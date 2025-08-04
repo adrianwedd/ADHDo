@@ -18,6 +18,8 @@ from mcp_server import __version__
 from mcp_server.config import settings
 from mcp_server.models import MCPFrame, User, Task, NudgeTier
 from mcp_server.cognitive_loop import cognitive_loop
+from traces.memory import trace_memory
+from frames.builder import frame_builder
 
 
 # Configure structured logging
@@ -60,7 +62,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🧠⚡ MCP ADHD Server starting up...")
     logger.info("Recursion unleashed. Context orchestration online.")
     
-    # TODO: Initialize Redis connection
+    # Initialize Redis connections
+    try:
+        await trace_memory.connect()
+        logger.info("✅ Redis connection initialized successfully")
+    except Exception as e:
+        logger.warning("⚠️ Redis connection failed, continuing in limited mode", error=str(e))
+    
     # TODO: Initialize database connection
     # TODO: Initialize Telegram bot
     # TODO: Start background nudge scheduler
@@ -68,7 +76,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     
     logger.info("🧠⚡ MCP ADHD Server shutting down...")
-    # TODO: Cleanup connections and background tasks
+    # Cleanup connections
+    try:
+        await trace_memory.disconnect()
+        logger.info("✅ All connections closed cleanly")
+    except Exception as e:
+        logger.warning("⚠️ Some connections failed to close cleanly", error=str(e))
 
 
 # Create FastAPI application
