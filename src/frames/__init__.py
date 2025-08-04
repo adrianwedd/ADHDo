@@ -1,0 +1,1 @@
+"""Frame building and context assembly for MCP ADHD Server."""
