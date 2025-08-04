@@ -43,16 +43,33 @@ class OllamaClient:
         self.model = model
         self.base_url = "http://localhost:11434"
         self.client = httpx.AsyncClient(timeout=30.0)
+        self._cache: Dict[str, LLMResponse] = {}
+        self._cache_max_size = 100
         
     async def generate(
         self, 
         prompt: str, 
         system_prompt: Optional[str] = None,
-        max_tokens: int = 150,
+        max_tokens: int = 75,  # Reduced for faster generation
         temperature: float = 0.7
     ) -> LLMResponse:
         """Generate response using local Ollama model."""
         start_time = time.time()
+        
+        # Create cache key
+        cache_key = f"{hash(prompt)}_{hash(system_prompt or '')}_{max_tokens}_{temperature}"
+        
+        # Check cache first
+        if cache_key in self._cache:
+            cached_response = self._cache[cache_key]
+            # Return cached response with updated latency
+            return LLMResponse(
+                text=cached_response.text,
+                source="local_cached",
+                confidence=cached_response.confidence,
+                latency_ms=(time.time() - start_time) * 1000,
+                model_used=self.model
+            )
         
         try:
             messages = []
@@ -67,8 +84,10 @@ class OllamaClient:
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
-                    "top_p": 0.9,
-                    "stop": ["Human:", "User:", "\n\n\n"]
+                    "top_p": 0.95,  # Slightly higher for faster generation
+                    "top_k": 40,    # Reduce search space for speed
+                    "repeat_penalty": 1.1,
+                    "stop": ["Human:", "User:", "\n\n\n", "\n\n"]
                 }
             }
             
@@ -81,12 +100,18 @@ class OllamaClient:
             result = response.json()
             latency_ms = (time.time() - start_time) * 1000
             
-            return LLMResponse(
+            llm_response = LLMResponse(
                 text=result["message"]["content"].strip(),
                 source="local",
                 latency_ms=latency_ms,
                 model_used=self.model
             )
+            
+            # Cache the response (if cache not full)
+            if len(self._cache) < self._cache_max_size:
+                self._cache[cache_key] = llm_response
+            
+            return llm_response
             
         except Exception as e:
             logger.error("Local LLM generation failed", error=str(e))
@@ -303,8 +328,8 @@ class LLMRouter:
         return await self.local_client.generate(
             user_input,
             system_prompt=system_prompt,
-            max_tokens=150,
-            temperature=0.7
+            max_tokens=50,  # Shorter responses for speed
+            temperature=0.8  # Slightly higher for faster generation
         )
     
     async def _handle_local_complex(
