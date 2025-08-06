@@ -4,7 +4,7 @@
 # Core HTTP and API clients
 aiohttp==3.8.5
 httpx==0.24.1
-requests==2.31.0
+requests==2.32.4
 
 # GitHub API integration
 PyGithub==1.59.1
