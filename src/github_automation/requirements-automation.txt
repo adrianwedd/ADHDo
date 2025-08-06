@@ -2,7 +2,7 @@
 # Production-ready dependencies with pinned versions for security and stability
 
 # Core HTTP and API clients
-aiohttp==3.8.5
+aiohttp==3.12.14
 httpx==0.24.1
 requests==2.31.0
 
