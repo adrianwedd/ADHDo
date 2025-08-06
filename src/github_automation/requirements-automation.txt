@@ -1,0 +1,73 @@
+# GitHub Automation System Dependencies
+# Production-ready dependencies with pinned versions for security and stability
+
+# Core HTTP and API clients
+aiohttp==3.8.5
+httpx==0.24.1
+requests==2.31.0
+
+# GitHub API integration
+PyGithub==1.59.1
+github3.py==4.0.1
+
+# Async and performance
+uvloop==0.17.0
+asyncio-throttle==1.0.2
+
+# Data processing and analysis
+pandas==2.0.3
+numpy==1.24.4
+
+# Configuration and validation
+pydantic[email]==2.3.0
+python-dotenv==1.0.0
+
+# Caching and rate limiting
+redis==4.6.0
+cachetools==5.3.1
+
+# Monitoring and observability
+prometheus-client==0.17.1
+structlog==23.1.0
+sentry-sdk[fastapi]==1.32.0
+
+# Security
+cryptography==41.0.4
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+
+# Code analysis (for feature detection)
+ast-decompiler==0.6.0
+tree-sitter==0.20.1
+tree-sitter-python==0.20.4
+
+# Git operations
+GitPython==3.1.32
+dulwich==0.21.5
+
+# Testing utilities (dev/test environments)
+faker==19.3.1
+factory-boy==3.3.0
+
+# Webhook security
+hmac-python==1.0.2
+
+# Background task processing
+celery==5.3.1
+kombu==5.3.1
+
+# Time and date handling
+python-dateutil==2.8.2
+pytz==2023.3
+
+# File and data processing
+pathlib2==2.3.7
+jsonschema==4.19.0
+
+# Development and debugging tools (optional)
+ipython==8.14.0
+rich==13.5.2
+
+# Production server
+gunicorn==21.2.0
+uvicorn[standard]==0.23.2

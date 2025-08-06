@@ -237,6 +237,10 @@ app.add_middleware(
 # Include MCP integration router
 app.include_router(mcp_router)
 
+# Include GitHub automation router
+from mcp_server.github_automation_endpoints import github_router
+app.include_router(github_router)
+
 # Mount static files for web interface
 import os
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")

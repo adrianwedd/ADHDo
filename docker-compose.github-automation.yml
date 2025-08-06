@@ -1,0 +1,371 @@
+# GitHub Automation System - Docker Compose Configuration
+# Production-ready multi-service deployment with monitoring, scaling, and resilience
+
+version: '3.8'
+
+services:
+  # === CORE SERVICES ===
+  
+  github-automation:
+    build:
+      context: .
+      dockerfile: docker/github-automation.dockerfile
+      target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    image: adhdo/github-automation:${VERSION:-latest}
+    container_name: adhdo-github-automation
+    restart: unless-stopped
+    environment:
+      # Application settings
+      ENVIRONMENT: production
+      DEBUG: false
+      LOG_LEVEL: INFO
+      
+      # Server configuration
+      WORKERS: ${WORKERS:-4}
+      MAX_WORKERS: ${MAX_WORKERS:-8}
+      BIND_HOST: 0.0.0.0
+      BIND_PORT: 8000
+      TIMEOUT: 120
+      
+      # Database connections
+      DATABASE_URL: postgresql+asyncpg://adhd:${DB_PASSWORD:-secure_password}@postgres:5432/adhd_automation
+      REDIS_URL: redis://redis:6379/0
+      
+      # GitHub integration
+      GITHUB_AUTOMATION_ENABLED: true
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Automation configuration
+      AUTOMATION_MAX_CONCURRENT_ACTIONS: ${AUTOMATION_MAX_CONCURRENT_ACTIONS:-10}
+      AUTOMATION_RATE_LIMIT_BUFFER: ${AUTOMATION_RATE_LIMIT_BUFFER:-0.8}
+      AUTOMATION_MIN_CONFIDENCE_AUTO_CLOSE: ${AUTOMATION_MIN_CONFIDENCE_AUTO_CLOSE:-0.85}
+      
+      # Security settings
+      JWT_SECRET: ${JWT_SECRET}
+      SECURE_SSL_REDIRECT: true
+      SESSION_COOKIE_SECURE: true
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN}
+      PROMETHEUS_ENABLED: true
+      
+    ports:
+      - "${PORT:-8000}:8000"
+    
+    volumes:
+      - ./logs/automation:/app/logs
+      - ./data/automation:/app/data
+      - github-automation-cache:/app/cache
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - adhd-network
+      - monitoring-network
+    
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.github-automation.rule=Host(`automation.adhdo.local`)"
+      - "traefik.http.routers.github-automation.tls=true"
+      - "traefik.http.services.github-automation.loadbalancer.server.port=8000"
+
+  # Background worker for async task processing
+  github-automation-worker:
+    build:
+      context: .
+      dockerfile: docker/github-automation.dockerfile
+      target: production
+    image: adhdo/github-automation:${VERSION:-latest}
+    container_name: adhdo-github-automation-worker
+    restart: unless-stopped
+    command: ["worker"]
+    environment:
+      # Inherit from main service
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://adhd:${DB_PASSWORD:-secure_password}@postgres:5432/adhd_automation
+      REDIS_URL: redis://redis:6379/0
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Worker specific
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      WORKER_QUEUE: automation
+      
+    volumes:
+      - ./logs/worker:/app/logs
+      - ./data/automation:/app/data
+      - github-automation-cache:/app/cache
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - adhd-network
+    
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Automation scheduler for periodic tasks
+  github-automation-scheduler:
+    build:
+      context: .
+      dockerfile: docker/github-automation.dockerfile
+      target: production
+    image: adhdo/github-automation:${VERSION:-latest}
+    container_name: adhdo-github-automation-scheduler
+    restart: unless-stopped
+    command: ["scheduler"]
+    environment:
+      # Inherit from main service
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+asyncpg://adhd:${DB_PASSWORD:-secure_password}@postgres:5432/adhd_automation
+      REDIS_URL: redis://redis:6379/0
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      
+      # Scheduler specific
+      SCHEDULER_INTERVAL: ${SCHEDULER_INTERVAL:-300} # 5 minutes
+      ENABLE_AUTO_SYNC: ${ENABLE_AUTO_SYNC:-true}
+      
+    volumes:
+      - ./logs/scheduler:/app/logs
+      - ./data/automation:/app/data
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - adhd-network
+
+  # === INFRASTRUCTURE SERVICES ===
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: adhdo-postgres-automation
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: adhd_automation
+      POSTGRES_USER: adhd
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    
+    networks:
+      - adhd-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adhd -d adhd_automation"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+
+  redis:
+    image: redis:7-alpine
+    container_name: adhdo-redis-automation
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/etc/redis/redis.conf:ro
+    
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    networks:
+      - adhd-network
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # === MONITORING SERVICES ===
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: adhdo-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    
+    networks:
+      - monitoring-network
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: adhdo-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    
+    networks:
+      - monitoring-network
+    
+    depends_on:
+      - prometheus
+    
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Load balancer / reverse proxy
+  traefik:
+    image: traefik:v3.0
+    container_name: adhdo-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--log.level=${TRAEFIK_LOG_LEVEL:-INFO}"
+      - "--accesslog=true"
+    
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-data:/letsencrypt
+      - ./logs/traefik:/var/log/traefik
+    
+    networks:
+      - adhd-network
+      - monitoring-network
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.adhdo.local`)"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+
+# === VOLUMES ===
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  traefik-data:
+    driver: local
+  github-automation-cache:
+    driver: local
+
+# === NETWORKS ===
+networks:
+  adhd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  
+  monitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
