@@ -1,6 +1,3 @@
-# Session files
-2025*.txt
-
 # Python
 __pycache__/
 *.py[cod]
@@ -19,33 +16,25 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# Virtual environments
+# Virtual Environments
 venv/
+venv_beta/
 env/
 ENV/
-.venv/
-.env/
+env.bak/
+venv.bak/
 
-# Environment variables
+# Environment Variables
 .env
 .env.local
-.env.*.local
-
-# Testing
-.coverage
-.pytest_cache/
-.tox/
-.nox/
-coverage.xml
-*.cover
-.hypothesis/
-htmlcov/
-.coverage.*
+.env.production
 
 # IDE
 .vscode/
@@ -63,6 +52,16 @@ htmlcov/
 ehthumbs.db
 Thumbs.db
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+coverage.xml
+*.cover
+.hypothesis/
+
 # Logs
 *.log
 logs/
@@ -72,30 +71,12 @@ logs/
 *.sqlite
 *.sqlite3
 
-# Temporary files
-*.tmp
-*.temp
-.tmp/
-.temp/
+# Redis
+dump.rdb
 
-# Node modules (if any)
-node_modules/
+# Docker
+.dockerignore
 
-# Build artifacts
-*.tar.gz
-*.zip
-
-# Documentation builds
-docs/_build/
-site/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Playwright
+test-results/
+playwright-report/
