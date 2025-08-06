@@ -514,5 +514,19 @@ OAUTH_CONFIGS = {
         'authorization_url': 'https://slack.com/oauth/v2/authorize',
         'token_url': 'https://slack.com/api/oauth.v2.access',
         'scope': 'channels:read chat:write'
+    },
+    'google_nest': {
+        'client_id': '',  # To be filled by user
+        'client_secret': '',  # To be filled by user
+        'authorization_url': 'https://accounts.google.com/o/oauth2/v2/auth',
+        'token_url': 'https://oauth2.googleapis.com/token',
+        'scope': 'https://www.googleapis.com/auth/sdm.service'
+    },
+    'nest': {  # Alias for google_nest
+        'client_id': '',  # To be filled by user
+        'client_secret': '',  # To be filled by user
+        'authorization_url': 'https://accounts.google.com/o/oauth2/v2/auth',
+        'token_url': 'https://oauth2.googleapis.com/token',
+        'scope': 'https://www.googleapis.com/auth/sdm.service'
     }
 }

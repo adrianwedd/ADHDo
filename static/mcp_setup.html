@@ -44,7 +44,7 @@
         <div class="mb-8">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-gray-600">Setup Progress</span>
-                <span class="text-sm text-gray-500" id="progress-text">0 of 3 tools connected</span>
+                <span class="text-sm text-gray-500" id="progress-text">0 of 4 tools connected</span>
             </div>
             <div class="w-full bg-gray-200 rounded-full h-2">
                 <div id="progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
@@ -118,6 +118,43 @@
                     <div class="flex items-center text-sm text-gray-500">
                         <i class="fas fa-clock mr-2"></i>
                         <span>Features: Alerts, Blocks, Scheduling</span>
+                    </div>
+                </div>
+                
+                <button class="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed" disabled>
+                    <i class="fas fa-hourglass-half mr-2"></i>
+                    Coming Soon
+                </button>
+            </div>
+
+            <!-- Google Nest Tool -->
+            <div class="setup-step bg-white rounded-lg shadow-lg p-6" id="nest-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-home text-2xl text-blue-600"></i>
+                        <h3 class="text-lg font-semibold">Google Nest</h3>
+                    </div>
+                    <span class="status-badge bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs" id="nest-status">
+                        Coming Soon
+                    </span>
+                </div>
+                
+                <p class="text-gray-600 text-sm mb-4">
+                    ADHD smart home integration with ambient nudges, focus mode, and environmental awareness for Hub Max and Minis.
+                </p>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-brain mr-2"></i>
+                        <span>Cognitive Load: Very Low</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <span>Focus Safe: Yes (ambient support)</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-lightbulb mr-2"></i>
+                        <span>Features: Nudges, Ambient, Routines</span>
                     </div>
                 </div>
                 
@@ -300,7 +337,7 @@
             const connectedList = document.getElementById('connected-list');
             
             // Update progress
-            const totalTools = 3; // Gmail, Calendar, Slack
+            const totalTools = 4; // Gmail, Calendar, Nest, Slack
             const connectedCount = connectedTools.length;
             const progressPercent = (connectedCount / totalTools) * 100;
             

@@ -16,7 +16,7 @@ from mcp_server.models import User
 from mcp_client import MCPClient
 from mcp_client.browser_auth import BrowserAuth, OAUTH_CONFIGS
 from mcp_client.models import ToolConfig, ToolType, AuthType, ToolCapability
-from mcp_tools import GmailTool
+from mcp_tools import GmailTool, NestTool
 
 logger = structlog.get_logger()
 
@@ -154,6 +154,24 @@ async def register_tool(
                 return {
                     'success': True,
                     'message': f'Gmail tool registered successfully',
+                    'tool_id': tool_config.tool_id,
+                    'requires_auth': True,
+                    'auth_type': 'oauth2'
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Tool registration failed")
+        
+        elif tool_type == 'nest' or tool_type == 'google_nest':
+            tool = NestTool(mcp_client.user_id)
+            tool_config = tool.get_tool_config()
+            
+            # Register with MCP client
+            success = await mcp_client.register_tool(tool_config)
+            
+            if success:
+                return {
+                    'success': True,
+                    'message': f'Google Nest tool registered successfully',
                     'tool_id': tool_config.tool_id,
                     'requires_auth': True,
                     'auth_type': 'oauth2'
