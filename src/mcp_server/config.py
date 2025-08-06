@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Server Configuration
     host: str = Field(default="127.0.0.1", description="Server host")
     port: int = Field(default=8000, description="Server port") 
-    debug: bool = Field(default=False, description="Debug mode")
+    debug: bool = Field(default=True, description="Debug mode")
     log_level: str = Field(default="INFO", description="Log level")
     
     # OpenAI Configuration
@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     )
     agent_max_retries: int = Field(default=3, description="Maximum agent retries")
     agent_timeout: int = Field(default=30, description="Agent timeout (seconds)")
+    
+    # Authentication Configuration
+    admin_username: Optional[str] = Field(default=None, description="Admin username")
+    admin_password: Optional[str] = Field(default=None, description="Admin password")
+    session_duration_hours: int = Field(default=24, description="Session duration (hours)")
+    jwt_secret: str = Field(
+        default="your-secret-key-change-in-production", 
+        description="JWT secret key"
+    )
     
     # Feature Flags
     enable_voice_input: bool = Field(default=False, description="Enable voice input")

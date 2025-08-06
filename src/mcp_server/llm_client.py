@@ -37,14 +37,24 @@ class LLMResponse(BaseModel):
 
 
 class OllamaClient:
-    """Local LLM client using Ollama."""
+    """Local LLM client using Ollama with optimization for ADHD use cases."""
     
     def __init__(self, model: str = "deepseek-r1:1.5b"):
         self.model = model
         self.base_url = "http://localhost:11434"
-        self.client = httpx.AsyncClient(timeout=30.0)
+        # Keep connection alive to reduce latency
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(max_connections=5, max_keepalive_connections=2)
+        )
         self._cache: Dict[str, LLMResponse] = {}
-        self._cache_max_size = 100
+        self._cache_max_size = 200  # Increased cache size
+        self._model_warmed = False
+        self._warmup_prompts = [
+            "Hi",
+            "Ready to help", 
+            "Let's focus"
+        ]
         
     async def generate(
         self, 
@@ -72,6 +82,10 @@ class OllamaClient:
             )
         
         try:
+            # Warm up model if not done yet
+            if not self._model_warmed:
+                await self._warmup_model()
+            
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
@@ -84,9 +98,12 @@ class OllamaClient:
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
-                    "top_p": 0.95,  # Slightly higher for faster generation
-                    "top_k": 40,    # Reduce search space for speed
-                    "repeat_penalty": 1.1,
+                    # Optimized for speed - ADHD needs quick responses
+                    "top_p": 0.9,     # Faster sampling
+                    "top_k": 30,      # Smaller search space
+                    "repeat_penalty": 1.05,  # Lower penalty for speed
+                    "seed": 42,       # Consistent seed for caching
+                    "num_ctx": 2048,  # Smaller context window for speed
                     "stop": ["Human:", "User:", "\n\n\n", "\n\n"]
                 }
             }
@@ -121,6 +138,55 @@ class OllamaClient:
                 confidence=0.1,
                 latency_ms=(time.time() - start_time) * 1000
             )
+    
+    async def _warmup_model(self) -> None:
+        """Warm up the model to reduce cold start latency."""
+        try:
+            logger.info("Warming up local LLM for faster responses")
+            for prompt in self._warmup_prompts:
+                await self.client.post(
+                    f"{self.base_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "stream": False,
+                        "options": {
+                            "num_predict": 5,  # Very short responses for warmup
+                            "temperature": 0.7
+                        }
+                    }
+                )
+            self._model_warmed = True
+            logger.info("Local LLM warmed up successfully")
+        except Exception as e:
+            logger.warning("Model warmup failed, continuing anyway", error=str(e))
+            self._model_warmed = True  # Don't block on warmup failure
+    
+    async def prefetch_common_responses(self) -> None:
+        """Pre-generate common ADHD responses to cache them."""
+        common_adhd_prompts = [
+            "I'm struggling to start this task",
+            "I'm feeling overwhelmed", 
+            "I can't focus right now",
+            "I need help breaking this down",
+            "Ready to work on email"
+        ]
+        
+        system_prompt = (
+            "You are a gentle, encouraging AI assistant helping someone with ADHD. "
+            "Keep responses short (1-2 sentences), positive, and actionable."
+        )
+        
+        for prompt in common_adhd_prompts:
+            try:
+                await self.generate(
+                    prompt, 
+                    system_prompt=system_prompt,
+                    max_tokens=30,
+                    temperature=0.8
+                )
+            except Exception:
+                continue  # Skip failed prefetch attempts
 
 
 class SafetyMonitor:
@@ -235,6 +301,17 @@ class LLMRouter:
         self.safety_monitor = SafetyMonitor()
         self.complexity_classifier = ComplexityClassifier()
         self.cloud_client = None  # TODO: Add OpenRouter client
+        self._initialized = False
+        
+        # Response templates for ultra-fast responses
+        self._quick_responses = {
+            "ready": "Let's do this! 💪 What's your first step?",
+            "start": "Break it into tiny pieces. Just pick one small thing to begin with.",
+            "stuck": "That's totally normal! What's the tiniest action you could take right now?",
+            "overwhelmed": "Pause. Breathe. Let's focus on just one thing. What feels most important?",
+            "energy_low": "Low energy is OK. What's the easiest task you could tackle?",
+            "hyperfocus": "Great focus! Remember to take breaks and hydrate. 🎯"
+        }
         
         # ADHD-specific system prompts
         self.adhd_system_prompts = {
@@ -261,6 +338,10 @@ class LLMRouter:
         nudge_tier: NudgeTier = NudgeTier.GENTLE
     ) -> LLMResponse:
         """Main entry point for LLM processing."""
+        
+        # Initialize if not done yet
+        if not self._initialized:
+            await self.initialize()
         
         # Step 1: Safety assessment (always first)
         # Extract user state from context if available
@@ -325,12 +406,64 @@ class LLMRouter:
             
             system_prompt += context_info
         
+        # Check for ultra-quick pattern matches first
+        quick_response = self._get_quick_response(user_input)
+        if quick_response:
+            return LLMResponse(
+                text=quick_response,
+                source="pattern_match",
+                confidence=0.9,
+                latency_ms=1.0,  # Near-instant
+                model_used="quick_match"
+            )
+        
         return await self.local_client.generate(
             user_input,
             system_prompt=system_prompt,
             max_tokens=50,  # Shorter responses for speed
             temperature=0.8  # Slightly higher for faster generation
         )
+    
+    def _get_quick_response(self, user_input: str) -> Optional[str]:
+        """Check for patterns that can be answered instantly."""
+        text_lower = user_input.lower()
+        
+        if any(word in text_lower for word in ["ready", "let's go", "time to"]):
+            return self._quick_responses["ready"]
+        elif any(word in text_lower for word in ["stuck", "can't start", "don't know how"]):
+            return self._quick_responses["stuck"]  
+        elif any(word in text_lower for word in ["overwhelmed", "too much", "stressed"]):
+            return self._quick_responses["overwhelmed"]
+        elif any(word in text_lower for word in ["tired", "low energy", "exhausted"]):
+            return self._quick_responses["energy_low"]
+        elif any(word in text_lower for word in ["focused", "in the zone", "hyperfocus"]):
+            return self._quick_responses["hyperfocus"]
+        elif any(word in text_lower for word in ["start", "begin", "first step"]):
+            return self._quick_responses["start"]
+            
+        return None
+    
+    async def initialize(self) -> None:
+        """Initialize the LLM router with model warmup and prefetching."""
+        if self._initialized:
+            return
+            
+        try:
+            logger.info("Initializing LLM router for optimal performance")
+            
+            # Warm up local model and prefetch common responses
+            await asyncio.gather(
+                self.local_client._warmup_model(),
+                self.local_client.prefetch_common_responses(),
+                return_exceptions=True
+            )
+            
+            self._initialized = True
+            logger.info("LLM router initialized successfully")
+            
+        except Exception as e:
+            logger.error("LLM router initialization failed", error=str(e))
+            self._initialized = True  # Continue even if initialization fails
     
     async def _handle_local_complex(
         self,

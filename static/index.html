@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP ADHD Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Custom ADHD-friendly styling */
+        .adhd-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .chat-message {
+            animation: fadeInUp 0.3s ease-out;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .thinking {
+            opacity: 0.7;
+            animation: pulse 2s infinite;
+        }
+        .pattern-match {
+            background: linear-gradient(45deg, #4ade80, #22c55e);
+        }
+        .local-response {
+            background: linear-gradient(45deg, #60a5fa, #3b82f6);
+        }
+        .safety-response {
+            background: linear-gradient(45deg, #f87171, #ef4444);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="adhd-card text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-brain text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">MCP ADHD Assistant</h1>
+                        <p class="text-sm opacity-90">Your AI-powered executive function support</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="status-indicator" class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-sm">Connected</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Quick Actions -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fas fa-bolt text-yellow-500 mr-2"></i>
+                Quick Actions
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button onclick="quickAction('ready')" class="bg-green-500 hover:bg-green-600 text-white p-4 rounded-lg text-center transition duration-200">
+                    <i class="fas fa-rocket text-2xl mb-2"></i>
+                    <div class="text-sm font-medium">I'm Ready!</div>
+                </button>
+                <button onclick="quickAction('stuck')" class="bg-orange-500 hover:bg-orange-600 text-white p-4 rounded-lg text-center transition duration-200">
+                    <i class="fas fa-question-circle text-2xl mb-2"></i>
+                    <div class="text-sm font-medium">I'm Stuck</div>
+                </button>
+                <button onclick="quickAction('overwhelmed')" class="bg-red-500 hover:bg-red-600 text-white p-4 rounded-lg text-center transition duration-200">
+                    <i class="fas fa-dizzy text-2xl mb-2"></i>
+                    <div class="text-sm font-medium">Overwhelmed</div>
+                </button>
+                <button onclick="quickAction('break')" class="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-lg text-center transition duration-200">
+                    <i class="fas fa-coffee text-2xl mb-2"></i>
+                    <div class="text-sm font-medium">Need Break</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="bg-white rounded-lg shadow-lg">
+            <!-- Chat Header -->
+            <div class="border-b border-gray-200 p-4">
+                <h3 class="text-lg font-semibold flex items-center">
+                    <i class="fas fa-comments text-blue-500 mr-2"></i>
+                    Chat with Your Assistant
+                </h3>
+            </div>
+
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="h-96 overflow-y-auto p-4 space-y-4">
+                <!-- Welcome Message -->
+                <div class="chat-message bg-gray-50 p-4 rounded-lg">
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center">
+                            <i class="fas fa-robot text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-gray-800">
+                                Hi! I'm your ADHD support assistant. 🧠✨
+                            </p>
+                            <p class="text-gray-600 text-sm mt-1">
+                                I'm here to help you stay focused, break down tasks, and celebrate your wins!
+                                Just tell me what's on your mind or what you're working on.
+                            </p>
+                            <div class="text-xs text-gray-500 mt-2">
+                                Ultra-fast pattern matching • Crisis detection • Privacy-first
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Focus Input -->
+            <div class="border-t border-gray-200 p-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-bullseye text-blue-500 mr-1"></i>
+                        Current Focus (optional)
+                    </label>
+                    <input 
+                        type="text" 
+                        id="task-focus" 
+                        placeholder="e.g., Write email to Sarah, Review project proposal..."
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                </div>
+
+                <!-- Chat Input -->
+                <div class="flex space-x-3">
+                    <input 
+                        type="text" 
+                        id="chat-input" 
+                        placeholder="Tell me what's on your mind..."
+                        class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onkeypress="if(event.key==='Enter') sendMessage()"
+                    >
+                    <button 
+                        onclick="sendMessage()" 
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center space-x-2"
+                    >
+                        <i class="fas fa-paper-plane"></i>
+                        <span>Send</span>
+                    </button>
+                </div>
+
+                <!-- Nudge Tier Selection -->
+                <div class="mt-4 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-600">Response Style:</span>
+                        <select id="nudge-tier" class="text-sm border border-gray-300 rounded px-2 py-1">
+                            <option value="0">Gentle 🌱</option>
+                            <option value="1">Sarcastic 🙄</option>
+                            <option value="2">Sergeant ⚡</option>
+                        </select>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        <span id="performance-stats">Ready to help!</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-4 rounded-lg shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-sm text-gray-600">Response Time</div>
+                        <div id="response-time" class="text-2xl font-bold text-green-500">< 1s</div>
+                    </div>
+                    <i class="fas fa-tachometer-alt text-green-500 text-2xl"></i>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-sm text-gray-600">Response Source</div>
+                        <div id="response-source" class="text-lg font-semibold text-blue-500">Pattern Match</div>
+                    </div>
+                    <i class="fas fa-bolt text-blue-500 text-2xl"></i>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-sm text-gray-600">Cognitive Load</div>
+                        <div id="cognitive-load" class="text-lg font-semibold text-orange-500">Optimal</div>
+                    </div>
+                    <i class="fas fa-brain text-orange-500 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Global state
+        let userId = 'debug-user-' + Math.random().toString(36).substr(2, 9);
+        
+        // Quick Actions
+        function quickAction(action) {
+            const messages = {
+                ready: "I'm ready to work!",
+                stuck: "I'm stuck and don't know how to start",
+                overwhelmed: "I'm feeling really overwhelmed right now",
+                break: "I think I need to take a break"
+            };
+            
+            const input = document.getElementById('chat-input');
+            input.value = messages[action];
+            sendMessage();
+        }
+        
+        // Send message to the API
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const taskFocus = document.getElementById('task-focus');
+            const nudgeTier = document.getElementById('nudge-tier');
+            
+            const message = input.value.trim();
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessage(message, 'user');
+            
+            // Clear input
+            input.value = '';
+            
+            // Show thinking indicator
+            const thinkingId = addMessage('Thinking...', 'assistant', true);
+            
+            try {
+                const startTime = Date.now();
+                
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-ID': userId  // Debug mode header
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        task_focus: taskFocus.value || null,
+                        nudge_tier: parseInt(nudgeTier.value)
+                    })
+                });
+                
+                const data = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                // Remove thinking indicator
+                document.getElementById(thinkingId).remove();
+                
+                if (response.ok && data.success) {
+                    // Add response message
+                    addMessage(data.response, 'assistant', false, {
+                        source: data.response?.source || 'unknown',
+                        processingTime: data.processing_time_ms || responseTime,
+                        cognitiveLoad: data.cognitive_load,
+                        actionsTaken: data.actions_taken
+                    });
+                    
+                    // Update performance metrics
+                    updateMetrics(data, responseTime);
+                    
+                } else {
+                    addMessage(`Sorry, I had trouble processing that. ${data.detail || 'Please try again.'}`, 'assistant error');
+                }
+                
+            } catch (error) {
+                console.error('Chat error:', error);
+                document.getElementById(thinkingId).remove();
+                addMessage('I had a connection issue. Please check your internet and try again.', 'assistant error');
+            }
+        }
+        
+        // Add message to chat
+        function addMessage(text, sender, isThinking = false, metadata = null) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.id = messageId;
+            messageDiv.className = 'chat-message';
+            
+            if (isThinking) {
+                messageDiv.className += ' thinking';
+            }
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3 justify-end">
+                        <div class="bg-blue-500 text-white p-3 rounded-lg max-w-md">
+                            <p>${escapeHtml(text)}</p>
+                        </div>
+                        <div class="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center">
+                            <i class="fas fa-user text-sm"></i>
+                        </div>
+                    </div>
+                `;
+            } else {
+                let bgClass = 'bg-gray-50';
+                let sourceIcon = 'fa-robot';
+                
+                if (metadata) {
+                    if (metadata.source === 'pattern_match') {
+                        bgClass = 'pattern-match text-white';
+                        sourceIcon = 'fa-bolt';
+                    } else if (metadata.source === 'local' || metadata.source === 'local_cached') {
+                        bgClass = 'local-response text-white';
+                        sourceIcon = 'fa-microchip';
+                    } else if (metadata.source === 'hard_coded') {
+                        bgClass = 'safety-response text-white';
+                        sourceIcon = 'fa-shield-alt';
+                    }
+                }
+                
+                if (sender.includes('error')) {
+                    bgClass = 'bg-red-100 border-red-300';
+                    sourceIcon = 'fa-exclamation-triangle';
+                }
+                
+                let metadataHtml = '';
+                if (metadata && !isThinking) {
+                    metadataHtml = `
+                        <div class="text-xs opacity-75 mt-2 flex items-center space-x-4">
+                            <span><i class="fas fa-bolt mr-1"></i>${metadata.source}</span>
+                            <span><i class="fas fa-clock mr-1"></i>${metadata.processingTime.toFixed(0)}ms</span>
+                            ${metadata.actionsTaken && metadata.actionsTaken.length > 0 ? 
+                                `<span><i class="fas fa-cogs mr-1"></i>${metadata.actionsTaken.join(', ')}</span>` : ''
+                            }
+                        </div>
+                    `;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <div class="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center">
+                            <i class="fas ${sourceIcon} text-sm"></i>
+                        </div>
+                        <div class="flex-1 ${bgClass} p-3 rounded-lg">
+                            <p class="${bgClass.includes('text-white') ? 'text-white' : 'text-gray-800'}">${escapeHtml(text)}</p>
+                            ${metadataHtml}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return messageId;
+        }
+        
+        // Update performance metrics
+        function updateMetrics(data, responseTime) {
+            // Response time
+            const timeDisplay = responseTime < 1000 ? `${responseTime}ms` : `${(responseTime/1000).toFixed(1)}s`;
+            document.getElementById('response-time').textContent = timeDisplay;
+            
+            // Response source
+            const sourceMap = {
+                'pattern_match': 'Pattern Match ⚡',
+                'local': 'Local AI 🤖',
+                'local_cached': 'Cached 💾',
+                'hard_coded': 'Safety Override 🛡️',
+                'fallback': 'Fallback 🔄'
+            };
+            
+            const source = data.response?.source || 'unknown';
+            document.getElementById('response-source').textContent = sourceMap[source] || source;
+            
+            // Cognitive load
+            let loadText = 'Optimal';
+            if (data.cognitive_load > 0.8) {
+                loadText = 'High';
+            } else if (data.cognitive_load > 0.5) {
+                loadText = 'Medium';
+            }
+            document.getElementById('cognitive-load').textContent = loadText;
+            
+            // Update stats
+            document.getElementById('performance-stats').textContent = 
+                `${data.processing_time_ms ? data.processing_time_ms.toFixed(0) + 'ms' : 'Ready'} • ${source}`;
+        }
+        
+        // Utility function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Focus on input
+            document.getElementById('chat-input').focus();
+            
+            // Add welcome message with current time
+            setTimeout(() => {
+                addMessage('Ready to help you tackle your day! What\'s on your mind? 🚀', 'assistant', false, {
+                    source: 'system',
+                    processingTime: 1,
+                    cognitiveLoad: 0.1
+                });
+            }, 500);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP ADHD Server - Performance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* ADHD-friendly color scheme */
+        :root {
+            --adhd-primary: #3B82F6;
+            --adhd-secondary: #10B981;
+            --adhd-warning: #F59E0B;
+            --adhd-danger: #EF4444;
+            --adhd-success: #059669;
+            --adhd-bg: #F8FAFC;
+            --adhd-card: #FFFFFF;
+        }
+        
+        body {
+            background-color: var(--adhd-bg);
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        .metric-card {
+            transition: all 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .status-healthy { color: var(--adhd-success); }
+        .status-degraded { color: var(--adhd-warning); }
+        .status-unhealthy { color: var(--adhd-danger); }
+        .status-unknown { color: #6B7280; }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        /* Auto-refresh indicator */
+        .refresh-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--adhd-success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">
+                    <i class="fas fa-tachometer-alt text-blue-600"></i>
+                    MCP ADHD Server Dashboard
+                </h1>
+                <p class="text-gray-600 mt-2">Real-time performance and health monitoring</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <div class="refresh-indicator"></div>
+                    <span class="text-sm text-gray-500">Auto-refresh</span>
+                </div>
+                <button onclick="refreshAll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <a href="/" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition">
+                    <i class="fas fa-home"></i> Main App
+                </a>
+            </div>
+        </div>
+
+        <!-- Overall Status -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Overall Status</p>
+                        <p class="text-2xl font-semibold" id="overall-status">Loading...</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-heartbeat text-blue-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Uptime</p>
+                        <p class="text-2xl font-semibold" id="uptime">Loading...</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-clock text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Active Users</p>
+                        <p class="text-2xl font-semibold" id="active-users">Loading...</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-users text-purple-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Response Time</p>
+                        <p class="text-2xl font-semibold" id="avg-response-time">Loading...</p>
+                    </div>
+                    <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-lightning-bolt text-yellow-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Metrics -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- CPU Usage -->
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-microchip text-blue-600"></i> CPU Usage
+                </h3>
+                <div class="chart-container">
+                    <canvas id="cpu-chart"></canvas>
+                </div>
+                <div class="mt-4 text-center">
+                    <span class="text-2xl font-bold" id="cpu-current">0%</span>
+                    <span class="text-gray-500 text-sm ml-2">Current</span>
+                </div>
+            </div>
+
+            <!-- Memory Usage -->
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-memory text-green-600"></i> Memory Usage
+                </h3>
+                <div class="chart-container">
+                    <canvas id="memory-chart"></canvas>
+                </div>
+                <div class="mt-4 text-center">
+                    <span class="text-2xl font-bold" id="memory-current">0%</span>
+                    <span class="text-gray-500 text-sm ml-2">Current</span>
+                </div>
+            </div>
+
+            <!-- Disk Usage -->
+            <div class="metric-card bg-white rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-hdd text-purple-600"></i> Disk Usage
+                </h3>
+                <div class="chart-container">
+                    <canvas id="disk-chart"></canvas>
+                </div>
+                <div class="mt-4 text-center">
+                    <span class="text-2xl font-bold" id="disk-current">0%</span>
+                    <span class="text-gray-500 text-sm ml-2">Current</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Component Health -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Component Status -->
+            <div class="bg-white rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                    <i class="fas fa-puzzle-piece text-indigo-600"></i> Component Health
+                </h3>
+                <div id="component-health" class="space-y-4">
+                    <!-- Components will be loaded here -->
+                </div>
+            </div>
+
+            <!-- ADHD-Specific Metrics -->
+            <div class="bg-white rounded-xl p-6 shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                    <i class="fas fa-brain text-pink-600"></i> ADHD Metrics
+                </h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Active Tasks</span>
+                        <span class="font-semibold" id="active-tasks">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Pattern Matches</span>
+                        <span class="font-semibold" id="pattern-matches">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Cognitive Load</span>
+                        <span class="font-semibold" id="cognitive-load">0.0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Nudges Sent</span>
+                        <span class="font-semibold" id="nudges-sent">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Tasks Completed</span>
+                        <span class="font-semibold" id="tasks-completed">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Time Chart -->
+        <div class="bg-white rounded-xl p-6 shadow-lg mb-8">
+            <h3 class="text-lg font-semibold text-gray-800 mb-6">
+                <i class="fas fa-chart-line text-blue-600"></i> Response Time Trends
+            </h3>
+            <div class="chart-container" style="height: 400px;">
+                <canvas id="response-time-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Activity Log -->
+        <div class="bg-white rounded-xl p-6 shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-semibold text-gray-800">
+                    <i class="fas fa-list text-gray-600"></i> Recent Activity
+                </h3>
+                <button onclick="refreshActivity()" class="text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div id="activity-log" class="space-y-3 max-h-64 overflow-y-auto">
+                <!-- Activity items will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let cpuChart, memoryChart, diskChart, responseTimeChart;
+        let refreshInterval;
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            loadInitialData();
+            startAutoRefresh();
+        });
+        
+        // Initialize Chart.js charts
+        function initializeCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            };
+            
+            // CPU Chart
+            const cpuCtx = document.getElementById('cpu-chart').getContext('2d');
+            cpuChart = new Chart(cpuCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#3B82F6', '#E5E7EB'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Memory Chart
+            const memoryCtx = document.getElementById('memory-chart').getContext('2d');
+            memoryChart = new Chart(memoryCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#10B981', '#E5E7EB'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Disk Chart
+            const diskCtx = document.getElementById('disk-chart').getContext('2d');
+            diskChart = new Chart(diskCtx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#8B5CF6', '#E5E7EB'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Response Time Chart
+            const responseCtx = document.getElementById('response-time-chart').getContext('2d');
+            responseTimeChart = new Chart(responseCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Response Time (ms)',
+                        data: [],
+                        borderColor: '#F59E0B',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Response Time (ms)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Load initial data
+        async function loadInitialData() {
+            await Promise.all([
+                loadHealthData(),
+                loadSystemMetrics(),
+                loadMetricsSummary(),
+                loadActivity()
+            ]);
+        }
+        
+        // Load health data
+        async function loadHealthData() {
+            try {
+                const response = await fetch('/health/detailed');
+                const data = await response.json();
+                
+                // Update overall status
+                document.getElementById('overall-status').textContent = data.status.toUpperCase();
+                document.getElementById('overall-status').className = `text-2xl font-semibold status-${data.status}`;
+                
+                // Update uptime
+                const uptimeHours = Math.floor(data.uptime_seconds / 3600);
+                const uptimeDays = Math.floor(uptimeHours / 24);
+                document.getElementById('uptime').textContent = 
+                    uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
+                
+                // Update component health
+                const componentContainer = document.getElementById('component-health');
+                componentContainer.innerHTML = '';
+                
+                Object.entries(data.components).forEach(([name, info]) => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
+                    div.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-circle status-${info.status}"></i>
+                            <span class="font-medium">${name.charAt(0).toUpperCase() + name.slice(1)}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm text-gray-600">${info.response_time_ms.toFixed(1)}ms</div>
+                            <div class="text-xs text-gray-400">${info.status}</div>
+                        </div>
+                    `;
+                    componentContainer.appendChild(div);
+                });
+                
+            } catch (error) {
+                console.error('Error loading health data:', error);
+                document.getElementById('overall-status').textContent = 'ERROR';
+                document.getElementById('overall-status').className = 'text-2xl font-semibold status-unhealthy';
+            }
+        }
+        
+        // Load system metrics
+        async function loadSystemMetrics() {
+            try {
+                const response = await fetch('/health/metrics/system');
+                const data = await response.json();
+                
+                // Update charts
+                updateGaugeChart(cpuChart, data.cpu_percent);
+                updateGaugeChart(memoryChart, data.memory_percent);
+                updateGaugeChart(diskChart, data.disk_usage_percent);
+                
+                // Update current values
+                document.getElementById('cpu-current').textContent = `${data.cpu_percent.toFixed(1)}%`;
+                document.getElementById('memory-current').textContent = `${data.memory_percent.toFixed(1)}%`;
+                document.getElementById('disk-current').textContent = `${data.disk_usage_percent.toFixed(1)}%`;
+                
+                // Add to response time chart
+                const now = new Date().toLocaleTimeString();
+                if (responseTimeChart.data.labels.length > 20) {
+                    responseTimeChart.data.labels.shift();
+                    responseTimeChart.data.datasets[0].data.shift();
+                }
+                responseTimeChart.data.labels.push(now);
+                responseTimeChart.data.datasets[0].data.push(Math.random() * 100 + 50); // Mock data
+                responseTimeChart.update('none');
+                
+            } catch (error) {
+                console.error('Error loading system metrics:', error);
+            }
+        }
+        
+        // Load metrics summary
+        async function loadMetricsSummary() {
+            try {
+                const response = await fetch('/metrics/summary');
+                const data = await response.json();
+                
+                // Update ADHD metrics
+                document.getElementById('active-users').textContent = data.metrics.active_users || 0;
+                document.getElementById('active-tasks').textContent = 
+                    data.metrics.total_tasks_created - data.metrics.total_tasks_completed || 0;
+                document.getElementById('pattern-matches').textContent = data.metrics.total_pattern_matches || 0;
+                document.getElementById('cognitive-load').textContent = 
+                    (data.metrics.avg_cognitive_load || 0).toFixed(2);
+                document.getElementById('nudges-sent').textContent = data.metrics.total_nudges_sent || 0;
+                document.getElementById('tasks-completed').textContent = data.metrics.total_tasks_completed || 0;
+                
+                // Update average response time
+                document.getElementById('avg-response-time').textContent = '50ms'; // Mock data
+                
+            } catch (error) {
+                console.error('Error loading metrics summary:', error);
+            }
+        }
+        
+        // Load activity log
+        async function loadActivity() {
+            const activityLog = document.getElementById('activity-log');
+            
+            // Mock activity data
+            const activities = [
+                { time: '2 min ago', action: 'User completed task "Review project proposal"', icon: 'check-circle', color: 'green' },
+                { time: '5 min ago', action: 'Pattern match: "I\'m ready" → instant response', icon: 'lightning-bolt', color: 'yellow' },
+                { time: '8 min ago', action: 'New user session started', icon: 'user-plus', color: 'blue' },
+                { time: '12 min ago', action: 'Health check: All systems healthy', icon: 'heartbeat', color: 'green' },
+                { time: '15 min ago', action: 'Database query completed in 23ms', icon: 'database', color: 'purple' }
+            ];
+            
+            activityLog.innerHTML = '';
+            activities.forEach(activity => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50';
+                div.innerHTML = `
+                    <i class="fas fa-${activity.icon} text-${activity.color}-500"></i>
+                    <div class="flex-1">
+                        <div class="text-sm text-gray-900">${activity.action}</div>
+                        <div class="text-xs text-gray-500">${activity.time}</div>
+                    </div>
+                `;
+                activityLog.appendChild(div);
+            });
+        }
+        
+        // Update gauge charts
+        function updateGaugeChart(chart, value) {
+            chart.data.datasets[0].data = [value, 100 - value];
+            chart.update('none');
+        }
+        
+        // Start auto-refresh
+        function startAutoRefresh() {
+            refreshInterval = setInterval(() => {
+                loadInitialData();
+            }, 5000); // Refresh every 5 seconds
+        }
+        
+        // Manual refresh
+        function refreshAll() {
+            loadInitialData();
+        }
+        
+        // Refresh activity only
+        function refreshActivity() {
+            loadActivity();
+        }
+        
+        // Format time duration
+        function formatDuration(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>
