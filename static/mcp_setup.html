@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Tools Setup - ADHD Server</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .adhd-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .setup-step {
+            transition: all 0.3s ease;
+        }
+        .setup-step.completed {
+            opacity: 0.7;
+            background-color: #f0f9ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="adhd-card text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-plug text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">MCP Tools Setup</h1>
+                        <p class="text-sm opacity-90">Connect your productivity tools for ADHD optimization</p>
+                    </div>
+                </div>
+                <a href="/" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Progress Bar -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-600">Setup Progress</span>
+                <span class="text-sm text-gray-500" id="progress-text">0 of 3 tools connected</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Available Tools -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Gmail Tool -->
+            <div class="setup-step bg-white rounded-lg shadow-lg p-6" id="gmail-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fab fa-google text-2xl text-red-500"></i>
+                        <h3 class="text-lg font-semibold">Gmail</h3>
+                    </div>
+                    <span class="status-badge bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs" id="gmail-status">
+                        Not Connected
+                    </span>
+                </div>
+                
+                <p class="text-gray-600 text-sm mb-4">
+                    ADHD-optimized email management with smart prioritization, task extraction, and inbox batching.
+                </p>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-brain mr-2"></i>
+                        <span>Cognitive Load: Low-Medium</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <span>Focus Safe: No (can be distracting)</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-tasks mr-2"></i>
+                        <span>Features: Inbox, Tasks, Priority</span>
+                    </div>
+                </div>
+                
+                <button onclick="setupGmail()" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg transition" id="gmail-button">
+                    <i class="fas fa-plug mr-2"></i>
+                    Connect Gmail
+                </button>
+            </div>
+
+            <!-- Google Calendar Tool -->
+            <div class="setup-step bg-white rounded-lg shadow-lg p-6" id="calendar-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-calendar text-2xl text-green-500"></i>
+                        <h3 class="text-lg font-semibold">Google Calendar</h3>
+                    </div>
+                    <span class="status-badge bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs" id="calendar-status">
+                        Coming Soon
+                    </span>
+                </div>
+                
+                <p class="text-gray-600 text-sm mb-4">
+                    ADHD time management with transition alerts, focus blocks, and energy-aware scheduling.
+                </p>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-brain mr-2"></i>
+                        <span>Cognitive Load: Low</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <span>Focus Safe: Yes</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-clock mr-2"></i>
+                        <span>Features: Alerts, Blocks, Scheduling</span>
+                    </div>
+                </div>
+                
+                <button class="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed" disabled>
+                    <i class="fas fa-hourglass-half mr-2"></i>
+                    Coming Soon
+                </button>
+            </div>
+
+            <!-- Slack Tool -->
+            <div class="setup-step bg-white rounded-lg shadow-lg p-6" id="slack-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fab fa-slack text-2xl text-purple-500"></i>
+                        <h3 class="text-lg font-semibold">Slack</h3>
+                    </div>
+                    <span class="status-badge bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs" id="slack-status">
+                        Coming Soon
+                    </span>
+                </div>
+                
+                <p class="text-gray-600 text-sm mb-4">
+                    ADHD-friendly communication with focus mode, message batching, and priority filtering.
+                </p>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-brain mr-2"></i>
+                        <span>Cognitive Load: Medium-High</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        <span>Focus Safe: No (high distraction)</span>
+                    </div>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <i class="fas fa-comments mr-2"></i>
+                        <span>Features: Batching, Priority, DND</span>
+                    </div>
+                </div>
+                
+                <button class="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed" disabled>
+                    <i class="fas fa-hourglass-half mr-2"></i>
+                    Coming Soon
+                </button>
+            </div>
+        </div>
+
+        <!-- Setup Instructions -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8" id="setup-instructions">
+            <h2 class="text-xl font-semibold mb-4">
+                <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                Setup Instructions
+            </h2>
+            
+            <div class="space-y-4">
+                <div class="p-4 bg-blue-50 rounded-lg">
+                    <h3 class="font-medium text-blue-800 mb-2">📧 Gmail Setup</h3>
+                    <p class="text-blue-700 text-sm mb-3">
+                        To connect Gmail, you'll need to create Google OAuth credentials:
+                    </p>
+                    <ol class="text-blue-700 text-sm space-y-1 ml-4 list-decimal">
+                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank" class="underline">Google Cloud Console</a></li>
+                        <li>Create a new project or select existing one</li>
+                        <li>Enable the Gmail API</li>
+                        <li>Create OAuth 2.0 credentials (Desktop application)</li>
+                        <li>Add <code class="bg-blue-200 px-1 rounded">http://localhost:8080/oauth/callback</code> as redirect URI</li>
+                        <li>Download the credentials and enter them below</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connected Tools -->
+        <div class="bg-white rounded-lg shadow-lg p-6" id="connected-tools" style="display: none;">
+            <h2 class="text-xl font-semibold mb-4">
+                <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                Connected Tools
+            </h2>
+            
+            <div id="connected-list" class="space-y-3">
+                <!-- Connected tools will appear here -->
+            </div>
+            
+            <div class="mt-6 p-4 bg-green-50 rounded-lg">
+                <h3 class="font-medium text-green-800 mb-2">🎉 Great job!</h3>
+                <p class="text-green-700 text-sm">
+                    Your tools are connected and ready to help with ADHD-optimized productivity. 
+                    You can now use them through the chat interface or API.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Gmail Setup Modal -->
+    <div id="gmail-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 sm:mx-0">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-2xl font-bold text-gray-900">Connect Gmail</h2>
+                        <button onclick="closeGmailModal()" class="text-gray-400 hover:text-gray-600 p-2">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <form id="gmail-form" onsubmit="authenticateGmail(event)">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Google Client ID
+                            </label>
+                            <input type="text" id="gmail-client-id" required 
+                                   placeholder="123456-abcdef.apps.googleusercontent.com"
+                                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Google Client Secret
+                            </label>
+                            <input type="password" id="gmail-client-secret" required 
+                                   placeholder="GOCSPX-..."
+                                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-lg font-medium transition">
+                            <i class="fas fa-link mr-2"></i>
+                            Connect Gmail
+                        </button>
+                    </form>
+                    
+                    <div id="gmail-loading" class="hidden text-center py-4">
+                        <i class="fas fa-spinner fa-spin text-2xl text-blue-500"></i>
+                        <p class="text-gray-600 mt-2">Opening browser for authentication...</p>
+                    </div>
+                    
+                    <div id="gmail-error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
+                        <div class="flex items-center">
+                            <i class="fas fa-exclamation-circle mr-2"></i>
+                            <span id="gmail-error-text"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let connectedTools = [];
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConnectedTools();
+        });
+        
+        // Load connected tools
+        async function loadConnectedTools() {
+            try {
+                const response = await fetch('/api/mcp/tools', {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    connectedTools = data.tools.filter(tool => tool.connected);
+                    updateUI();
+                } else {
+                    console.error('Failed to load tools');
+                }
+            } catch (error) {
+                console.error('Error loading tools:', error);
+            }
+        }
+        
+        // Update UI based on connected tools
+        function updateUI() {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const connectedToolsDiv = document.getElementById('connected-tools');
+            const connectedList = document.getElementById('connected-list');
+            
+            // Update progress
+            const totalTools = 3; // Gmail, Calendar, Slack
+            const connectedCount = connectedTools.length;
+            const progressPercent = (connectedCount / totalTools) * 100;
+            
+            progressBar.style.width = progressPercent + '%';
+            progressText.textContent = `${connectedCount} of ${totalTools} tools connected`;
+            
+            // Update tool status
+            connectedTools.forEach(tool => {
+                const statusElement = document.getElementById(`${tool.tool_id}-status`);
+                const buttonElement = document.getElementById(`${tool.tool_id}-button`);
+                const cardElement = document.getElementById(`${tool.tool_id}-card`);
+                
+                if (statusElement) {
+                    statusElement.textContent = 'Connected';
+                    statusElement.className = 'status-badge bg-green-200 text-green-800 px-2 py-1 rounded text-xs';
+                }
+                
+                if (buttonElement) {
+                    buttonElement.innerHTML = '<i class="fas fa-check mr-2"></i>Connected';
+                    buttonElement.className = 'w-full bg-green-500 text-white py-2 px-4 rounded-lg';
+                    buttonElement.disabled = true;
+                }
+                
+                if (cardElement) {
+                    cardElement.classList.add('completed');
+                }
+            });
+            
+            // Show connected tools section if any tools are connected
+            if (connectedCount > 0) {
+                connectedToolsDiv.style.display = 'block';
+                
+                connectedList.innerHTML = connectedTools.map(tool => `
+                    <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-check-circle text-green-500"></i>
+                            <div>
+                                <div class="font-medium">${tool.name}</div>
+                                <div class="text-sm text-gray-500">${tool.description}</div>
+                            </div>
+                        </div>
+                        <div class="text-sm text-green-600">
+                            <i class="fas fa-plug mr-1"></i>Connected
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        // Gmail setup functions
+        function setupGmail() {
+            document.getElementById('gmail-modal').classList.remove('hidden');
+        }
+        
+        function closeGmailModal() {
+            document.getElementById('gmail-modal').classList.add('hidden');
+            clearGmailError();
+        }
+        
+        function showGmailLoading() {
+            document.getElementById('gmail-form').style.display = 'none';
+            document.getElementById('gmail-loading').classList.remove('hidden');
+        }
+        
+        function hideGmailLoading() {
+            document.getElementById('gmail-form').style.display = 'block';
+            document.getElementById('gmail-loading').classList.add('hidden');
+        }
+        
+        function showGmailError(message) {
+            const errorDiv = document.getElementById('gmail-error');
+            const errorText = document.getElementById('gmail-error-text');
+            errorText.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+        
+        function clearGmailError() {
+            document.getElementById('gmail-error').classList.add('hidden');
+        }
+        
+        async function authenticateGmail(event) {
+            event.preventDefault();
+            
+            const clientId = document.getElementById('gmail-client-id').value;
+            const clientSecret = document.getElementById('gmail-client-secret').value;
+            
+            showGmailLoading();
+            clearGmailError();
+            
+            try {
+                // First register the Gmail tool
+                const registerResponse = await fetch('/api/mcp/tools/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        tool_type: 'gmail'
+                    })
+                });
+                
+                if (!registerResponse.ok) {
+                    throw new Error('Failed to register Gmail tool');
+                }
+                
+                // Then authenticate
+                const authResponse = await fetch('/api/mcp/tools/authenticate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        tool_id: 'gmail',
+                        oauth_provider: 'gmail',
+                        credentials: {
+                            client_id: clientId,
+                            client_secret: clientSecret
+                        }
+                    })
+                });
+                
+                const data = await authResponse.json();
+                
+                if (data.success) {
+                    closeGmailModal();
+                    await loadConnectedTools();
+                    
+                    // Show success message
+                    alert('Gmail connected successfully! You can now use Gmail features in your ADHD assistant.');
+                } else {
+                    showGmailError(data.message || 'Authentication failed');
+                }
+                
+            } catch (error) {
+                console.error('Gmail authentication error:', error);
+                showGmailError('Connection error. Please check your credentials and try again.');
+            } finally {
+                hideGmailLoading();
+            }
+        }
+        
+        // Test Gmail connection
+        async function testGmail() {
+            try {
+                const response = await fetch('/api/mcp/tools/gmail/invoke', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        operation: 'get_unread_count',
+                        parameters: {}
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`Gmail test successful! You have ${data.data.total_unread} unread emails.`);
+                } else {
+                    alert(`Gmail test failed: ${data.error}`);
+                }
+                
+            } catch (error) {
+                console.error('Gmail test error:', error);
+                alert('Gmail test failed. Check console for details.');
+            }
+        }
+    </script>
+</body>
+</html>

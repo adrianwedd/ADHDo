@@ -41,6 +41,7 @@ from mcp_server.middleware import (
 from mcp_server.alerting import alert_manager
 from mcp_server.telegram_bot import telegram_bot
 from mcp_server.onboarding import onboarding_manager
+from mcp_server.mcp_integration import mcp_router, initialize_mcp_system, shutdown_mcp_system
 from mcp_server.beta_onboarding import beta_onboarding, QuickSetupRequest, BetaInvite
 from traces.memory import trace_memory
 from frames.builder import frame_builder
@@ -124,6 +125,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("⚠️ Alert monitoring failed to start", error=str(e))
     
+
+    # Initialize MCP system
+    try:
+        await initialize_mcp_system()
+        logger.info("✅ MCP system initialized successfully")
+    except Exception as e:
+        logger.warning("⚠️ MCP system initialization failed", error=str(e))
     # TODO: Initialize Telegram bot
     # TODO: Start background nudge scheduler
     
@@ -135,6 +143,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await alert_manager.stop_monitoring()
         await trace_memory.disconnect()
         await close_database()
+        await shutdown_mcp_system()
         logger.info("✅ All connections closed cleanly")
     except Exception as e:
         logger.warning("⚠️ Some connections failed to close cleanly", error=str(e))
@@ -223,6 +232,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Include MCP integration router
+app.include_router(mcp_router)
 
 # Mount static files for web interface
 import os
