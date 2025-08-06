@@ -69,5 +69,5 @@ ipython==8.14.0
 rich==13.5.2
 
 # Production server
-gunicorn==21.2.0
+gunicorn==23.0.0
 uvicorn[standard]==0.23.2
