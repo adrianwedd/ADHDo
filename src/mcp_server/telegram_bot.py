@@ -14,6 +14,7 @@ from telegram.error import TelegramError
 from mcp_server.config import settings
 from mcp_server.cognitive_loop import cognitive_loop
 from mcp_server.models import User, NudgeTier, TraceMemory
+from mcp_server.auth import auth_manager
 from traces.memory import trace_memory
 
 logger = structlog.get_logger()
@@ -44,6 +45,9 @@ class TelegramBotHandler:
             self.application.add_handler(CommandHandler("status", self.handle_status))
             self.application.add_handler(CommandHandler("focus", self.handle_focus))
             self.application.add_handler(CommandHandler("break", self.handle_break))
+            self.application.add_handler(CommandHandler("register", self.handle_register))
+            self.application.add_handler(CommandHandler("login", self.handle_login))
+            self.application.add_handler(CommandHandler("link", self.handle_link_account))
             
             # Message handler for general chat
             self.application.add_handler(
@@ -99,12 +103,16 @@ class TelegramBotHandler:
     async def handle_help(self, update: Update, context) -> None:
         """Handle /help command."""
         help_text = (
-            "🧠 MCP ADHD Assistant Commands:\n\n"
+            "🧠 **MCP ADHD Assistant Commands**\n\n"
             "💬 **General Chat**: Just message me about your tasks or how you're feeling\n\n"
-            "📋 **Commands**:\n"
+            "📋 **Task Commands**:\n"
             "/status - See your current focus and energy level\n"
             "/focus <task> - Set what you're working on now\n"
             "/break - Log that you're taking a break (important!)\n\n"
+            "🔐 **Account Commands**:\n"
+            "/register <name> <email> <password> - Create new account\n"
+            "/login <email> <password> - Link existing account\n"
+            "/link - Get account linking help\n\n"
             "🎯 **Examples**:\n"
             "• \"I'm struggling to start this email\"\n"
             "• \"Feeling overwhelmed with my project\"\n"
@@ -281,6 +289,119 @@ class TelegramBotHandler:
             await update.message.reply_text(
                 "I had a brief moment of confusion 😅 Could you try that again?"
             )
+    
+    async def handle_register(self, update: Update, context) -> None:
+        """Handle /register command for creating new account via Telegram."""
+        if not update.effective_user or not update.message:
+            return
+        
+        # Check if user already has context.args with name, email, password
+        if not context.args or len(context.args) < 3:
+            await update.message.reply_text(
+                "To register via Telegram, use:\n"
+                "`/register YourName your.email@example.com yourpassword123`\n\n"
+                "⚠️ *Security Note*: Consider deleting this message after registration "
+                "to protect your password!\n\n"
+                "Or register safely via the web interface at the server URL.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        name = context.args[0]
+        email = context.args[1]
+        password = context.args[2]
+        
+        try:
+            from mcp_server.auth import RegistrationRequest
+            registration = RegistrationRequest(name=name, email=email, password=password)
+            result = auth_manager.register_user(registration)
+            
+            if result.success:
+                # Update user with Telegram chat ID
+                user_data = auth_manager._user_data.get(result.user['user_id'])
+                if user_data:
+                    auth_user = auth_manager._users.get(result.user['user_id'])
+                    if auth_user:
+                        auth_user.telegram_chat_id = str(update.message.chat_id)
+                        auth_user.preferred_nudge_methods.append("telegram")
+                
+                await update.message.reply_text(
+                    f"🎉 Welcome to MCP ADHD Server, {name}!\n\n"
+                    "Your account has been created and linked to this Telegram chat.\n"
+                    "You can now:\n"
+                    "• Chat with me here for ADHD support\n"
+                    "• Use the web interface with your email/password\n"
+                    "• Get nudges and reminders via Telegram\n\n"
+                    "⚠️ *Please delete your registration message above for security!*"
+                )
+            else:
+                await update.message.reply_text(f"❌ Registration failed: {result.message}")
+                
+        except ValueError as e:
+            await update.message.reply_text(f"❌ Registration error: {str(e)}")
+        except Exception as e:
+            logger.error("Telegram registration error", error=str(e))
+            await update.message.reply_text("🔄 Something went wrong with registration. Let's try again or you can use our web interface for easier setup.")
+
+    async def handle_login(self, update: Update, context) -> None:
+        """Handle /login command for linking existing account."""
+        if not update.effective_user or not update.message:
+            return
+        
+        if not context.args or len(context.args) < 2:
+            await update.message.reply_text(
+                "To login via Telegram, use:\n"
+                "`/login your.email@example.com yourpassword`\n\n"
+                "⚠️ *Security Note*: Please delete this message after login "
+                "to protect your password!\n\n"
+                "Or login safely via the web interface.",
+                parse_mode="Markdown"
+            )
+            return
+        
+        email = context.args[0]
+        password = context.args[1]
+        
+        try:
+            from mcp_server.auth import LoginRequest
+            login_request = LoginRequest(email=email, password=password)
+            result = auth_manager.login_user(login_request)
+            
+            if result.success:
+                # Link Telegram to existing account
+                user = auth_manager._users.get(result.user['user_id'])
+                if user:
+                    user.telegram_chat_id = str(update.message.chat_id)
+                    if "telegram" not in user.preferred_nudge_methods:
+                        user.preferred_nudge_methods.append("telegram")
+                
+                await update.message.reply_text(
+                    f"✅ Welcome back, {result.user['name']}!\n\n"
+                    "Your existing account is now linked to this Telegram chat.\n"
+                    "You can continue using both the web interface and Telegram bot.\n\n"
+                    "⚠️ *Please delete your login message above for security!*"
+                )
+            else:
+                await update.message.reply_text(f"❌ Login failed: {result.message}")
+                
+        except Exception as e:
+            logger.error("Telegram login error", error=str(e))
+            await update.message.reply_text("❌ Login failed. Please check your credentials and try again.")
+
+    async def handle_link_account(self, update: Update, context) -> None:
+        """Handle /link command to get linking instructions."""
+        await update.message.reply_text(
+            "🔗 **Link Your Account**\n\n"
+            "To connect your existing web account to Telegram:\n\n"
+            "1️⃣ If you have an account: `/login your.email@domain.com yourpassword`\n"
+            "2️⃣ If you need an account: `/register YourName your.email@domain.com yourpassword`\n\n"
+            "⚠️ **Security Tips**:\n"
+            "• Delete your login/register message after use\n"
+            "• Consider using the secure web interface instead\n"
+            "• Only do this in a private chat with me\n\n"
+            "💡 **Alternative**: Use the web interface to manage your account securely!",
+            parse_mode="Markdown"
+        )
     
     async def _get_or_create_user(self, user_id: str, username: str, chat_id: int) -> User:
         """Get existing user or create new one."""

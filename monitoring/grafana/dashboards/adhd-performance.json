@@ -1,0 +1,334 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "MCP ADHD Server - Performance Dashboard",
+    "tags": ["mcp", "adhd", "performance"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "ADHD Response Time Target (<3s)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "avg(adhd_response_time_seconds)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "min": 0,
+            "max": 5,
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow", 
+                  "value": 2
+                },
+                {
+                  "color": "red",
+                  "value": 3
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Cognitive Load Distribution",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "adhd_cognitive_load_current",
+            "refId": "A",
+            "legendFormat": "Current Load"
+          },
+          {
+            "expr": "adhd_cognitive_load_average",
+            "refId": "B", 
+            "legendFormat": "Average Load"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0,
+            "max": 1,
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "pointSize": 3,
+              "showPoints": "auto",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "ADHD Pattern Matching Speed",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(adhd_pattern_match_duration_seconds_sum[5m]) / rate(adhd_pattern_match_duration_seconds_count[5m])",
+            "refId": "A",
+            "legendFormat": "Avg Pattern Match Time"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "thresholds": [
+                {
+                  "color": "red",
+                  "value": 100
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "green", 
+                  "value": 0
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Hyperfocus Session Activity",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "adhd_hyperfocus_sessions_active",
+            "refId": "A",
+            "legendFormat": "Active Sessions"
+          },
+          {
+            "expr": "increase(adhd_hyperfocus_sessions_total[1h])",
+            "refId": "B",
+            "legendFormat": "Sessions Started (1h)"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 5,
+        "title": "Overwhelm Detection Events",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "increase(adhd_overwhelm_detected_total[5m])",
+            "refId": "A",
+            "legendFormat": "Overwhelm Events"
+          },
+          {
+            "expr": "increase(adhd_crisis_interventions_total[5m])",
+            "refId": "B",
+            "legendFormat": "Crisis Interventions"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "barAlignment": 0
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Dopamine Reward System",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "adhd_dopamine_rewards_total",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "color": {
+              "mode": "value"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "match": "null",
+                  "result": {
+                    "text": "N/A"
+                  }
+                },
+                "type": "special"
+              }
+            ],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "orientation": "auto",
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 24
+        }
+      },
+      {
+        "id": 7,
+        "title": "System Health Components",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "health_check_status{component=\"database\"}",
+            "refId": "A"
+          },
+          {
+            "expr": "health_check_status{component=\"redis\"}", 
+            "refId": "B"
+          },
+          {
+            "expr": "health_check_status{component=\"llm\"}",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "text": "UNHEALTHY"
+                  },
+                  "1": {
+                    "color": "green", 
+                    "text": "HEALTHY"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 16,
+          "x": 8,
+          "y": 24
+        }
+      },
+      {
+        "id": 8,
+        "title": "Rate Limiting Status",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status=~\"4.*\"}[5m])",
+            "refId": "A",
+            "legendFormat": "Rate Limited Requests"
+          },
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "refId": "B",
+            "legendFormat": "Total Requests"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(up{job=\"mcp-adhd-server\"}, instance)",
+          "refresh": "on_time_range_changed"
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "ADHD Events",
+          "datasource": "Prometheus",
+          "expr": "changes(adhd_overwhelm_detected_total[5m]) > 0",
+          "titleFormat": "Overwhelm Detected",
+          "textFormat": "User overwhelm event detected"
+        }
+      ]
+    }
+  }
+}

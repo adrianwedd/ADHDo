@@ -1,43 +1,186 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mcp_adhd}
+      POSTGRES_USER: ${POSTGRES_USER:-mcpuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mcpuser} -d ${POSTGRES_DB:-mcp_adhd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - mcp_network
+
   redis:
     image: redis:7-alpine
-    restart: always
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       timeout: 3s
       interval: 5s
       retries: 5
+    networks:
+      - mcp_network
 
   mcp-server:
-    build: .
-    restart: always
+    build:
+      context: .
+      target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VERSION: ${VERSION:-latest}
+        VCS_REF: ${VCS_REF:-}
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mcpuser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mcp_adhd}
       - REDIS_URL=redis://redis:6379/0
-      - DEBUG=true
-      - LOG_LEVEL=INFO
-      # These are optional - system will work without them in test mode
+      
+      # Application Configuration
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8000
+      
+      # Security Configuration
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      
+      # External Service Configuration (optional)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      
+      # ADHD Performance Configuration
+      - MAX_RESPONSE_TIME_MS=${MAX_RESPONSE_TIME_MS:-3000}
+      - MAX_COGNITIVE_PROCESSING_MS=${MAX_COGNITIVE_PROCESSING_MS:-1000}
+      - MAX_PATTERN_MATCH_MS=${MAX_PATTERN_MATCH_MS:-100}
+      
+      # Monitoring Configuration
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      - METRICS_PORT=${METRICS_PORT:-9090}
+      - PROMETHEUS_MULTIPROC_DIR=/app/prometheus
+      
     volumes:
-      - ./src:/app/src:ro
+      - app_data:/app/data
+      - app_logs:/app/logs
+      - prometheus_multiproc:/app/prometheus
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      timeout: 3s
-      interval: 10s
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+      start_period: 10s
+    networks:
+      - mcp_network
+
+  # Prometheus for metrics collection (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - mcp-server
+    networks:
+      - mcp_network
+    profiles:
+      - monitoring
+
+  # Grafana for metrics visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - mcp_network
+    profiles:
+      - monitoring
+
+  # Nginx reverse proxy with SSL (optional)
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - mcp-server
+    networks:
+      - mcp_network
+    profiles:
+      - ssl
 
 volumes:
+  postgres_data:
+    driver: local
   redis_data:
+    driver: local
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
+  prometheus_multiproc:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  mcp_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

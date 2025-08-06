@@ -52,6 +52,36 @@
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
+                    <!-- User Profile Section -->
+                    <div id="user-profile" class="hidden flex items-center space-x-3">
+                        <div class="text-right">
+                            <div id="user-name" class="text-sm font-medium">User</div>
+                            <div class="text-xs opacity-75">Signed in</div>
+                        </div>
+                        <div class="relative">
+                            <button onclick="toggleUserMenu()" class="w-11 h-11 bg-white bg-opacity-20 rounded-full flex items-center justify-center hover:bg-opacity-30 transition min-h-[44px] min-w-[44px]">
+                                <i class="fas fa-user text-sm"></i>
+                            </button>
+                            <!-- User dropdown menu -->
+                            <div id="user-menu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-10">
+                                <a href="#" onclick="showProfile()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-user-cog mr-2"></i>Profile Settings
+                                </a>
+                                <a href="#" onclick="handleLogout()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-sign-out-alt mr-2"></i>Sign Out
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Login Button (shown when not authenticated) -->
+                    <div id="login-section">
+                        <button onclick="showAuthModal('login')" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg transition duration-200 flex items-center space-x-2 min-h-[44px] min-w-[44px]">
+                            <i class="fas fa-sign-in-alt"></i>
+                            <span>Sign In</span>
+                        </button>
+                    </div>
+                    
                     <span id="status-indicator" class="flex items-center space-x-2">
                         <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
                         <span class="text-sm">Connected</span>
@@ -149,7 +179,7 @@
                     >
                     <button 
                         onclick="sendMessage()" 
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center space-x-2"
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition duration-200 flex items-center space-x-2 min-h-[44px] min-w-[44px]"
                     >
                         <i class="fas fa-paper-plane"></i>
                         <span>Send</span>
@@ -205,9 +235,94 @@
         </div>
     </main>
 
+    <!-- Login/Register Modal -->
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 sm:mx-0">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 id="auth-modal-title" class="text-2xl font-bold text-gray-900">Welcome Back!</h2>
+                        <button onclick="closeAuthModal()" class="text-gray-400 hover:text-gray-600 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Login Form -->
+                    <div id="login-form">
+                        <form onsubmit="handleLogin(event)">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                <input type="email" id="login-email" required 
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div class="mb-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                                <input type="password" id="login-password" required 
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-lg font-medium transition duration-200 min-h-[44px] flex items-center justify-center">
+                                Sign In
+                            </button>
+                        </form>
+                        <div class="text-center mt-4">
+                            <button onclick="switchToRegister()" class="text-blue-500 hover:text-blue-700 text-sm py-2 px-4 min-h-[44px] flex items-center justify-center mx-auto">
+                                Don't have an account? Sign up
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Register Form -->
+                    <div id="register-form" class="hidden">
+                        <form onsubmit="handleRegister(event)">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                                <input type="text" id="register-name" required 
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                <input type="email" id="register-email" required 
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                                <input type="password" id="register-password" required 
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <div class="text-xs text-gray-600 mt-1">
+                                    Must be 8+ characters with letters and numbers
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-lg font-medium transition duration-200 min-h-[44px] flex items-center justify-center">
+                                Create Account
+                            </button>
+                        </form>
+                        <div class="text-center mt-4">
+                            <button onclick="switchToLogin()" class="text-blue-500 hover:text-blue-700 text-sm py-2 px-4 min-h-[44px] flex items-center justify-center mx-auto">
+                                Already have an account? Sign in
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading/Error States -->
+                    <div id="auth-loading" class="hidden text-center py-4">
+                        <i class="fas fa-spinner fa-spin text-2xl text-blue-500"></i>
+                        <p class="text-gray-600 mt-2">Please wait...</p>
+                    </div>
+                    <div id="auth-error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">
+                        <div class="flex items-center">
+                            <i class="fas fa-exclamation-circle mr-2"></i>
+                            <span id="auth-error-text"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global state
-        let userId = 'debug-user-' + Math.random().toString(36).substr(2, 9);
+        let currentUser = null;
+        let sessionId = null;
         
         // Quick Actions
         function quickAction(action) {
@@ -223,6 +338,225 @@
             sendMessage();
         }
         
+        // Authentication Functions
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/me', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    currentUser = userData;
+                    updateUIForAuthenticatedUser(userData);
+                    return true;
+                } else {
+                    currentUser = null;
+                    updateUIForUnauthenticatedUser();
+                    return false;
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                currentUser = null;
+                updateUIForUnauthenticatedUser();
+                return false;
+            }
+        }
+        
+        function updateUIForAuthenticatedUser(userData) {
+            document.getElementById('user-name').textContent = userData.name;
+            document.getElementById('user-profile').classList.remove('hidden');
+            document.getElementById('login-section').classList.add('hidden');
+        }
+        
+        function updateUIForUnauthenticatedUser() {
+            document.getElementById('user-profile').classList.add('hidden');
+            document.getElementById('login-section').classList.remove('hidden');
+        }
+        
+        function showAuthModal(mode = 'login') {
+            const modal = document.getElementById('auth-modal');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const title = document.getElementById('auth-modal-title');
+            
+            // Reset forms and errors
+            clearAuthError();
+            hideAuthLoading();
+            
+            if (mode === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                title.textContent = 'Welcome Back!';
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                title.textContent = 'Create Your Account';
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeAuthModal() {
+            document.getElementById('auth-modal').classList.add('hidden');
+            clearAuthError();
+        }
+        
+        function switchToLogin() {
+            showAuthModal('login');
+        }
+        
+        function switchToRegister() {
+            showAuthModal('register');
+        }
+        
+        function showAuthLoading() {
+            document.getElementById('auth-loading').classList.remove('hidden');
+            document.getElementById('login-form').style.opacity = '0.5';
+            document.getElementById('register-form').style.opacity = '0.5';
+        }
+        
+        function hideAuthLoading() {
+            document.getElementById('auth-loading').classList.add('hidden');
+            document.getElementById('login-form').style.opacity = '1';
+            document.getElementById('register-form').style.opacity = '1';
+        }
+        
+        function showAuthError(message) {
+            const errorDiv = document.getElementById('auth-error');
+            const errorText = document.getElementById('auth-error-text');
+            errorText.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+        
+        function clearAuthError() {
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+        
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            showAuthLoading();
+            clearAuthError();
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentUser = data.user;
+                    updateUIForAuthenticatedUser(data.user);
+                    closeAuthModal();
+                    
+                    // Check if user needs onboarding
+                    await checkOnboarding();
+                    
+                    // Add welcome message to chat
+                    addMessage(`Welcome back, ${data.user.name}! Ready to tackle your goals? 🎯`, 'assistant', false, {
+                        source: 'system',
+                        processingTime: 1,
+                        cognitiveLoad: 0.1
+                    });
+                } else {
+                    showAuthError(data.message || 'Login failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showAuthError('Connection error. Please check your internet and try again.');
+            } finally {
+                hideAuthLoading();
+            }
+        }
+        
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            
+            showAuthLoading();
+            clearAuthError();
+            
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ name, email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Auto-login after registration
+                    await handleLogin(new Event('submit'));
+                } else {
+                    showAuthError(data.message || 'Registration failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showAuthError('Connection error. Please check your internet and try again.');
+            } finally {
+                hideAuthLoading();
+            }
+        }
+        
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                currentUser = null;
+                updateUIForUnauthenticatedUser();
+                
+                // Clear chat and show logged out message
+                const messagesContainer = document.getElementById('chat-messages');
+                messagesContainer.innerHTML = `
+                    <div class="chat-message bg-gray-50 p-4 rounded-lg">
+                        <div class="flex items-start space-x-3">
+                            <div class="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center">
+                                <i class="fas fa-robot text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-gray-800">You've been signed out. Thanks for using MCP ADHD Server! 👋</p>
+                                <p class="text-gray-600 text-sm mt-1">Sign in again to continue your productivity journey.</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+        
+        function toggleUserMenu() {
+            const menu = document.getElementById('user-menu');
+            menu.classList.toggle('hidden');
+        }
+        
+        function showProfile() {
+            // TODO: Implement profile modal
+            alert('Profile settings coming soon!');
+            toggleUserMenu();
+        }
+        
         // Send message to the API
         async function sendMessage() {
             const input = document.getElementById('chat-input');
@@ -232,8 +566,20 @@
             const message = input.value.trim();
             if (!message) return;
             
+            // Check if user is authenticated
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+            
             // Add user message to chat
             addMessage(message, 'user');
+            
+            // Check for onboarding commands
+            if (handleOnboardingCommand(message)) {
+                input.value = '';
+                return;
+            }
             
             // Clear input
             input.value = '';
@@ -247,9 +593,9 @@
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-User-ID': userId  // Debug mode header
+                        'Content-Type': 'application/json'
                     },
+                    credentials: 'include',
                     body: JSON.stringify({
                         message: message,
                         task_focus: taskFocus.value || null,
@@ -275,6 +621,12 @@
                     // Update performance metrics
                     updateMetrics(data, responseTime);
                     
+                } else if (response.status === 401) {
+                    // Authentication required
+                    currentUser = null;
+                    updateUIForUnauthenticatedUser();
+                    showAuthModal('login');
+                    addMessage('Please sign in to continue chatting.', 'assistant error');
                 } else {
                     addMessage(`Sorry, I had trouble processing that. ${data.detail || 'Please try again.'}`, 'assistant error');
                 }
@@ -403,19 +755,117 @@
             return div.innerHTML;
         }
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            // Focus on input
-            document.getElementById('chat-input').focus();
+        // Close user menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const userMenu = document.getElementById('user-menu');
+            const userProfile = document.getElementById('user-profile');
             
-            // Add welcome message with current time
-            setTimeout(() => {
-                addMessage('Ready to help you tackle your day! What\'s on your mind? 🚀', 'assistant', false, {
-                    source: 'system',
+            if (!userProfile.contains(event.target)) {
+                userMenu.classList.add('hidden');
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check authentication status first
+            const isAuthenticated = await checkAuthStatus();
+            
+            if (isAuthenticated) {
+                // Focus on input for authenticated users
+                document.getElementById('chat-input').focus();
+                
+                // Add personalized welcome message
+                setTimeout(() => {
+                    addMessage(`Ready to help you tackle your day, ${currentUser.name}! What's on your mind? 🚀`, 'assistant', false, {
+                        source: 'system',
+                        processingTime: 1,
+                        cognitiveLoad: 0.1
+                    });
+                }, 500);
+            } else {
+                // Add welcome message for unauthenticated users
+                setTimeout(() => {
+                    addMessage('Hi! I\'m your ADHD support assistant. Sign in to start chatting and get personalized help! 🧠✨', 'assistant', false, {
+                        source: 'system',
+                        processingTime: 1,
+                        cognitiveLoad: 0.1
+                    });
+                }, 500);
+            }
+        });
+        
+        // Onboarding system integration
+        async function checkOnboarding() {
+            if (!currentUser) return;
+            
+            try {
+                const response = await fetch('/api/onboarding/status', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const onboardingData = await response.json();
+                    
+                    // Check if user needs onboarding
+                    if (!onboardingData.completed && !onboardingData.skipped) {
+                        // Show onboarding suggestion
+                        setTimeout(() => {
+                            addMessage(`Welcome, ${currentUser.name}! 🎉 Would you like a quick setup to customize your ADHD support? It takes just 2-3 minutes and helps me understand how to best assist you.`, 'assistant', false, {
+                                source: 'onboarding',
+                                processingTime: 1,
+                                cognitiveLoad: 0.2
+                            });
+                            
+                            // Add onboarding action buttons (simplified for now)
+                            setTimeout(() => {
+                                addMessage(`Type "start onboarding" to begin customization, or "skip onboarding" if you'd prefer to dive right in!`, 'assistant', false, {
+                                    source: 'onboarding',
+                                    processingTime: 1,
+                                    cognitiveLoad: 0.1
+                                });
+                            }, 1000);
+                        }, 2000);
+                    }
+                }
+            } catch (error) {
+                console.log('Onboarding check skipped:', error);
+                // Don't show error to user - onboarding is optional
+            }
+        }
+        
+        // Handle onboarding commands in the chat
+        function handleOnboardingCommand(message) {
+            const lowerMessage = message.toLowerCase().trim();
+            
+            if (lowerMessage === 'start onboarding') {
+                addMessage('Great! Let\'s get you set up. This will help me provide better ADHD support tailored to your needs.', 'assistant', false, {
+                    source: 'onboarding',
+                    processingTime: 1,
+                    cognitiveLoad: 0.2
+                });
+                
+                setTimeout(() => {
+                    addMessage('For now, you can explore the system and I\'ll learn your preferences as we chat. The full onboarding interface is coming soon!', 'assistant', false, {
+                        source: 'onboarding',
+                        processingTime: 1,
+                        cognitiveLoad: 0.1
+                    });
+                }, 1500);
+                
+                return true;
+            } else if (lowerMessage === 'skip onboarding') {
+                addMessage('No problem! You can always customize your settings later. Let\'s get started - what\'s on your mind today?', 'assistant', false, {
+                    source: 'onboarding',
                     processingTime: 1,
                     cognitiveLoad: 0.1
                 });
-            }, 500);
+                return true;
+            }
+            
+            return false;
+        }
+        
         });
     </script>
 </body>

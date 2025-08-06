@@ -1,0 +1,35 @@
+# Grafana datasource configuration for Prometheus
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    
+    # ADHD-specific configuration
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+      queryTimeout: "300s"
+      
+      # Custom headers for ADHD metrics
+      customQueryParameters: "format=prometheus"
+      
+      # Performance optimizations
+      cacheLevel: "Low"
+      incrementalQuerying: true
+      
+    # Basic auth (if needed)
+    # basicAuth: true
+    # basicAuthUser: admin
+    # secureJsonData:
+    #   basicAuthPassword: password
+    
+    # Example queries for ADHD metrics
+    exemplarTraceIdDestinations:
+      - name: trace_id
+        datasourceUid: jaeger_uid
+        urlDisplayLabel: "View Trace"

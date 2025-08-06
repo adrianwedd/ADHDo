@@ -1,0 +1,117 @@
+# Prometheus configuration for MCP ADHD Server
+# Optimized for ADHD performance monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: 'mcp-adhd-server'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files:
+  - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # MCP ADHD Server metrics
+  - job_name: 'mcp-adhd-server'
+    static_configs:
+      - targets: ['mcp-server:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: true
+    
+    # ADHD-specific metric collection
+    params:
+      format: ['prometheus']
+    
+    # Metric relabeling for ADHD-specific metrics
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'adhd_.*'
+        target_label: 'adhd_metric'
+        replacement: 'true'
+      
+      - source_labels: [__name__]
+        regex: 'cognitive_load_.*'
+        target_label: 'cognitive_metric'
+        replacement: 'true'
+    
+    # Sample limits to prevent metric explosion
+    sample_limit: 10000
+
+  # Health check monitoring
+  - job_name: 'mcp-health'
+    static_configs:
+      - targets: ['mcp-server:8000']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    
+    # Convert health check to metrics
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'up'
+        target_label: 'health_check'
+        replacement: 'true'
+
+  # PostgreSQL metrics (if postgres_exporter is available)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Redis metrics (if redis_exporter is available) 
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # System metrics (if node_exporter is available)
+  - job_name: 'system'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    
+    # Collect only essential system metrics for ADHD performance
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'node_(cpu|memory|disk|network)_.*'
+        action: keep
+
+  # Nginx metrics (if nginx-prometheus-exporter is available)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx_exporter:9113']
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+# Storage configuration for ADHD metrics retention
+storage:
+  tsdb:
+    retention.time: 200h  # ~8 days for detailed metrics
+    retention.size: 1GB
+    
+    # Optimized for ADHD time-series queries
+    min-block-duration: 2h
+    max-block-duration: 25h
+    
+    # Compression for long-term storage
+    compression: snappy
+
+# Remote write configuration (for long-term storage)
+# remote_write:
+#   - url: "https://your-metrics-store.com/api/v1/write"
+#     headers:
+#       X-Service: "mcp-adhd-server"

@@ -1,0 +1,100 @@
+# Docker Compose override for development environment
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.development.yml up
+
+version: '3.8'
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: mcp_adhd_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password_123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+  redis:
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+
+  mcp-server:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8001:8000"
+    environment:
+      # Override with development settings
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql://dev_user:dev_password_123@postgres:5432/mcp_adhd_dev
+      - REDIS_URL=redis://redis:6379/1
+      - DEBUG=true
+      - ENABLE_AUTO_RELOAD=true
+      - ENABLE_DEBUG_TOOLBAR=true
+      - SECRET_KEY=dev_secret_key_not_for_production
+      - JWT_SECRET=dev_jwt_secret_not_for_production
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - MAX_RESPONSE_TIME_MS=5000
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+      - ENABLE_MOCK_LLM=true
+    volumes:
+      # Mount source code for live development
+      - ./src:/app/src:delegated
+      - ./static:/app/static:delegated
+      - ./tests:/app/tests:delegated
+      - ./alembic:/app/alembic:delegated
+      - ./alembic.ini:/app/alembic.ini:ro
+    command: ["sh", "-c", "alembic upgrade head && uvicorn mcp_server.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug"]
+
+  # Development-specific services
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web interface
+    networks:
+      - mcp_network
+
+  # Development database admin
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@dev.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DISABLE_POSTFIX: "true"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - mcp_network
+
+  # Redis admin interface
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379:1
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - mcp_network
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  pgadmin_data:
+    driver: local

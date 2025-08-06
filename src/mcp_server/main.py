@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import AsyncGenerator, Optional
 
 import structlog
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +21,11 @@ from mcp_server import __version__
 from mcp_server.config import settings
 from mcp_server.models import MCPFrame, User, Task, NudgeTier
 from mcp_server.cognitive_loop import cognitive_loop
-from mcp_server.auth import auth_manager, get_current_user, get_optional_user
+from mcp_server.auth import (
+    auth_manager, get_current_user, get_optional_user,
+    RegistrationRequest, LoginRequest, PasswordResetRequest, 
+    PasswordResetConfirm, UserProfile, AuthResponse
+)
 from mcp_server.database import init_database, close_database, get_database_session
 from mcp_server.repositories import (
     UserRepository, TaskRepository, TraceMemoryRepository, 
@@ -35,6 +39,8 @@ from mcp_server.middleware import (
     HealthCheckMiddleware, ADHDOptimizationMiddleware, SecurityMiddleware
 )
 from mcp_server.alerting import alert_manager
+from mcp_server.telegram_bot import telegram_bot
+from mcp_server.onboarding import onboarding_manager
 from traces.memory import trace_memory
 from frames.builder import frame_builder
 
@@ -137,14 +143,68 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="MCP ADHD Server",
     description=(
-        "Meta-Cognitive Protocol server for ADHD executive function support. "
-        "A recursive, context-aware AI orchestration system that helps "
-        "neurodivergent minds get their shit done."
+        "🧠⚡ Meta-Cognitive Protocol server for ADHD executive function support.\n\n"
+        "A recursive, context-aware AI orchestration system specifically designed "
+        "for neurodivergent minds. Features ultra-fast responses (<3s), "
+        "cognitive load management, hyperfocus detection, and crisis intervention.\n\n"
+        "**Key Features:**\n"
+        "- 🚀 Ultra-fast ADHD-optimized responses\n"
+        "- 🎯 Context-aware task support\n" 
+        "- 📱 Telegram bot integration\n"
+        "- 🧠 ADHD-specific onboarding\n"
+        "- 🏆 Built-in celebration system\n"
+        "- 🚨 Overwhelm detection & intervention\n"
+        "- 🔒 Privacy-first architecture\n\n"
+        "Built by neurodivergent developers for neurodivergent users."
     ),
     version=__version__,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
+    contact={
+        "name": "MCP ADHD Server Support",
+        "url": "https://github.com/your-org/mcp-adhd-server",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    servers=[
+        {
+            "url": "http://localhost:8000",
+            "description": "Development server"
+        },
+        {
+            "url": "https://api.mcpadhd.com",
+            "description": "Production server"
+        }
+    ],
+    tags_metadata=[
+        {
+            "name": "Authentication",
+            "description": "🔐 User registration, login, and session management with ADHD-optimized flows."
+        },
+        {
+            "name": "Onboarding", 
+            "description": "🧠 ADHD-specific onboarding system to customize user experience."
+        },
+        {
+            "name": "Chat",
+            "description": "💬 Core ADHD support chat API with context awareness and crisis detection."
+        },
+        {
+            "name": "Health",
+            "description": "❤️ System health monitoring and performance metrics."
+        },
+        {
+            "name": "Telegram",
+            "description": "📱 Telegram bot integration for mobile ADHD support."
+        },
+        {
+            "name": "Webhooks",
+            "description": "🔗 Integration webhooks for external services."
+        }
+    ]
 )
 
 # Add custom middleware (order matters - last added runs first)
@@ -191,7 +251,7 @@ async def global_exception_handler(request, exc):
 
 # === HEALTH CHECK ENDPOINTS ===
 
-@app.get("/health")
+@app.get("/health", tags=["Health"], summary="Basic Health Check")
 async def basic_health_check():
     """Basic health check endpoint for load balancers."""
     return {
@@ -390,10 +450,344 @@ async def api_info():
         "tagline": "Because Executive Function Is a Liar.",
         "status": "🧠⚡ Recursion unleashed",
         "docs": "/docs" if settings.debug else "Documentation disabled in production",
-        "dashboard": "/dashboard",
+        "dashboard": "/dashboard", 
         "web_interface": "/",
-        "metrics": "/metrics"
+        "metrics": "/metrics",
+        "auth": {
+            "register": "/api/auth/register",
+            "login": "/api/auth/login",
+            "logout": "/api/auth/logout",
+            "profile": "/api/auth/me"
+        }
     }
+
+
+# === AUTHENTICATION ENDPOINTS ===
+
+@app.post("/api/auth/register", response_model=AuthResponse, tags=["Authentication"], 
+         summary="Register New User", 
+         description="Create a new ADHD-optimized user account with secure authentication.")
+async def register_user(registration: RegistrationRequest, request: Request) -> AuthResponse:
+    """Register a new user account.
+    
+    Creates a new user account with ADHD-optimized defaults and validation.
+    Passwords must be at least 8 characters with letters and numbers.
+    """
+    try:
+        # Rate limiting for registration
+        client_ip = request.client.host
+        if not auth_manager.check_rate_limit(f"register:{client_ip}", limit=5, window=3600):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many registration attempts. Please try again in an hour."
+            )
+        
+        result = auth_manager.register_user(registration)
+        
+        if result.success:
+            logger.info("User registration successful", email=registration.email)
+            # Track registration metric
+            metrics_collector.increment_counter("adhd_user_registrations_total")
+        else:
+            logger.warning("User registration failed", email=registration.email, reason=result.message)
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning("Registration validation error", error=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error("Registration error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Let's try that again! Something went wrong with creating your account. Please check your info and give it another go.")
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)  
+async def login_user(login: LoginRequest, request: Request) -> AuthResponse:
+    """Login with email and password.
+    
+    Creates a secure session and returns user information.
+    Sessions expire after the configured duration (default 24 hours).
+    """
+    try:
+        # Rate limiting for login attempts
+        client_ip = request.client.host
+        if not auth_manager.check_rate_limit(f"login:{client_ip}", limit=10, window=3600):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Please try again later."
+            )
+        
+        user_agent = request.headers.get("user-agent")
+        result = auth_manager.login_user(login, user_agent, client_ip)
+        
+        if result.success:
+            logger.info("User login successful", email=login.email)
+            # Track login metric
+            metrics_collector.increment_counter("adhd_user_logins_total")
+            
+            # Set secure session cookie if successful
+            response = JSONResponse(result.dict())
+            if result.session_id:
+                response.set_cookie(
+                    key="session_id",
+                    value=result.session_id,
+                    httponly=True,
+                    secure=not settings.debug,  # HTTPS only in production
+                    samesite="lax",
+                    max_age=86400 * 7  # 7 days
+                )
+            return response
+        else:
+            logger.warning("User login failed", email=login.email)
+            # Add delay for failed attempts to prevent brute force
+            import asyncio
+            await asyncio.sleep(2)
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Login error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Login failed. Please try again.")
+
+
+@app.post("/api/auth/logout", response_model=AuthResponse)
+async def logout_user(request: Request) -> AuthResponse:
+    """Logout current user and invalidate session.
+    
+    Revokes the current session and clears the session cookie.
+    """
+    try:
+        # Get session from cookie
+        session_id = request.cookies.get("session_id")
+        
+        if session_id:
+            result = auth_manager.logout_user(session_id)
+            logger.info("User logout", session_id=session_id[:8])
+        else:
+            result = AuthResponse(
+                success=True,
+                message="Already logged out."
+            )
+        
+        # Clear session cookie
+        response = JSONResponse(result.dict())
+        response.delete_cookie("session_id")
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Logout error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Logout failed.")
+
+
+@app.get("/api/auth/me")
+async def get_current_user_profile(current_user: User = Depends(get_current_user)) -> dict:
+    """Get current user profile information.
+    
+    Returns the authenticated user's profile data and ADHD preferences.
+    Requires valid session or API key authentication.
+    """
+    return {
+        "user_id": current_user.user_id,
+        "name": current_user.name,
+        "email": getattr(current_user, 'email', None),
+        "timezone": current_user.timezone,
+        "preferred_nudge_methods": current_user.preferred_nudge_methods,
+        "energy_patterns": current_user.energy_patterns,
+        "hyperfocus_indicators": current_user.hyperfocus_indicators,
+        "nudge_timing_preferences": current_user.nudge_timing_preferences,
+        "created_at": datetime.utcnow().isoformat()  # TODO: get actual creation date
+    }
+
+
+@app.put("/api/auth/me", response_model=AuthResponse)
+async def update_user_profile(
+    profile: UserProfile, 
+    current_user: User = Depends(get_current_user)
+) -> AuthResponse:
+    """Update current user profile.
+    
+    Updates user preferences and ADHD-specific settings.
+    All fields are optional - only provided fields will be updated.
+    """
+    try:
+        result = auth_manager.update_user_profile(current_user.user_id, profile)
+        
+        if result.success:
+            logger.info("User profile updated", user_id=current_user.user_id)
+            # Track profile update metric
+            metrics_collector.increment_counter("adhd_profile_updates_total")
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Profile update error", user_id=current_user.user_id, error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Profile update failed. Please try again.")
+
+
+@app.post("/api/auth/forgot-password", response_model=AuthResponse)
+async def request_password_reset(
+    reset_request: PasswordResetRequest, 
+    request: Request
+) -> AuthResponse:
+    """Request password reset email.
+    
+    Sends password reset instructions to the provided email address.
+    For security, always returns success regardless of email validity.
+    """
+    try:
+        # Rate limiting for password reset
+        client_ip = request.client.host
+        if not auth_manager.check_rate_limit(f"reset:{client_ip}", limit=5, window=3600):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many password reset attempts. Please try again in an hour."
+            )
+        
+        result = auth_manager.request_password_reset(reset_request.email)
+        
+        logger.info("Password reset requested", email=reset_request.email)
+        # Track reset request metric
+        metrics_collector.increment_counter("adhd_password_resets_requested_total")
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Password reset request error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Password reset request failed.")
+
+
+@app.post("/api/auth/reset-password", response_model=AuthResponse)
+async def confirm_password_reset(
+    reset_confirm: PasswordResetConfirm,
+    request: Request
+) -> AuthResponse:
+    """Confirm password reset with token.
+    
+    Resets the password using the token from the reset email.
+    All existing sessions will be invalidated for security.
+    """
+    try:
+        # Rate limiting for reset confirmation
+        client_ip = request.client.host
+        if not auth_manager.check_rate_limit(f"reset_confirm:{client_ip}", limit=10, window=3600):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many password reset attempts. Please try again later."
+            )
+        
+        result = auth_manager.reset_password(reset_confirm)
+        
+        if result.success:
+            logger.info("Password reset completed successfully")
+            # Track reset completion metric
+            metrics_collector.increment_counter("adhd_password_resets_completed_total")
+        else:
+            logger.warning("Password reset failed", reason=result.message)
+        
+        return result
+        
+    except ValueError as e:
+        logger.warning("Password reset validation error", error=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error("Password reset error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Password reset failed. Please try again.")
+
+
+# === END AUTHENTICATION ENDPOINTS ===
+
+# === ONBOARDING ENDPOINTS ===
+
+@app.get("/api/onboarding/status", tags=["Onboarding"], 
+         summary="Get Onboarding Status",
+         description="Check current user's ADHD onboarding progress and completion status.")
+async def get_onboarding_status(current_user: User = Depends(get_current_user)) -> dict:
+    """Get current user's onboarding status."""
+    try:
+        status = await onboarding_manager.get_onboarding_status(current_user.user_id)
+        
+        if not status:
+            # Start onboarding if not started
+            status = await onboarding_manager.start_onboarding(current_user.user_id)
+        
+        return {
+            "user_id": status.user_id,
+            "current_step": status.current_step,
+            "is_completed": status.is_completed,
+            "started_at": status.started_at.isoformat(),
+            "completed_at": status.completed_at.isoformat() if status.completed_at else None
+        }
+        
+    except Exception as e:
+        logger.error("Get onboarding status failed", user_id=current_user.user_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get onboarding status")
+
+
+@app.post("/api/onboarding/start")
+async def start_onboarding(current_user: User = Depends(get_current_user)) -> dict:
+    """Start or restart the onboarding process."""
+    try:
+        onboarding = await onboarding_manager.start_onboarding(current_user.user_id)
+        
+        # Get the welcome step content
+        welcome_response = await onboarding_manager.process_step(current_user.user_id, {})
+        
+        logger.info("Onboarding started", user_id=current_user.user_id)
+        metrics_collector.increment_counter("adhd_onboarding_started_total")
+        
+        return {
+            "status": "started",
+            "onboarding_id": onboarding.user_id,
+            "current_step": onboarding.current_step,
+            **welcome_response
+        }
+        
+    except Exception as e:
+        logger.error("Start onboarding failed", user_id=current_user.user_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start onboarding")
+
+
+@app.post("/api/onboarding/step")
+async def process_onboarding_step(
+    step_input: dict,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Process user input for current onboarding step."""
+    try:
+        result = await onboarding_manager.process_step(current_user.user_id, step_input)
+        
+        # Track completion
+        if result.get("status") == "completed":
+            logger.info("Onboarding completed", user_id=current_user.user_id)
+            metrics_collector.increment_counter("adhd_onboarding_completed_total")
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Process onboarding step failed", user_id=current_user.user_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to process onboarding step")
+
+
+@app.post("/api/onboarding/skip")
+async def skip_onboarding(current_user: User = Depends(get_current_user)) -> dict:
+    """Skip the onboarding process and use defaults."""
+    try:
+        result = await onboarding_manager.skip_onboarding(current_user.user_id)
+        
+        logger.info("Onboarding skipped", user_id=current_user.user_id)
+        metrics_collector.increment_counter("adhd_onboarding_skipped_total")
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Skip onboarding failed", user_id=current_user.user_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to skip onboarding")
+
+
+# === END ONBOARDING ENDPOINTS ===
 
 # === AUTHENTICATION ENDPOINTS ===
 
@@ -493,7 +887,9 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 # === CORE MCP ENDPOINTS ===
 
-@app.post("/chat")
+@app.post("/chat", tags=["Chat"], 
+         summary="Chat with ADHD AI Assistant", 
+         description="Main interaction endpoint for ADHD support with context awareness, crisis detection, and ultra-fast responses (<3s).")
 async def chat_with_system(
     request: ChatRequest, 
     current_user: User = Depends(get_current_user)
@@ -659,17 +1055,88 @@ async def trigger_nudge(user_id: str, task_id: str = None):
 
 # === INTEGRATION WEBHOOKS ===
 
-@app.post("/webhooks/telegram")
+@app.post("/webhooks/telegram", tags=["Telegram"], 
+         summary="Telegram Bot Webhook",
+         description="Handle incoming Telegram updates for ADHD support bot.")
 async def telegram_webhook(update: dict):
-    """Handle incoming Telegram updates."""
+    """Handle incoming Telegram updates via webhook."""
     logger.info("Telegram webhook received", update_id=update.get("update_id"))
     
-    # TODO: Parse Telegram update
-    # TODO: Extract user response
-    # TODO: Update context/task status
-    # TODO: Trigger follow-up actions
+    try:
+        # Import telegram Update class for proper parsing
+        from telegram import Update
+        
+        # Convert dict to Update object
+        telegram_update = Update.de_json(update, telegram_bot.bot)
+        
+        if telegram_update and telegram_bot.application:
+            # Process the update through the bot's handlers
+            await telegram_bot.application.process_update(telegram_update)
+            
+            # Track webhook processing
+            metrics_collector.increment_counter("telegram_webhooks_processed_total")
+            
+            return {"status": "processed"}
+        else:
+            logger.warning("Invalid Telegram update or bot not initialized")
+            return {"status": "error", "message": "Bot not available"}
+            
+    except Exception as e:
+        logger.error("Telegram webhook processing failed", error=str(e), exc_info=True)
+        return {"status": "error", "message": "Processing failed"}
+
+
+@app.post("/webhooks/telegram/set")
+async def set_telegram_webhook():
+    """Set up the Telegram webhook (for production deployment)."""
+    if not settings.telegram_bot_token:
+        raise HTTPException(status_code=400, detail="Telegram bot token not configured")
     
-    return {"status": "processed"}
+    try:
+        webhook_url = f"{settings.host}/webhooks/telegram"
+        if settings.host.startswith("localhost") or settings.host.startswith("127.0.0.1"):
+            raise HTTPException(status_code=400, detail="Cannot set webhook for localhost")
+        
+        # Set webhook
+        success = await telegram_bot.bot.set_webhook(
+            url=webhook_url,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query"]
+        )
+        
+        if success:
+            logger.info("Telegram webhook set successfully", url=webhook_url)
+            return {"status": "success", "webhook_url": webhook_url}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to set webhook")
+            
+    except Exception as e:
+        logger.error("Failed to set Telegram webhook", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Webhook setup failed: {str(e)}")
+
+
+@app.get("/webhooks/telegram/info")
+async def get_telegram_webhook_info():
+    """Get current Telegram webhook information."""
+    if not settings.telegram_bot_token:
+        raise HTTPException(status_code=400, detail="Telegram bot token not configured")
+    
+    try:
+        webhook_info = await telegram_bot.bot.get_webhook_info()
+        
+        return {
+            "webhook_url": webhook_info.url,
+            "has_custom_certificate": webhook_info.has_custom_certificate,
+            "pending_update_count": webhook_info.pending_update_count,
+            "last_error_date": webhook_info.last_error_date,
+            "last_error_message": webhook_info.last_error_message,
+            "max_connections": webhook_info.max_connections,
+            "allowed_updates": webhook_info.allowed_updates
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get Telegram webhook info", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get webhook info: {str(e)}")
 
 
 @app.post("/webhooks/calendar")
