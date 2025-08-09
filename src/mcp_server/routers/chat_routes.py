@@ -5,7 +5,7 @@ Extracted from monolithic main.py to improve code organization and maintainabili
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -13,6 +13,11 @@ from ..models import MCPFrame, User
 from ..auth import get_current_user, get_optional_user
 from ..cognitive_loop import cognitive_loop
 from ..health_monitor import health_monitor
+from ..adhd_errors import (
+    create_adhd_error_response, system_error, adhd_feature_error,
+    not_found_error
+)
+from ..exception_handlers import ADHDFeatureException
 from traces.memory import trace_memory
 from frames.builder import frame_builder
 
@@ -20,10 +25,56 @@ chat_router = APIRouter(tags=["Chat"])
 
 
 class ChatRequest(BaseModel):
-    message: str
-    context: Optional[dict] = None
-    user_id: Optional[str] = None
-    emergency: bool = False
+    """
+    Chat request with ADHD-optimized processing options.
+    
+    This is the primary interface for user interaction with the MCP system,
+    designed to handle both regular conversations and crisis situations.
+    """
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "message": "I'm feeling overwhelmed and can't focus on my work",
+                    "context": {
+                        "current_task": "Writing report",
+                        "energy_level": "low",
+                        "distractions": ["phone notifications", "messy desk"]
+                    },
+                    "emergency": False
+                },
+                {
+                    "message": "I'm having thoughts of self-harm",
+                    "emergency": True
+                }
+            ]
+        }
+    )
+    
+    message: str = Field(
+        description="User's message or question for the MCP system",
+        min_length=1,
+        max_length=2000,
+        examples=["I can't focus today", "Help me break down this big task"]
+    )
+    context: Optional[dict] = Field(
+        default=None,
+        description="Additional context about user's current situation",
+        examples=[{
+            "current_task": "Project deadline",
+            "energy_level": "medium", 
+            "time_available": "2 hours"
+        }]
+    )
+    user_id: Optional[str] = Field(
+        default=None,
+        description="User ID for anonymous requests (authenticated users don't need this)",
+        examples=["anon_user_123", "temp_session_456"]
+    )
+    emergency: bool = Field(
+        default=False,
+        description="Flag for crisis situations requiring immediate intervention"
+    )
 
 
 @chat_router.post("/chat", 
@@ -85,12 +136,19 @@ async def chat_with_system(
         
     except Exception as e:
         health_monitor.record_error("chat_processing", str(e))
-        # Safety fallback for ADHD users - simple, clear response
+        # For chat errors, return a supportive JSON response rather than HTTP error
+        # This maintains the chat interface UX while still being ADHD-friendly
         return {
-            "response": "I'm having trouble processing that right now. Please try again in a moment.",
+            "response": "I'm having a small hiccup processing that request. No worries - this happens sometimes! Please try rephrasing or ask something else, and I'll do my best to help.",
             "error": True,
             "frame_id": None,
-            "safety_level": "safe"
+            "safety_level": "safe",
+            "support_message": "Every conversation system has its moments - you're doing great!",
+            "next_steps": [
+                "Try rephrasing your request",
+                "Ask about something else", 
+                "Refresh and try again if needed"
+            ]
         }
 
 
@@ -112,7 +170,7 @@ async def create_frame(frame: MCPFrame):
         
     except Exception as e:
         health_monitor.record_error("create_frame", str(e))
-        raise HTTPException(status_code=500, detail="Failed to create frame")
+        raise ADHDFeatureException("frame_creation", "Unable to create context frame", recoverable=True)
 
 
 @chat_router.get("/frames/{frame_id}", response_model=MCPFrame)  
@@ -126,7 +184,7 @@ async def get_frame(frame_id: str):
         frame = await frame_builder.get_frame(frame_id)
         
         if not frame:
-            raise HTTPException(status_code=404, detail="Frame not found")
+            raise HTTPException(status_code=404, detail="Context frame not found")
         
         return frame
         
@@ -134,7 +192,7 @@ async def get_frame(frame_id: str):
         raise
     except Exception as e:
         health_monitor.record_error("get_frame", str(e))
-        raise HTTPException(status_code=500, detail="Failed to retrieve frame")
+        raise ADHDFeatureException("frame_retrieval", "Unable to retrieve context frame", recoverable=True)
 
 
 @chat_router.post("/context/{user_id}")
@@ -161,4 +219,4 @@ async def update_context(user_id: str, context_data: dict):
         
     except Exception as e:
         health_monitor.record_error("update_context", str(e))
-        raise HTTPException(status_code=500, detail="Failed to update context")
+        raise ADHDFeatureException("context_update", "Unable to update user context", recoverable=True)

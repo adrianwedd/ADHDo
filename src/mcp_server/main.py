@@ -58,11 +58,12 @@ from mcp_server.health_monitor import health_monitor
 from mcp_server.metrics import metrics_collector
 from mcp_server.alerting import alert_manager
 from mcp_server.websocket_manager import websocket_manager, start_periodic_health_check
+from mcp_server.exception_handlers import register_exception_handlers
 
 # Import core routers only - defer optional ones
 from mcp_server.routers import (
     auth_router, health_router, chat_router, user_router,
-    webhook_router, beta_router
+    webhook_router, beta_router, docs_router
 )
 
 # Mark startup stage
@@ -277,18 +278,166 @@ def create_app() -> FastAPI:
     """
     app_creation_start = time.perf_counter()
     
-    # Create FastAPI application with performance optimizations
+    # Enhanced OpenAPI documentation configuration
+    openapi_description = """
+    ## 🧠 MCP ADHD Server - Executive Function Support API
+
+    **Meta-Cognitive Protocol server for ADHD executive function support**
+    
+    A recursive, context-aware AI orchestration system designed specifically for neurodivergent users.
+    
+    ### Key Features
+    
+    - **🔄 Cognitive Loop Processing** - Recursive meta-cognitive protocol with safety-first design
+    - **🛡️ Crisis Detection & Safety** - Built-in crisis detection with immediate intervention
+    - **⚡ Circuit Breaker Protection** - Psychological stability protection using Dynamic Systems Theory
+    - **🎯 ADHD-Optimized Responses** - Sub-3 second response times with cognitive load management
+    - **📱 Multi-Platform Integration** - Telegram, Calendar, Smart Home integrations
+    - **🧮 Intelligent Nudging** - Graduated intervention system with personalization
+    - **📊 Pattern Learning** - Trace memory system for continuous improvement
+    
+    ### ADHD-Specific Design
+    
+    - **Cognitive Load Management** - Information density optimized for executive dysfunction
+    - **Progressive Disclosure** - Complex features revealed gradually based on user readiness
+    - **Visual Hierarchy** - Clear, scannable documentation structure  
+    - **Quick Reference** - Common tasks accessible within 2-3 clicks
+    
+    ### Safety & Privacy
+    
+    - **Local Processing** - Sensitive operations stay on device when possible
+    - **Crisis Hardcoded Responses** - Never LLM-generated for safety situations
+    - **Minimal Data Collection** - Privacy-first architecture
+    - **Audit Trail** - Complete interaction logging for safety monitoring
+    
+    ### Performance Targets
+    
+    - **< 3s Response Times** - Critical for ADHD user engagement
+    - **< 100ms Context Assembly** - Lightning-fast context building
+    - **Smart Routing** - Local vs cloud model selection based on complexity
+    - **Memory Efficient** - Optimized for continuous operation
+    
+    ### Getting Started
+    
+    1. **Authentication** - Register or login via `/api/auth/register` or `/api/auth/login`
+    2. **Chat Interface** - Start conversations via `/chat` endpoint
+    3. **Context Management** - Update user context via `/context/{user_id}`
+    4. **Task Management** - Create and track tasks via `/tasks` endpoints
+    5. **Integrations** - Connect external systems via webhook endpoints
+    
+    ### Support & Resources
+    
+    - **API Status**: Monitor system health via `/health` endpoints
+    - **Performance Metrics**: Track response times via `/api/performance` endpoints  
+    - **Developer Portal**: Enhanced documentation at `/docs-portal`
+    - **Code Examples**: Multiple language examples in each endpoint
+    """
+    
+    # Create FastAPI application with enhanced OpenAPI configuration
     app = FastAPI(
         title="MCP ADHD Server",
-        description="Meta-Cognitive Protocol server for ADHD executive function support",
+        description=openapi_description,
         version=__version__,
         lifespan=lifespan,
-        docs_url="/docs" if settings.DEBUG else None,  # Disable docs in production for performance
-        redoc_url="/redoc" if settings.DEBUG else None,
-        openapi_url="/openapi.json" if settings.DEBUG else None,
+        docs_url="/docs",
+        redoc_url="/redoc", 
+        openapi_url="/openapi.json",
+        contact={
+            "name": "MCP ADHD Server Support",
+            "url": "https://github.com/your-repo/mcp-adhd-server",
+            "email": "support@mcp-adhd.dev"
+        },
+        license_info={
+            "name": "MIT License",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        servers=[
+            {
+                "url": f"http://{settings.HOST}:{settings.PORT}",
+                "description": "Development server"
+            },
+            {
+                "url": "https://api.mcp-adhd.dev",
+                "description": "Production server"
+            }
+        ],
         # Performance optimizations for ADHD users
         default_response_class=JSONResponse,
-        generate_unique_id_function=lambda route: f"{route.tags[0]}-{route.name}" if route.tags else route.name
+        generate_unique_id_function=lambda route: f"{route.tags[0]}-{route.name}" if route.tags else route.name,
+        openapi_tags=[
+            {
+                "name": "Authentication", 
+                "description": "🔐 User registration, login, profile management, and API key operations",
+                "externalDocs": {
+                    "description": "Authentication Guide", 
+                    "url": "/docs-portal#authentication"
+                }
+            },
+            {
+                "name": "Chat", 
+                "description": "💬 Core conversation and MCP cognitive processing endpoints",
+                "externalDocs": {
+                    "description": "Chat API Guide", 
+                    "url": "/docs-portal#chat"
+                }
+            },
+            {
+                "name": "Health", 
+                "description": "🏥 System health monitoring, metrics, and alerting",
+                "externalDocs": {
+                    "description": "Health Monitoring Guide", 
+                    "url": "/docs-portal#health"
+                }
+            },
+            {
+                "name": "Users", 
+                "description": "👥 User management and task tracking for ADHD support",
+                "externalDocs": {
+                    "description": "User Management Guide", 
+                    "url": "/docs-portal#users"
+                }
+            },
+            {
+                "name": "Tasks", 
+                "description": "✅ Task creation, tracking, and completion with ADHD optimizations",
+                "externalDocs": {
+                    "description": "Task Management Guide", 
+                    "url": "/docs-portal#tasks"
+                }
+            },
+            {
+                "name": "Webhooks", 
+                "description": "🔗 Integration webhooks for Telegram, Calendar, Home Assistant",
+                "externalDocs": {
+                    "description": "Webhook Integration Guide", 
+                    "url": "/docs-portal#webhooks"
+                }
+            },
+            {
+                "name": "Beta", 
+                "description": "🧪 Beta testing program and onboarding endpoints",
+                "externalDocs": {
+                    "description": "Beta Program Guide", 
+                    "url": "/docs-portal#beta"
+                }
+            },
+            {
+                "name": "Evolution", 
+                "description": "🧬 AI evolution and optimization system (experimental)",
+                "externalDocs": {
+                    "description": "Evolution System Guide", 
+                    "url": "/docs-portal#evolution"
+                }
+            },
+            {
+                "name": "GitHub Automation", 
+                "description": "🐙 GitHub integration and automation workflows",
+                "externalDocs": {
+                    "description": "GitHub Integration Guide", 
+                    "url": "/docs-portal#github"
+                }
+            }
+        ]
     )
     
     # Configure CORS with performance optimizations
@@ -326,6 +475,9 @@ def create_app() -> FastAPI:
         logger = structlog.get_logger(__name__)
         logger.warning("Static directory not found, skipping static file mounting")
     
+    # Register ADHD-friendly exception handlers first
+    register_exception_handlers(app)
+    
     # Register core routers (always needed)
     app.include_router(auth_router, tags=["Authentication"])
     app.include_router(health_router, tags=["Health"])
@@ -333,6 +485,7 @@ def create_app() -> FastAPI:
     app.include_router(user_router, tags=["Users"])
     app.include_router(webhook_router, tags=["Webhooks"])
     app.include_router(beta_router, tags=["Beta"])
+    app.include_router(docs_router, tags=["Documentation"])  # Enhanced documentation portal
     
     # Lazy load optional routers based on configuration
     if should_enable_service('evolution_engine'):
@@ -389,38 +542,8 @@ def create_app() -> FastAPI:
             "connections": len(process.connections()) if hasattr(process, 'connections') else 0
         }
 
-    # Global exception handler with performance optimization
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        """Global exception handler with ADHD-optimized error responses."""
-        logger = structlog.get_logger(__name__)
-        
-        # Fast logging for performance (structured but minimal)
-        logger.error("Unhandled exception", 
-                    path=str(request.url.path),
-                    method=request.method,
-                    error=str(exc)[:200])  # Truncate long errors for performance
-        
-        # Record error metric (non-blocking)
-        try:
-            health_monitor.record_error("global_exception", str(exc)[:100])
-        except Exception:
-            pass  # Don't let error recording cause more errors
-        
-        # Return ADHD-friendly error response (fast and clear)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Something went wrong. Please try again in a moment.",
-                "support": "If this continues, please contact support.",
-                "timestamp": datetime.utcnow().isoformat(),
-                "request_id": getattr(request.state, 'request_id', None)
-            },
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache"
-            }
-        )
+    # Note: Global exception handler is now registered via register_exception_handlers()
+    # This provides comprehensive ADHD-friendly error handling throughout the application
     
     # Performance-optimized web interface routes
     @app.get("/")

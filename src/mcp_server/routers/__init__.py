@@ -12,6 +12,7 @@ from .user_routes import user_router
 from .webhook_routes import webhook_router
 from .beta_routes import beta_router
 from .evolution_routes import evolution_router
+from .docs_routes import docs_router
 
 __all__ = [
     "auth_router",
@@ -20,5 +21,6 @@ __all__ = [
     "user_router",
     "webhook_router",
     "beta_router",
-    "evolution_router"
+    "evolution_router",
+    "docs_router"
 ]

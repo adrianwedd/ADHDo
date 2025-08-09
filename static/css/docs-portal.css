@@ -1,0 +1,391 @@
+/* ADHD-Friendly Documentation Portal CSS */
+
+:root {
+    /* Color system optimized for ADHD users */
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success-color: #059669;
+    --success-hover: #047857;
+    --warning-color: #d97706;
+    --danger-color: #dc2626;
+    
+    /* Text colors with high contrast */
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --text-white: #ffffff;
+    
+    /* Background colors for clear visual hierarchy */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f9fafb;
+    --bg-accent: #f3f4f6;
+    --bg-code: #1f2937;
+    --bg-gradient: linear-gradient(135deg, #2563eb, #1e40af);
+    
+    /* Border and shadow colors */
+    --border-color: #e5e7eb;
+    --border-hover: #d1d5db;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    
+    /* Focus indicators for accessibility */
+    --focus-ring: #93c5fd;
+    --focus-ring-offset: 2px;
+    
+    /* Typography scales optimized for readability */
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 1.875rem;
+    --font-size-4xl: 2.25rem;
+    
+    /* Spacing scale for consistent layout */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+    
+    /* Animation timings for smooth interactions */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.2s ease;
+    --transition-slow: 0.3s ease;
+}
+
+/* Base reset and typography */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus management for better accessibility */
+:focus {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+}
+
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Typography hierarchy */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: var(--space-4);
+    color: var(--text-primary);
+}
+
+h1 { font-size: var(--font-size-4xl); }
+h2 { font-size: var(--font-size-3xl); }
+h3 { font-size: var(--font-size-2xl); }
+h4 { font-size: var(--font-size-xl); }
+h5 { font-size: var(--font-size-lg); }
+h6 { font-size: var(--font-size-base); }
+
+p {
+    margin-bottom: var(--space-4);
+    color: var(--text-secondary);
+}
+
+/* Interactive elements */
+button {
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    border: none;
+    border-radius: 0.5rem;
+    padding: var(--space-3) var(--space-6);
+    font-weight: 500;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Primary button style */
+.btn-primary {
+    background-color: var(--primary-color);
+    color: var(--text-white);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Success button style */
+.btn-success {
+    background-color: var(--success-color);
+    color: var(--text-white);
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: var(--success-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Input styles */
+input, textarea, select {
+    font-family: inherit;
+    font-size: inherit;
+    padding: var(--space-3);
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    transition: border-color var(--transition-base);
+    width: 100%;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* Code and pre-formatted text */
+code, pre {
+    font-family: 'Fira Code', 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: var(--font-size-sm);
+}
+
+code {
+    background-color: var(--bg-accent);
+    color: var(--text-primary);
+    padding: var(--space-1) var(--space-2);
+    border-radius: 0.25rem;
+}
+
+pre {
+    background-color: var(--bg-code);
+    color: var(--text-white);
+    padding: var(--space-4);
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: var(--space-4) 0;
+}
+
+pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+}
+
+/* Lists with better spacing */
+ul, ol {
+    margin-left: var(--space-6);
+    margin-bottom: var(--space-4);
+}
+
+li {
+    margin-bottom: var(--space-2);
+    color: var(--text-secondary);
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--space-6) 0;
+}
+
+th, td {
+    text-align: left;
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    font-weight: 600;
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+}
+
+/* Cards and containers */
+.card {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: var(--space-6);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 1rem;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.status-success {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status-warning {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.status-error {
+    background-color: #fecaca;
+    color: #991b1b;
+}
+
+.status-info {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn var(--transition-slow) ease-out;
+}
+
+.slide-in {
+    animation: slideIn var(--transition-slow) ease-out;
+}
+
+/* Responsive utilities */
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--space-4);
+}
+
+.grid {
+    display: grid;
+    gap: var(--space-6);
+}
+
+.grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-auto {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+    :root {
+        --font-size-4xl: 2rem;
+        --font-size-3xl: 1.5rem;
+    }
+    
+    .container {
+        padding: 0 var(--space-4);
+    }
+    
+    .grid-2,
+    .grid-3 {
+        grid-template-columns: 1fr;
+    }
+    
+    h1 { font-size: var(--font-size-3xl); }
+    h2 { font-size: var(--font-size-2xl); }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    :root {
+        --text-primary: #000000;
+        --text-secondary: #333333;
+        --border-color: #666666;
+        --bg-secondary: #f0f0f0;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+    
+    .no-print {
+        display: none !important;
+    }
+    
+    pre, code {
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+    }
+}

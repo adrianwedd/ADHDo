@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class UserState(str, Enum):
@@ -54,12 +54,49 @@ class ActionType(str, Enum):
 
 
 class FrameContext(BaseModel):
-    """Individual context item in an MCP Frame."""
-    type: ContextType
-    timestamp: datetime
-    data: Dict[str, Any]
-    source: Optional[str] = None
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    """
+    Individual context item in an MCP Frame.
+    
+    Context items provide situational awareness for the cognitive loop,
+    helping the system understand the user's current environment and state.
+    """
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "type": "user_state",
+                    "timestamp": "2024-01-15T10:30:00Z",
+                    "data": {
+                        "energy_level": "low",
+                        "mood": "anxious", 
+                        "focus_difficulty": 8
+                    },
+                    "source": "user_input",
+                    "confidence": 0.9
+                }
+            ]
+        }
+    )
+    
+    type: ContextType = Field(
+        description="Type of context data being provided"
+    )
+    timestamp: datetime = Field(
+        description="When this context was captured"
+    )
+    data: Dict[str, Any] = Field(
+        description="Context-specific data payload"
+    )
+    source: Optional[str] = Field(
+        default=None, 
+        description="Source of the context (e.g., 'user_input', 'calendar', 'home_assistant')"
+    )
+    confidence: float = Field(
+        default=1.0, 
+        ge=0.0, 
+        le=1.0,
+        description="Confidence level in this context data (0.0 to 1.0)"
+    )
 
 
 class FrameAction(BaseModel):
