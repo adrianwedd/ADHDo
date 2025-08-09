@@ -1,5 +1,5 @@
 """Configuration management for MCP ADHD Server."""
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,10 +34,43 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = Field(default=None, description="Redis password")
     redis_db: int = Field(default=0, description="Redis database number")
     
-    # Database Configuration
+    # Database Configuration - PostgreSQL Enforced in Production
     database_url: str = Field(
         default="postgresql+asyncpg://mcp:password@localhost:5432/mcp_adhd",
-        description="Database URL"
+        description="Database URL - PostgreSQL required in production"
+    )
+    database_pool_size: int = Field(
+        default=20,
+        description="Database connection pool size (production optimized)"
+    )
+    database_pool_max_overflow: int = Field(
+        default=10, 
+        description="Maximum overflow connections beyond pool size"
+    )
+    database_pool_timeout: int = Field(
+        default=5,
+        description="Connection pool timeout in seconds (ADHD optimized)"
+    )
+    database_pool_recycle: int = Field(
+        default=3600,
+        description="Connection recycle time in seconds (1 hour)"
+    )
+    database_query_timeout: int = Field(
+        default=30,
+        description="Individual query timeout in seconds"
+    )
+    database_health_check_interval: int = Field(
+        default=30,
+        description="Database health check interval in seconds"
+    )
+    # Environment Detection
+    environment: str = Field(
+        default="development",
+        description="Environment: development, staging, production"
+    )
+    enforce_postgresql: bool = Field(
+        default=True,
+        description="Enforce PostgreSQL in production environments"
     )
     
     # Google Calendar Configuration (Optional)
@@ -93,10 +126,30 @@ class Settings(BaseSettings):
         description="Redis response time threshold (ms)"
     )
     
-    # Integration Performance Configuration
+    # Database Performance Monitoring
     database_performance_threshold: float = Field(
         default=100.0,
         description="Database response time threshold (ms)"
+    )
+    database_slow_query_threshold: float = Field(
+        default=200.0,
+        description="Slow query alert threshold (ms)"
+    )
+    database_connection_timeout_threshold: float = Field(
+        default=1000.0,
+        description="Connection timeout alert threshold (ms)"
+    )
+    database_backup_enabled: bool = Field(
+        default=True,
+        description="Enable automated database backups"
+    )
+    database_backup_interval_hours: int = Field(
+        default=6,
+        description="Database backup interval in hours"
+    )
+    database_backup_retention_days: int = Field(
+        default=30,
+        description="Database backup retention period in days"
     )
     integration_efficiency_threshold: float = Field(
         default=70.0,
@@ -121,7 +174,44 @@ class Settings(BaseSettings):
     session_duration_hours: int = Field(default=24, description="Session duration (hours)")
     jwt_secret: str = Field(
         default="your-secret-key-change-in-production", 
-        description="JWT secret key"
+        description="JWT secret key (DEPRECATED - use JWT rotation)"
+    )
+    
+    # Enhanced Security Configuration
+    master_encryption_key: str = Field(
+        default="change-me-in-production-use-strong-key",
+        description="Master encryption key for JWT secrets (use environment variable)"
+    )
+    jwt_rotation_days: int = Field(default=30, description="JWT secret rotation period (days)")
+    max_failed_login_attempts: int = Field(default=15, description="Max failed login attempts before lockout")
+    account_lockout_duration_minutes: int = Field(default=1440, description="Account lockout duration (minutes)")
+    session_cleanup_interval_hours: int = Field(default=6, description="Session cleanup interval (hours)")
+    require_email_verification: bool = Field(default=True, description="Require email verification for new accounts")
+    
+    # Rate Limiting Configuration
+    rate_limit_requests_per_minute: int = Field(default=60, description="Rate limit requests per minute per user")
+    rate_limit_requests_per_hour: int = Field(default=1000, description="Rate limit requests per hour per user")
+    rate_limit_window_size_seconds: int = Field(default=3600, description="Rate limit window size (seconds)")
+    
+    # Security Monitoring
+    security_log_retention_days: int = Field(default=90, description="Security log retention period (days)")
+    session_activity_log_retention_days: int = Field(default=30, description="Session activity log retention (days)")
+    enable_security_alerts: bool = Field(default=True, description="Enable security event alerting")
+    
+    # Multi-Factor Authentication (Future)
+    mfa_issuer_name: str = Field(default="MCP ADHD Server", description="MFA issuer name")
+    mfa_backup_codes_count: int = Field(default=10, description="Number of MFA backup codes")
+    
+    # Session Security
+    csrf_token_expiry_hours: int = Field(default=8, description="CSRF token expiry (hours)")
+    device_fingerprint_enabled: bool = Field(default=True, description="Enable device fingerprinting")
+    session_ip_validation: bool = Field(default=True, description="Validate session IP addresses")
+    
+    # Crisis Support Access (ADHD-Specific)
+    crisis_bypass_auth: bool = Field(default=True, description="Allow crisis support access without full auth")
+    crisis_keywords: List[str] = Field(
+        default=["crisis", "emergency", "suicide", "self-harm", "help"],
+        description="Keywords that trigger crisis support bypass"
     )
     
     # Feature Flags
@@ -137,6 +227,142 @@ class Settings(BaseSettings):
     enable_energy_tracking: bool = Field(
         default=True, 
         description="Enable energy tracking"
+    )
+    
+    # Monitoring and Observability Configuration
+    sentry_dsn: Optional[str] = Field(
+        default=None, 
+        description="Sentry DSN for error tracking"
+    )
+    sentry_environment: str = Field(
+        default="development",
+        description="Sentry environment name"
+    )
+    sentry_traces_sample_rate: float = Field(
+        default=0.1,
+        description="Sentry traces sample rate (0.0 to 1.0)"
+    )
+    sentry_profiles_sample_rate: float = Field(
+        default=0.1,
+        description="Sentry profiling sample rate (0.0 to 1.0)"
+    )
+    
+    # OpenTelemetry Configuration
+    otel_service_name: str = Field(
+        default="mcp-adhd-server",
+        description="OpenTelemetry service name"
+    )
+    otel_service_version: str = Field(
+        default="1.0.0",
+        description="OpenTelemetry service version"
+    )
+    otel_exporter_jaeger_endpoint: Optional[str] = Field(
+        default=None,
+        description="Jaeger exporter endpoint"
+    )
+    otel_exporter_prometheus_endpoint: str = Field(
+        default="http://localhost:9090",
+        description="Prometheus exporter endpoint"
+    )
+    otel_traces_exporter: str = Field(
+        default="console",
+        description="OpenTelemetry traces exporter (console, jaeger, otlp)"
+    )
+    otel_metrics_exporter: str = Field(
+        default="prometheus",
+        description="OpenTelemetry metrics exporter (console, prometheus, otlp)"
+    )
+    otel_resource_attributes: str = Field(
+        default="service.name=mcp-adhd-server,service.version=1.0.0",
+        description="OpenTelemetry resource attributes"
+    )
+    
+    # ADHD-Specific Monitoring Configuration
+    adhd_response_time_target: float = Field(
+        default=3.0,
+        description="Target response time for ADHD users (seconds)"
+    )
+    adhd_attention_span_tracking: bool = Field(
+        default=True,
+        description="Enable attention span tracking"
+    )
+    adhd_cognitive_load_monitoring: bool = Field(
+        default=True,
+        description="Enable cognitive load monitoring"
+    )
+    adhd_crisis_detection_enabled: bool = Field(
+        default=True,
+        description="Enable crisis detection monitoring"
+    )
+    adhd_hyperfocus_detection_enabled: bool = Field(
+        default=True,
+        description="Enable hyperfocus session detection"
+    )
+    
+    # Performance Monitoring Configuration
+    performance_monitoring_enabled: bool = Field(
+        default=True,
+        description="Enable performance monitoring"
+    )
+    database_query_monitoring: bool = Field(
+        default=True,
+        description="Enable database query performance monitoring"
+    )
+    api_endpoint_monitoring: bool = Field(
+        default=True,
+        description="Enable API endpoint monitoring"
+    )
+    memory_monitoring_enabled: bool = Field(
+        default=True,
+        description="Enable memory usage monitoring"
+    )
+    cpu_monitoring_enabled: bool = Field(
+        default=True,
+        description="Enable CPU usage monitoring"
+    )
+    
+    # Alerting Configuration
+    alerting_enabled: bool = Field(
+        default=True,
+        description="Enable alerting system"
+    )
+    critical_error_alert_threshold: int = Field(
+        default=5,
+        description="Critical error count threshold for alerting"
+    )
+    response_time_alert_threshold: float = Field(
+        default=5.0,
+        description="Response time threshold for alerting (seconds)"
+    )
+    memory_usage_alert_threshold: float = Field(
+        default=85.0,
+        description="Memory usage alert threshold (%)"
+    )
+    cpu_usage_alert_threshold: float = Field(
+        default=80.0,
+        description="CPU usage alert threshold (%)"
+    )
+    
+    # Business Intelligence Metrics
+    user_engagement_tracking: bool = Field(
+        default=True,
+        description="Enable user engagement tracking"
+    )
+    feature_adoption_tracking: bool = Field(
+        default=True,
+        description="Enable feature adoption tracking"
+    )
+    nudge_effectiveness_tracking: bool = Field(
+        default=True,
+        description="Enable nudge effectiveness tracking"
+    )
+    calendar_integration_analytics: bool = Field(
+        default=True,
+        description="Enable calendar integration analytics"
+    )
+    crisis_intervention_analytics: bool = Field(
+        default=True,
+        description="Enable crisis intervention effectiveness tracking"
     )
 
 

@@ -54,6 +54,11 @@ from mcp_server.middleware import (
     MetricsMiddleware, PerformanceMiddleware, 
     HealthCheckMiddleware, ADHDOptimizationMiddleware, SecurityMiddleware
 )
+# Enhanced security middleware
+from mcp_server.security_middleware import (
+    SecurityMiddleware as EnhancedSecurityMiddleware,
+    CSRFMiddleware, SessionCleanupMiddleware
+)
 from mcp_server.health_monitor import health_monitor
 from mcp_server.metrics import metrics_collector
 from mcp_server.alerting import alert_manager
@@ -65,6 +70,13 @@ from mcp_server.routers import (
     auth_router, health_router, chat_router, user_router,
     webhook_router, beta_router, docs_router, calendar_router, onboarding_router, adhd_router
 )
+
+# Import comprehensive monitoring system
+from mcp_server.monitoring import monitoring_system
+from mcp_server.monitoring_middleware import (
+    ComprehensiveMonitoringMiddleware, ADHDUserExperienceMiddleware
+)
+from mcp_server.database_monitoring import db_monitor
 
 # Import enhanced ADHD features (lazy loaded)
 _enhanced_features = None
@@ -129,6 +141,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         core_tasks.append(metrics_collector.initialize())
         core_tasks.append(alert_manager.initialize())
         
+        # Initialize comprehensive monitoring system
+        core_tasks.append(monitoring_system.initialize())
+        
         # Wait for core systems with timeout
         await asyncio.wait_for(
             asyncio.gather(*core_tasks), 
@@ -137,6 +152,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         _startup_metrics['stages']['core_init'] = time.perf_counter() - stage_start
         logger.info("Core systems initialized", elapsed=f"{_startup_metrics['stages']['core_init']:.2f}s")
+        
+        # Initialize database monitoring with the initialized database engine
+        try:
+            from mcp_server.database import get_engine
+            db_engine = get_engine()
+            if db_engine:
+                db_monitor.initialize(db_engine)
+                logger.info("Database monitoring initialized successfully")
+        except Exception as e:
+            logger.warning("Failed to initialize database monitoring", error=str(e))
         
         # Initialize optional services based on configuration
         optional_services = []
@@ -244,6 +269,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             
             # Shutdown monitoring systems
             shutdown_tasks.extend([
+                monitoring_system.shutdown(),
                 alert_manager.shutdown(),
                 metrics_collector.shutdown(),
                 health_monitor.shutdown()
@@ -455,8 +481,13 @@ def create_app() -> FastAPI:
     )
     
     # Add custom middleware stack in performance-optimized order
-    # Security first (fail fast for unauthorized requests)
-    app.add_middleware(SecurityMiddleware)
+    # Enhanced security first (fail fast for unauthorized requests)
+    app.add_middleware(EnhancedSecurityMiddleware)
+    app.add_middleware(CSRFMiddleware)
+    app.add_middleware(SessionCleanupMiddleware)
+    
+    # Legacy security middleware (for compatibility)
+    # app.add_middleware(SecurityMiddleware)
     
     # ADHD optimizations early in the stack (critical for user experience)
     app.add_middleware(ADHDOptimizationMiddleware)

@@ -34,6 +34,21 @@ class User(Base):
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verification_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    email_verification_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    password_reset_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    # Multi-factor authentication
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    backup_codes: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    
+    # Account security
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    account_locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # ADHD-specific settings
     preferred_nudge_methods: Mapped[List[str]] = mapped_column(
@@ -277,6 +292,18 @@ class Session(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     
+    # Security features
+    session_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    csrf_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    device_fingerprint: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    login_method: Mapped[str] = mapped_column(String(50), default="password")
+    two_factor_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    security_flags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Session lifecycle
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
@@ -401,4 +428,304 @@ class SystemHealth(Base):
     __table_args__ = (
         Index("ix_system_health_component_time", "component", "measured_at"),
         Index("ix_system_health_status", "status"),
+    )
+
+
+class JWTSecret(Base):
+    """JWT secret rotation model."""
+    __tablename__ = "jwt_secrets"
+    
+    # Primary key
+    secret_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    
+    # Secret details
+    secret_key: Mapped[str] = mapped_column(String(512), nullable=False)  # Encrypted
+    algorithm: Mapped[str] = mapped_column(String(20), default="HS256")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    # Lifecycle
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    activated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deactivated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rotation_reason: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_jwt_secrets_active", "is_active", "expires_at"),
+        Index("ix_jwt_secrets_expires", "expires_at"),
+        CheckConstraint("algorithm IN ('HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512')", 
+                       name="ck_jwt_secrets_algorithm_values"),
+    )
+
+
+class SessionActivity(Base):
+    """Session activity log for security monitoring."""
+    __tablename__ = "session_activities"
+    
+    # Primary key
+    activity_id: Mapped[str] = mapped_column(
+        String(255), 
+        primary_key=True, 
+        default=lambda: str(uuid4())
+    )
+    
+    # Foreign keys
+    session_id: Mapped[str] = mapped_column(
+        String(255), 
+        ForeignKey("sessions.session_id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(255), 
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Activity details
+    activity_type: Mapped[str] = mapped_column(
+        String(50),
+        CheckConstraint("activity_type IN ('login', 'logout', 'api_call', 'password_change', 'profile_update', 'suspicious')", 
+                       name="ck_session_activities_type_values"),
+        nullable=False
+    )
+    
+    # Request details
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    endpoint: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    request_method: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    response_status: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # Security metrics
+    risk_score: Mapped[float] = mapped_column(
+        Float, 
+        CheckConstraint("risk_score >= 0.0 AND risk_score <= 10.0", 
+                       name="ck_session_activities_risk_score_range"),
+        default=0.0
+    )
+    security_alerts: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_session_activities_session_time", "session_id", "created_at"),
+        Index("ix_session_activities_user_time", "user_id", "created_at"),
+        Index("ix_session_activities_risk", "risk_score"),
+        Index("ix_session_activities_type_time", "activity_type", "created_at"),
+    )
+
+
+class SecurityEvent(Base):
+    """Security events log for monitoring and alerting."""
+    __tablename__ = "security_events"
+    
+    # Primary key
+    event_id: Mapped[str] = mapped_column(
+        String(255), 
+        primary_key=True, 
+        default=lambda: str(uuid4())
+    )
+    
+    # Optional foreign keys
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(255), 
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True
+    )
+    session_id: Mapped[Optional[str]] = mapped_column(
+        String(255), 
+        ForeignKey("sessions.session_id", ondelete="SET NULL"),
+        nullable=True
+    )
+    
+    # Event details
+    event_type: Mapped[str] = mapped_column(
+        String(50),
+        CheckConstraint("event_type IN ('failed_login', 'account_lockout', 'suspicious_activity', 'password_reset', 'session_hijack', 'rate_limit_exceeded', 'unauthorized_access')", 
+                       name="ck_security_events_type_values"),
+        nullable=False
+    )
+    severity: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("severity IN ('low', 'medium', 'high', 'critical')", 
+                       name="ck_security_events_severity_values"),
+        nullable=False
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # Request context
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    event_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    # Resolution tracking
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_security_events_user_time", "user_id", "created_at"),
+        Index("ix_security_events_severity_time", "severity", "created_at"),
+        Index("ix_security_events_type_time", "event_type", "created_at"),
+        Index("ix_security_events_unresolved", "resolved", "created_at"),
+    )
+
+
+class RateLimit(Base):
+    """Rate limiting tracking for users, IPs, and API keys."""
+    __tablename__ = "rate_limits"
+    
+    # Primary key
+    limit_id: Mapped[str] = mapped_column(
+        String(255), 
+        primary_key=True, 
+        default=lambda: str(uuid4())
+    )
+    
+    # Rate limit details
+    identifier: Mapped[str] = mapped_column(String(255), nullable=False)  # user_id, ip, or api_key
+    limit_type: Mapped[str] = mapped_column(
+        String(50),
+        CheckConstraint("limit_type IN ('user', 'ip', 'api_key', 'session')", 
+                       name="ck_rate_limits_type_values"),
+        nullable=False
+    )
+    endpoint_pattern: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    # Counters
+    requests_count: Mapped[int] = mapped_column(Integer, default=0)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    limit_exceeded: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    # Timestamps
+    last_request_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')
+    )
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_rate_limits_identifier_type", "identifier", "limit_type"),
+        Index("ix_rate_limits_window_end", "window_end"),
+        Index("ix_rate_limits_exceeded", "limit_exceeded", "window_end"),
+    )
+
+
+class UserRole(Base):
+    """User roles for RBAC system."""
+    __tablename__ = "user_roles"
+    
+    # Primary key
+    role_id: Mapped[str] = mapped_column(
+        String(255), 
+        primary_key=True, 
+        default=lambda: str(uuid4())
+    )
+    
+    # Foreign key
+    user_id: Mapped[str] = mapped_column(
+        String(255), 
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Role details
+    role_name: Mapped[str] = mapped_column(
+        String(100),
+        CheckConstraint("role_name IN ('admin', 'user', 'beta_tester', 'moderator', 'readonly')", 
+                       name="ck_user_roles_name_values"),
+        nullable=False
+    )
+    permissions: Mapped[List[str]] = mapped_column(JSON, nullable=False)
+    
+    # Grant tracking
+    granted_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_user_roles_user_active", "user_id", "is_active"),
+        Index("ix_user_roles_name", "role_name"),
+    )
+
+
+class OAuthProvider(Base):
+    """OAuth provider integrations."""
+    __tablename__ = "oauth_providers"
+    
+    # Primary key
+    provider_id: Mapped[str] = mapped_column(
+        String(255), 
+        primary_key=True, 
+        default=lambda: str(uuid4())
+    )
+    
+    # Foreign key
+    user_id: Mapped[str] = mapped_column(
+        String(255), 
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False
+    )
+    
+    # Provider details
+    provider_name: Mapped[str] = mapped_column(
+        String(50),
+        CheckConstraint("provider_name IN ('google', 'github', 'microsoft', 'discord')", 
+                       name="ck_oauth_providers_name_values"),
+        nullable=False
+    )
+    provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Tokens (hashed for security)
+    access_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    refresh_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    # Profile data
+    profile_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP')
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')
+    )
+    
+    # Indexes
+    __table_args__ = (
+        Index("ix_oauth_providers_user_provider", "user_id", "provider_name", unique=True),
+        Index("ix_oauth_providers_external_id", "provider_name", "provider_user_id", unique=True),
     )

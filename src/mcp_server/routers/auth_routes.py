@@ -9,13 +9,18 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+# Legacy auth imports (deprecated)
 from ..auth import (
     auth_manager, get_current_user, get_optional_user,
-    RegistrationRequest, LoginRequest, PasswordResetRequest, 
-    PasswordResetConfirm, UserProfile, AuthResponse
+    PasswordResetRequest, PasswordResetConfirm, UserProfile
+)
+# Enhanced auth imports (new production system)
+from ..enhanced_auth import (
+    enhanced_auth_manager, get_current_user_enhanced, get_optional_user_enhanced,
+    RegistrationRequest, LoginRequest, AuthResponse
 )
 from ..models import User
-from ..database import get_database_session
+from ..database import get_database_session, get_db_session
 from ..repositories import UserRepository, APIKeyRepository
 from ..health_monitor import health_monitor
 from ..adhd_errors import (
@@ -33,22 +38,22 @@ class CreateAPIKeyRequest(BaseModel):
 @auth_router.post("/register", response_model=AuthResponse, 
                   summary="Register a new user",
                   description="Creates a new user account with email verification")
-async def register_user(registration: RegistrationRequest, request: Request) -> AuthResponse:
-    """Register a new user with comprehensive validation and security measures."""
+async def register_user(
+    registration: RegistrationRequest, 
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+) -> AuthResponse:
+    """Register a new user with enhanced security measures."""
     try:
-        # Check if user already exists
-        user_repo = UserRepository()
-        existing_user = await user_repo.get_by_email(registration.email)
+        # Use enhanced auth manager for secure registration
+        result = await enhanced_auth_manager.register_user(db, registration)
         
-        if existing_user:
+        if not result.success:
             return create_adhd_error_response(
-                error="User with this email already exists", 
+                error=result.message,
                 status_code=400,
                 request=request
             )
-        
-        # Create user through auth manager
-        result = await auth_manager.register_user(registration, str(request.client.host))
         
         # Record health metric
         health_monitor.record_metric("user_registrations", 1)
@@ -63,20 +68,20 @@ async def register_user(registration: RegistrationRequest, request: Request) -> 
 
 
 @auth_router.post("/login", response_model=AuthResponse)  
-async def login_user(login: LoginRequest, request: Request) -> AuthResponse:
-    """Authenticate user and return JWT token with comprehensive security logging."""
+async def login_user(
+    login: LoginRequest, 
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+) -> AuthResponse:
+    """Authenticate user with enhanced security and session management."""
     try:
-        # Authenticate through auth manager
-        result = await auth_manager.authenticate_user(
-            login.email, 
-            login.password, 
-            str(request.client.host)
-        )
+        # Use enhanced auth manager for secure login
+        result = await enhanced_auth_manager.login_user(db, login, request)
         
         if not result.success:
             health_monitor.record_metric("failed_login_attempts", 1)
             return create_adhd_error_response(
-                error=f"Login failed: {result.message}",
+                error=result.message,
                 status_code=401,
                 request=request
             )
