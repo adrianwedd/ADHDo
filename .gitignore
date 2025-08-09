@@ -71,6 +71,26 @@ logs/
 *.sqlite
 *.sqlite3
 
+# Temporary files and artifacts
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Python specific additions
+*/__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Project specific
+adhd_server.db
+.env*
+!.env.example
+
 # Redis
 dump.rdb
 
