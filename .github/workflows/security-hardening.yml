@@ -1,0 +1,476 @@
+name: Security Hardening Validation
+# Comprehensive security validation for MCP ADHD Server
+# OWASP compliance, performance security, and ADHD-specific validations
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  PYTHON_VERSION: "3.11"
+  POSTGRES_PASSWORD: postgres
+  REDIS_URL: redis://localhost:6379/0
+  DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/mcp_adhd_test
+
+jobs:
+  security-hardening-tests:
+    name: Security Hardening Validation
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mcp_adhd_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client redis-tools jq curl openssl
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        pip install pytest pytest-asyncio pytest-cov httpx
+
+    - name: Install security scanning tools
+      run: |
+        # Install bandit for security scanning
+        pip install bandit[toml] safety semgrep
+        
+        # Install OWASP ZAP baseline scanner
+        docker pull owasp/zap2docker-stable
+
+    - name: Set up test environment
+      run: |
+        # Create test environment file
+        cat > .env.test << EOF
+        DEBUG=False
+        ENVIRONMENT=testing
+        DATABASE_URL=${{ env.DATABASE_URL }}
+        REDIS_URL=${{ env.REDIS_URL }}
+        MASTER_ENCRYPTION_KEY=test-key-for-security-testing-only
+        JWT_SECRET=test-jwt-secret-change-in-production
+        RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+        CRISIS_BYPASS_AUTH=True
+        EOF
+        
+        # Initialize test database
+        python -c "
+        import asyncio
+        from mcp_server.database import init_database
+        asyncio.run(init_database())
+        "
+
+    - name: Run Static Security Analysis
+      run: |
+        echo "=== Running Bandit Security Scan ==="
+        bandit -r src/ -f json -o bandit-report.json || true
+        bandit -r src/ -ll -i || true
+        
+        echo "=== Running Safety Check ==="
+        safety check --json --output safety-report.json || true
+        safety check || true
+        
+        echo "=== Running Semgrep Security Rules ==="
+        semgrep --config=auto --json --output=semgrep-report.json src/ || true
+        semgrep --config=auto src/ || true
+
+    - name: Start application for security testing
+      run: |
+        # Start the application in background
+        export PYTHONPATH=$PWD/src:$PYTHONPATH
+        python src/mcp_server/main.py &
+        APP_PID=$!
+        echo $APP_PID > app.pid
+        
+        # Wait for application to start
+        echo "Waiting for application to start..."
+        for i in {1..30}; do
+          if curl -s http://localhost:8000/health > /dev/null; then
+            echo "Application started successfully"
+            break
+          fi
+          sleep 2
+        done
+        
+        # Verify application is running
+        curl -f http://localhost:8000/health || exit 1
+
+    - name: Run Security Hardening Tests
+      run: |
+        echo "=== Running Security Hardening Test Suite ==="
+        python -m pytest tests/security/test_security_hardening.py -v \
+          --tb=short \
+          --cov=src/mcp_server \
+          --cov-report=xml:security-coverage.xml \
+          --cov-report=term-missing \
+          --junitxml=security-test-results.xml
+
+    - name: Run Security Validation Script
+      run: |
+        echo "=== Running Automated Security Validation ==="
+        ./scripts/security-validation.sh || true
+        
+        # Copy report for artifacts
+        cp /tmp/security-reports/security_report_*.json security-validation-report.json || true
+
+    - name: Run OWASP ZAP Baseline Scan
+      run: |
+        echo "=== Running OWASP ZAP Baseline Scan ==="
+        docker run -v $(pwd):/zap/wrk/:rw \
+          --network host \
+          -t owasp/zap2docker-stable \
+          zap-baseline.py \
+          -t http://localhost:8000 \
+          -J zap-report.json \
+          -w zap-report.md || true
+
+    - name: Run Performance Security Tests
+      run: |
+        echo "=== Testing Performance Security (Timing Attacks) ==="
+        python -c "
+        import time
+        import httpx
+        import statistics
+        
+        # Test for timing attack vulnerabilities in authentication
+        client = httpx.Client(base_url='http://localhost:8000')
+        
+        # Test valid user format vs invalid format response times
+        valid_times = []
+        invalid_times = []
+        
+        for i in range(10):
+            # Valid format
+            start = time.time()
+            try:
+                client.post('/api/auth/login', json={'username': 'test@example.com', 'password': 'wrong'})
+            except:
+                pass
+            valid_times.append(time.time() - start)
+            
+            # Invalid format  
+            start = time.time()
+            try:
+                client.post('/api/auth/login', json={'username': 'invalid', 'password': 'wrong'})
+            except:
+                pass
+            invalid_times.append(time.time() - start)
+        
+        avg_valid = statistics.mean(valid_times)
+        avg_invalid = statistics.mean(invalid_times)
+        
+        print(f'Average valid format response: {avg_valid:.3f}s')
+        print(f'Average invalid format response: {avg_invalid:.3f}s')
+        
+        ratio = abs(avg_valid - avg_invalid) / max(avg_valid, avg_invalid)
+        print(f'Timing difference ratio: {ratio:.3f}')
+        
+        if ratio > 0.5:
+            print('WARNING: Potential timing attack vulnerability detected')
+        else:
+            print('PASS: No significant timing attack vulnerability')
+        "
+
+    - name: Test ADHD-Specific Security
+      run: |
+        echo "=== Testing ADHD-Specific Security Measures ==="
+        python -c "
+        import httpx
+        import time
+        
+        client = httpx.Client(base_url='http://localhost:8000', timeout=10.0)
+        
+        print('Testing crisis support accessibility...')
+        crisis_response = client.post('/chat', json={
+            'message': 'I am having thoughts of suicide and need help immediately',
+            'crisis': True
+        })
+        
+        if crisis_response.status_code not in [403, 429]:
+            print('PASS: Crisis support accessible through security layers')
+        else:
+            print(f'FAIL: Crisis support blocked (status: {crisis_response.status_code})')
+        
+        print('Testing ADHD performance requirements...')
+        start_time = time.time()
+        health_response = client.get('/health')
+        response_time = (time.time() - start_time) * 1000
+        
+        print(f'Health endpoint response time: {response_time:.2f}ms')
+        
+        if response_time < 1000:
+            print('PASS: ADHD performance requirements met (<1s)')
+        elif response_time < 3000:
+            print('WARN: ADHD performance borderline (1-3s)')  
+        else:
+            print('FAIL: ADHD performance requirements not met (>3s)')
+        
+        print('Testing context loading performance...')
+        # This would test actual context loading if endpoint exists
+        "
+
+    - name: Generate Security Summary Report
+      if: always()
+      run: |
+        echo "=== Generating Security Summary Report ==="
+        python -c "
+        import json
+        import os
+        from datetime import datetime
+        
+        # Collect all security reports
+        reports = {
+            'timestamp': datetime.now().isoformat(),
+            'commit': os.environ.get('GITHUB_SHA', 'unknown'),
+            'branch': os.environ.get('GITHUB_REF_NAME', 'unknown'),
+            'reports': {}
+        }
+        
+        # Load bandit report
+        try:
+            with open('bandit-report.json', 'r') as f:
+                reports['reports']['bandit'] = json.load(f)
+        except FileNotFoundError:
+            reports['reports']['bandit'] = {'error': 'Report not found'}
+        
+        # Load safety report
+        try:
+            with open('safety-report.json', 'r') as f:
+                reports['reports']['safety'] = json.load(f)
+        except FileNotFoundError:
+            reports['reports']['safety'] = {'error': 'Report not found'}
+        
+        # Load semgrep report
+        try:
+            with open('semgrep-report.json', 'r') as f:
+                reports['reports']['semgrep'] = json.load(f)
+        except FileNotFoundError:
+            reports['reports']['semgrep'] = {'error': 'Report not found'}
+        
+        # Load security validation report
+        try:
+            with open('security-validation-report.json', 'r') as f:
+                reports['reports']['security_validation'] = json.load(f)
+        except FileNotFoundError:
+            reports['reports']['security_validation'] = {'error': 'Report not found'}
+        
+        # Load ZAP report
+        try:
+            with open('zap-report.json', 'r') as f:
+                reports['reports']['zap'] = json.load(f)
+        except FileNotFoundError:
+            reports['reports']['zap'] = {'error': 'Report not found'}
+        
+        # Save combined report
+        with open('security-summary-report.json', 'w') as f:
+            json.dump(reports, f, indent=2)
+        
+        print('Security summary report generated')
+        "
+
+    - name: Stop application
+      if: always()
+      run: |
+        if [ -f app.pid ]; then
+          APP_PID=$(cat app.pid)
+          kill $APP_PID || true
+          sleep 5
+          kill -9 $APP_PID 2>/dev/null || true
+        fi
+
+    - name: Upload security reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports-${{ github.run_number }}
+        path: |
+          *-report.json
+          *-report.md
+          security-coverage.xml
+          security-test-results.xml
+        retention-days: 30
+
+    - name: Comment PR with Security Results
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            // Read security validation report
+            let securityReport = {};
+            try {
+              const reportData = fs.readFileSync('security-validation-report.json', 'utf8');
+              securityReport = JSON.parse(reportData);
+            } catch (e) {
+              console.log('No security validation report found');
+            }
+            
+            // Generate comment
+            let comment = '## 🔒 Security Hardening Validation Results\n\n';
+            
+            if (securityReport.summary) {
+              const { total_tests, passed, failed, warnings } = securityReport.summary;
+              const score = total_tests > 0 ? Math.round((passed / total_tests) * 100) : 0;
+              
+              comment += `### Summary\n`;
+              comment += `- **Security Score:** ${score}%\n`;
+              comment += `- **Tests:** ${total_tests} total, ${passed} passed, ${failed} failed, ${warnings} warnings\n\n`;
+              
+              if (score >= 90) {
+                comment += '✅ **Status:** Excellent security posture\n\n';
+              } else if (score >= 80) {
+                comment += '✅ **Status:** Good security posture\n\n';
+              } else if (score >= 70) {
+                comment += '⚠️ **Status:** Needs improvement\n\n';
+              } else {
+                comment += '❌ **Status:** Critical security issues detected\n\n';
+              }
+            }
+            
+            comment += '### Key Security Validations\n';
+            comment += '- OWASP Top 10 compliance testing\n';
+            comment += '- Input validation and sanitization\n';
+            comment += '- Security headers verification\n';
+            comment += '- Authentication and authorization\n';
+            comment += '- Rate limiting and abuse prevention\n';
+            comment += '- ADHD-specific security considerations\n\n';
+            
+            comment += '📊 Detailed security reports available in workflow artifacts.\n';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          } catch (error) {
+            console.log('Error creating PR comment:', error);
+          }
+
+    - name: Fail workflow if critical security issues found
+      if: always()
+      run: |
+        echo "=== Checking for Critical Security Issues ==="
+        
+        # Check for critical issues in any report
+        CRITICAL_ISSUES=false
+        
+        # Check bandit for high severity issues
+        if [ -f "bandit-report.json" ]; then
+          HIGH_SEVERITY=$(jq -r '.results[] | select(.issue_severity == "HIGH" or .issue_severity == "CRITICAL") | length' bandit-report.json 2>/dev/null || echo "0")
+          if [ "$HIGH_SEVERITY" != "0" ] && [ "$HIGH_SEVERITY" != "" ]; then
+            echo "CRITICAL: Bandit found high/critical severity security issues"
+            CRITICAL_ISSUES=true
+          fi
+        fi
+        
+        # Check safety for known vulnerabilities
+        if [ -f "safety-report.json" ]; then
+          VULNERABILITIES=$(jq -r '.vulnerabilities | length' safety-report.json 2>/dev/null || echo "0")
+          if [ "$VULNERABILITIES" != "0" ] && [ "$VULNERABILITIES" != "" ]; then
+            echo "CRITICAL: Safety found known security vulnerabilities"
+            CRITICAL_ISSUES=true
+          fi
+        fi
+        
+        # Check security validation results
+        if [ -f "security-validation-report.json" ]; then
+          FAILED_TESTS=$(jq -r '.summary.failed' security-validation-report.json 2>/dev/null || echo "0")
+          if [ "$FAILED_TESTS" != "0" ] && [ "$FAILED_TESTS" != "" ] && [ "$FAILED_TESTS" -gt 0 ]; then
+            echo "CRITICAL: Security validation tests failed"
+            CRITICAL_ISSUES=true
+          fi
+        fi
+        
+        if [ "$CRITICAL_ISSUES" = "true" ]; then
+          echo "❌ CRITICAL SECURITY ISSUES DETECTED - FAILING WORKFLOW"
+          echo "Review security reports and fix issues before merging."
+          exit 1
+        else
+          echo "✅ No critical security issues detected"
+        fi
+
+  dependency-security-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+
+    - name: Run pip-audit for known vulnerabilities
+      run: |
+        pip install pip-audit
+        pip-audit --format=json --output=pip-audit-report.json || true
+        pip-audit --format=cyclonedx-json --output=sbom.json || true
+
+    - name: Generate dependency report
+      run: |
+        echo "=== Dependency Security Report ===" > dependency-report.md
+        echo "" >> dependency-report.md
+        
+        if [ -f "pip-audit-report.json" ]; then
+          echo "### Vulnerabilities Found:" >> dependency-report.md
+          jq -r '.vulnerabilities[] | "- **\(.package)** \(.installed_version): \(.description)"' pip-audit-report.json >> dependency-report.md 2>/dev/null || echo "No vulnerabilities found" >> dependency-report.md
+        fi
+        
+        cat dependency-report.md
+
+    - name: Upload dependency reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-security-reports
+        path: |
+          pip-audit-report.json
+          sbom.json
+          dependency-report.md

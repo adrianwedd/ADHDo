@@ -54,11 +54,11 @@ from mcp_server.middleware import (
     MetricsMiddleware, PerformanceMiddleware, 
     HealthCheckMiddleware, ADHDOptimizationMiddleware, SecurityMiddleware
 )
-# Enhanced security middleware
-from mcp_server.security_middleware import (
-    SecurityMiddleware as EnhancedSecurityMiddleware,
-    CSRFMiddleware, SessionCleanupMiddleware
+# Enhanced security middleware (OWASP Level 2 compliant)
+from mcp_server.enhanced_security_middleware import (
+    EnhancedSecurityMiddleware, EnhancedCSRFMiddleware
 )
+from mcp_server.security_middleware import SessionCleanupMiddleware
 from mcp_server.health_monitor import health_monitor
 from mcp_server.metrics import metrics_collector
 from mcp_server.alerting import alert_manager
@@ -71,12 +71,19 @@ from mcp_server.routers import (
     webhook_router, beta_router, docs_router, calendar_router, onboarding_router, adhd_router
 )
 
+# Import background processing routes  
+from mcp_server.routers.background_routes import background_router
+
+# Import background processing and caching systems (lazy loaded)
+_background_systems_loaded = False
+
 # Import comprehensive monitoring system
 from mcp_server.monitoring import monitoring_system
 from mcp_server.monitoring_middleware import (
     ComprehensiveMonitoringMiddleware, ADHDUserExperienceMiddleware
 )
 from mcp_server.database_monitoring import db_monitor
+from mcp_server.database_optimization import database_optimizer
 
 # Import enhanced ADHD features (lazy loaded)
 _enhanced_features = None
@@ -144,6 +151,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Initialize comprehensive monitoring system
         core_tasks.append(monitoring_system.initialize())
         
+        # Initialize background processing and caching systems if enabled
+        if settings.background_processing_enabled:
+            logger.info("Loading background processing systems...")
+            from mcp_server.background_processing import background_task_manager
+            from mcp_server.task_monitoring import task_monitoring_system
+            core_tasks.append(background_task_manager.initialize())
+            core_tasks.append(task_monitoring_system.initialize())
+            
+        if settings.cache_enabled:
+            logger.info("Loading caching systems...")
+            from mcp_server.caching_system import cache_manager
+            from mcp_server.cache_strategies import cache_warming_engine, cache_invalidation_engine
+            core_tasks.append(cache_manager.initialize())
+            core_tasks.append(cache_warming_engine.initialize())
+            core_tasks.append(cache_invalidation_engine.initialize())
+            
+            global _background_systems_loaded
+            _background_systems_loaded = True
+        
         # Wait for core systems with timeout
         await asyncio.wait_for(
             asyncio.gather(*core_tasks), 
@@ -153,15 +179,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _startup_metrics['stages']['core_init'] = time.perf_counter() - stage_start
         logger.info("Core systems initialized", elapsed=f"{_startup_metrics['stages']['core_init']:.2f}s")
         
-        # Initialize database monitoring with the initialized database engine
+        # Initialize database monitoring and optimization with the initialized database engine
         try:
             from mcp_server.database import get_engine
             db_engine = get_engine()
             if db_engine:
+                # Initialize monitoring
                 db_monitor.initialize(db_engine)
                 logger.info("Database monitoring initialized successfully")
+                
+                # Initialize optimizer for performance analysis
+                await database_optimizer.initialize(db_engine)
+                logger.info("Database optimizer initialized successfully")
         except Exception as e:
-            logger.warning("Failed to initialize database monitoring", error=str(e))
+            logger.warning("Failed to initialize database systems", error=str(e))
         
         # Initialize optional services based on configuration
         optional_services = []
@@ -184,6 +215,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if telegram_bot_module and hasattr(telegram_bot_module, 'telegram_bot'):
                 optional_services.append(telegram_bot_module.telegram_bot.initialize())
         
+        # Start background workers if enabled
+        if settings.background_processing_enabled and _background_systems_loaded:
+            logger.info("Starting background workers...")
+            from mcp_server.background_processing import background_task_manager
+            worker_counts = {
+                # ADHD-optimized worker allocation
+                'crisis': 2,      # Always available for crisis
+                'high': 4,        # Ample capacity for user interactions  
+                'normal': 3,      # Background processing
+                'low': 1,         # Maintenance
+                'maintenance': 1  # System optimization
+            }
+            await background_task_manager.start_workers(worker_counts)
+            
         # Initialize optional services in parallel
         if optional_services:
             optional_start = time.perf_counter()
@@ -266,6 +311,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Shutdown Telegram bot
             if telegram_bot_module and hasattr(telegram_bot_module, 'telegram_bot'):
                 shutdown_tasks.append(telegram_bot_module.telegram_bot.shutdown())
+            
+            # Shutdown background processing and caching systems
+            if settings.background_processing_enabled and _background_systems_loaded:
+                logger.info("Shutting down background processing systems...")
+                from mcp_server.background_processing import background_task_manager
+                from mcp_server.task_monitoring import task_monitoring_system
+                shutdown_tasks.extend([
+                    background_task_manager.shutdown(),
+                    task_monitoring_system.shutdown()
+                ])
+                
+            if settings.cache_enabled and _background_systems_loaded:
+                logger.info("Shutting down caching systems...")
+                from mcp_server.caching_system import cache_manager
+                from mcp_server.cache_strategies import cache_warming_engine, cache_invalidation_engine
+                shutdown_tasks.extend([
+                    cache_manager.shutdown(),
+                    cache_warming_engine.shutdown(),
+                    cache_invalidation_engine.shutdown()
+                ])
             
             # Shutdown monitoring systems
             shutdown_tasks.extend([
@@ -483,7 +548,7 @@ def create_app() -> FastAPI:
     # Add custom middleware stack in performance-optimized order
     # Enhanced security first (fail fast for unauthorized requests)
     app.add_middleware(EnhancedSecurityMiddleware)
-    app.add_middleware(CSRFMiddleware)
+    app.add_middleware(EnhancedCSRFMiddleware)
     app.add_middleware(SessionCleanupMiddleware)
     
     # Legacy security middleware (for compatibility)
@@ -523,6 +588,10 @@ def create_app() -> FastAPI:
     app.include_router(docs_router, tags=["Documentation"])  # Enhanced documentation portal
     app.include_router(calendar_router, tags=["Calendar"])  # ADHD time management features
     app.include_router(adhd_router, tags=["Advanced ADHD Support"])  # Enhanced ADHD features and personalization
+    
+    # Include background processing router if enabled
+    if settings.background_processing_enabled:
+        app.include_router(background_router, tags=["Background Processing"])
     
     # Lazy load optional routers based on configuration
     if should_enable_service('evolution_engine'):

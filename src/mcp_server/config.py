@@ -33,6 +33,82 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
     redis_password: Optional[str] = Field(default=None, description="Redis password")
     redis_db: int = Field(default=0, description="Redis database number")
+    redis_max_connections: int = Field(default=20, description="Maximum Redis connections")
+    redis_retry_on_timeout: bool = Field(default=True, description="Retry on Redis timeout")
+    redis_health_check_interval: int = Field(default=30, description="Redis health check interval")
+    
+    # Background Processing Configuration
+    background_processing_enabled: bool = Field(
+        default=True, 
+        description="Enable background task processing"
+    )
+    background_worker_count: int = Field(
+        default=5, 
+        description="Number of background workers per priority level"
+    )
+    background_task_timeout: int = Field(
+        default=300, 
+        description="Default task timeout in seconds"
+    )
+    background_max_retries: int = Field(
+        default=3, 
+        description="Maximum task retry attempts"
+    )
+    background_retry_delay: int = Field(
+        default=60, 
+        description="Delay between retries in seconds"
+    )
+    
+    # Multi-Layer Caching Configuration
+    cache_enabled: bool = Field(default=True, description="Enable multi-layer caching")
+    cache_memory_size_mb: int = Field(default=100, description="In-memory cache size in MB")
+    cache_redis_hot_db: int = Field(default=1, description="Redis database for hot cache")
+    cache_redis_warm_db: int = Field(default=2, description="Redis database for warm cache")
+    cache_redis_external_db: int = Field(default=3, description="Redis database for external cache")
+    cache_compression_enabled: bool = Field(default=True, description="Enable cache compression")
+    cache_compression_threshold: int = Field(default=1024, description="Compression threshold in bytes")
+    
+    # Cache TTL Configuration (ADHD-optimized)
+    cache_crisis_ttl: int = Field(default=3600, description="Crisis data cache TTL (seconds)")
+    cache_user_interaction_ttl: int = Field(default=300, description="User interaction cache TTL (seconds)")
+    cache_background_ttl: int = Field(default=3600, description="Background data cache TTL (seconds)")
+    cache_analytics_ttl: int = Field(default=7200, description="Analytics cache TTL (seconds)")
+    cache_maintenance_ttl: int = Field(default=86400, description="Maintenance cache TTL (seconds)")
+    
+    # Cache Warming Configuration
+    cache_warming_enabled: bool = Field(default=True, description="Enable predictive cache warming")
+    cache_warming_peak_hours: List[int] = Field(
+        default=[9, 10, 11, 14, 15, 16], 
+        description="Peak ADHD attention hours for cache warming"
+    )
+    cache_warming_batch_size: int = Field(default=50, description="Cache warming batch size")
+    cache_warming_max_patterns: int = Field(default=1000, description="Maximum patterns to track")
+    
+    # Performance Targets (ADHD-optimized)
+    performance_crisis_response_ms: int = Field(
+        default=100, 
+        description="Crisis response time target (milliseconds)"
+    )
+    performance_user_response_ms: int = Field(
+        default=1000, 
+        description="User interaction response time target (milliseconds)"
+    )
+    performance_background_resource_limit: float = Field(
+        default=0.7, 
+        description="Background processing resource limit (0.0-1.0)"
+    )
+    performance_memory_cache_ms: float = Field(
+        default=1.0, 
+        description="Memory cache access time target (milliseconds)"
+    )
+    performance_redis_hot_ms: float = Field(
+        default=10.0, 
+        description="Redis hot cache access time target (milliseconds)"
+    )
+    performance_redis_warm_ms: float = Field(
+        default=100.0, 
+        description="Redis warm cache access time target (milliseconds)"
+    )
     
     # Database Configuration - PostgreSQL Enforced in Production
     database_url: str = Field(

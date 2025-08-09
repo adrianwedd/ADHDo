@@ -45,6 +45,26 @@ dependencies = [
   "psutil>=5.9.0",
   "prometheus-client>=0.19.0",
   "jinja2>=3.1.0",
+  # Security Dependencies
+  "bleach>=6.1.0",
+  # Background Processing Dependencies
+  "celery[redis]>=5.3.0",
+  "kombu>=5.3.0",
+  "vine>=5.1.0",
+  # Advanced Caching Dependencies
+  "redis[hiredis]>=5.0.0",
+  "hiredis>=2.3.0",
+  "lz4>=4.3.0",
+  "python-snappy>=0.6.1",
+  # Performance and Concurrency Dependencies
+  "aiofiles>=23.2.0",
+  "aioredis>=2.0.0",
+  "asyncio-throttle>=1.0.2",
+  "asyncache>=0.3.1",
+  # Data Processing Dependencies
+  "msgpack>=1.0.7",
+  "orjson>=3.9.0",
+  "ujson>=5.8.0",
   # Monitoring and Observability Dependencies
   "sentry-sdk[fastapi,sqlalchemy,redis,httpx,logging]>=1.40.0",
   "opentelemetry-api>=1.21.0",
@@ -87,6 +107,33 @@ dev = [
   "requests>=2.31.0",
   "colorama>=0.4.6",
   "beautifulsoup4>=4.12.0",
+  # Performance testing tools
+  "pytest-timeout>=2.2.0",
+  "pytest-profiling>=1.7.0",
+  "memory-profiler>=0.61.0",
+  "py-spy>=0.3.14",
+  "locust>=2.17.0",
+  "pytest-stress>=1.0.1",
+]
+performance = [
+  # High-performance production dependencies
+  "uvloop>=0.19.0",
+  "cchardet>=2.1.7",
+  "aiodns>=3.1.0",
+  "brotli>=1.1.0",
+  # Background processing performance
+  "celery[redis,msgpack]>=5.3.0",
+  "redis[hiredis]>=5.0.0",
+  "hiredis>=2.3.0",
+  # Cache compression and serialization
+  "lz4>=4.3.0",
+  "python-snappy>=0.6.1",
+  "zstd>=1.5.2.6",
+  "msgpack>=1.0.7",
+  "orjson>=3.9.0",
+  # Memory optimization
+  "pympler>=0.9",
+  "objgraph>=3.6.0",
 ]
 integrations = [
   "google-api-python-client>=2.100.0",
