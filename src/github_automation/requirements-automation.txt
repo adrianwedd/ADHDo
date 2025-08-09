@@ -29,7 +29,7 @@ cachetools==5.3.1
 # Monitoring and observability
 prometheus-client==0.17.1
 structlog==23.1.0
-sentry-sdk[fastapi]==1.32.0
+sentry-sdk[fastapi]==2.34.1
 
 # Security
 cryptography==44.0.1

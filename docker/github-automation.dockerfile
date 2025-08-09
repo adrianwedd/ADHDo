@@ -53,7 +53,7 @@ RUN pip install --no-cache-dir \
     uvloop==0.17.0 \
     httptools==0.6.0 \
     prometheus-client==0.17.1 \
-    sentry-sdk[fastapi]==1.32.0
+    sentry-sdk[fastapi]==2.34.1
 
 # === PRODUCTION STAGE ===
 FROM python:3.11-slim as production
