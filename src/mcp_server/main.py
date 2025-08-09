@@ -63,8 +63,11 @@ from mcp_server.exception_handlers import register_exception_handlers
 # Import core routers only - defer optional ones
 from mcp_server.routers import (
     auth_router, health_router, chat_router, user_router,
-    webhook_router, beta_router, docs_router, calendar_router
+    webhook_router, beta_router, docs_router, calendar_router, onboarding_router, adhd_router
 )
+
+# Import enhanced ADHD features (lazy loaded)
+_enhanced_features = None
 
 # Mark startup stage
 _startup_metrics['stages']['core_imports'] = time.perf_counter() - _startup_start_time
@@ -485,8 +488,10 @@ def create_app() -> FastAPI:
     app.include_router(user_router, tags=["Users"])
     app.include_router(webhook_router, tags=["Webhooks"])
     app.include_router(beta_router, tags=["Beta"])
+    app.include_router(onboarding_router, tags=["Enhanced Onboarding"])  # Comprehensive ADHD-optimized onboarding
     app.include_router(docs_router, tags=["Documentation"])  # Enhanced documentation portal
     app.include_router(calendar_router, tags=["Calendar"])  # ADHD time management features
+    app.include_router(adhd_router, tags=["Advanced ADHD Support"])  # Enhanced ADHD features and personalization
     
     # Lazy load optional routers based on configuration
     if should_enable_service('evolution_engine'):

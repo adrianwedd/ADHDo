@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>ADHD Server - Mobile Dashboard</title>
+    
+    <!-- Stylesheets -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/mobile-adhd.css" rel="stylesheet">
+    <link href="css/mobile-modals.css" rel="stylesheet">
+    <link href="css/mobile-accessibility.css" rel="stylesheet">
+    
+    <style>
+        /* Dashboard-specific styles */
+        .mobile-dashboard-header {
+            background: linear-gradient(135deg, #3B82F6, #1E40AF);
+            color: white;
+            padding: var(--mobile-space-4);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .mobile-metric-card {
+            background: var(--mobile-bg-primary);
+            border-radius: var(--mobile-radius-xl);
+            padding: var(--mobile-space-4);
+            box-shadow: var(--mobile-shadow-base);
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        
+        .mobile-metric-card:active {
+            transform: scale(0.98);
+        }
+        
+        .mobile-metric-value {
+            font-size: var(--mobile-text-2xl);
+            font-weight: 700;
+            margin: var(--mobile-space-2) 0;
+        }
+        
+        .mobile-metric-label {
+            font-size: var(--mobile-text-sm);
+            color: var(--mobile-text-muted);
+            font-weight: 500;
+        }
+        
+        .mobile-metric-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto var(--mobile-space-3);
+            font-size: var(--mobile-text-xl);
+        }
+        
+        .mobile-status-healthy { color: var(--adhd-success); background: #dcfce7; }
+        .mobile-status-warning { color: var(--adhd-warning); background: #fef3c7; }
+        .mobile-status-error { color: var(--adhd-danger); background: #fecaca; }
+        .mobile-status-info { color: var(--adhd-primary); background: #dbeafe; }
+        
+        .mobile-section-title {
+            font-size: var(--mobile-text-lg);
+            font-weight: 600;
+            color: var(--mobile-text-primary);
+            margin-bottom: var(--mobile-space-4);
+            display: flex;
+            align-items: center;
+            gap: var(--mobile-space-2);
+        }
+        
+        .mobile-component-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--mobile-space-3);
+            background: var(--mobile-bg-accent);
+            border-radius: var(--mobile-radius-lg);
+            margin-bottom: var(--mobile-space-2);
+        }
+        
+        .mobile-component-info {
+            display: flex;
+            align-items: center;
+            gap: var(--mobile-space-3);
+        }
+        
+        .mobile-component-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .mobile-activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--mobile-space-3);
+            padding: var(--mobile-space-3);
+            border-left: 3px solid #e2e8f0;
+            margin-bottom: var(--mobile-space-3);
+        }
+        
+        .mobile-activity-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .mobile-activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: var(--mobile-text-sm);
+        }
+        
+        .mobile-activity-content {
+            flex: 1;
+        }
+        
+        .mobile-activity-text {
+            font-size: var(--mobile-text-sm);
+            color: var(--mobile-text-primary);
+            margin-bottom: var(--mobile-space-1);
+        }
+        
+        .mobile-activity-time {
+            font-size: var(--mobile-text-xs);
+            color: var(--mobile-text-muted);
+        }
+        
+        .mobile-refresh-btn {
+            position: fixed;
+            bottom: 80px;
+            right: var(--mobile-space-4);
+            z-index: 50;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--adhd-primary);
+            color: white;
+            border: none;
+            box-shadow: var(--mobile-shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--mobile-text-lg);
+        }
+        
+        .mobile-loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .mobile-loading-content {
+            background: var(--mobile-bg-primary);
+            padding: var(--mobile-space-6);
+            border-radius: var(--mobile-radius-xl);
+            text-align: center;
+            box-shadow: var(--mobile-shadow-xl);
+        }
+        
+        .mobile-auto-refresh {
+            position: relative;
+        }
+        
+        .mobile-auto-refresh::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--adhd-success);
+            animation: auto-refresh-spin 5s linear infinite;
+        }
+        
+        @keyframes auto-refresh-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Skip Navigation -->
+    <a href="#main-content" class="mobile-skip-nav">Skip to main content</a>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="mobile-loading-overlay hidden">
+        <div class="mobile-loading-content">
+            <div class="mobile-spinner" style="margin: 0 auto var(--mobile-space-4);"></div>
+            <div>Updating dashboard...</div>
+        </div>
+    </div>
+    
+    <!-- Header -->
+    <header class="mobile-dashboard-header">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="mobile-heading-2" style="margin-bottom: 0;">
+                    <i class="fas fa-tachometer-alt mr-2"></i>
+                    Dashboard
+                </h1>
+                <div class="mobile-text-small opacity-75">Real-time system monitoring</div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="mobile-auto-refresh">
+                    <div class="w-3 h-3 bg-green-400 rounded-full"></div>
+                </div>
+                <a href="mobile-index.html" class="mobile-btn mobile-btn-outline" style="color: white; border-color: white;">
+                    <i class="fas fa-home"></i>
+                </a>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Floating Refresh Button -->
+    <button 
+        id="refresh-btn" 
+        onclick="refreshAll()" 
+        class="mobile-refresh-btn mobile-touch-target"
+        aria-label="Refresh dashboard data"
+        title="Refresh data"
+    >
+        <i class="fas fa-sync-alt" id="refresh-icon"></i>
+    </button>
+    
+    <!-- Main Content -->
+    <main id="main-content" class="mobile-container" style="padding-top: var(--mobile-space-6); padding-bottom: var(--mobile-space-16);">
+        <!-- System Status Overview -->
+        <section class="mobile-stack">
+            <div class="mobile-grid-2">
+                <div class="mobile-metric-card mobile-tap-enhanced" onclick="showDetailModal('status')">
+                    <div class="mobile-metric-icon mobile-status-info">
+                        <i class="fas fa-heartbeat"></i>
+                    </div>
+                    <div class="mobile-metric-label">System Status</div>
+                    <div class="mobile-metric-value" id="overall-status">Loading...</div>
+                </div>
+                
+                <div class="mobile-metric-card mobile-tap-enhanced" onclick="showDetailModal('uptime')">
+                    <div class="mobile-metric-icon mobile-status-healthy">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="mobile-metric-label">Uptime</div>
+                    <div class="mobile-metric-value" id="uptime">Loading...</div>
+                </div>
+                
+                <div class="mobile-metric-card mobile-tap-enhanced" onclick="showDetailModal('users')">
+                    <div class="mobile-metric-icon mobile-status-info">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="mobile-metric-label">Active Users</div>
+                    <div class="mobile-metric-value" id="active-users">Loading...</div>
+                </div>
+                
+                <div class="mobile-metric-card mobile-tap-enhanced" onclick="showDetailModal('response')">
+                    <div class="mobile-metric-icon mobile-status-warning">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="mobile-metric-label">Response Time</div>
+                    <div class="mobile-metric-value" id="avg-response-time">Loading...</div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- System Resources -->
+        <section class="mobile-stack" style="margin-top: var(--mobile-space-8);">
+            <h2 class="mobile-section-title">
+                <i class="fas fa-server"></i>
+                System Resources
+            </h2>
+            <div class="mobile-grid-2" style="gap: var(--mobile-space-3);">
+                <div class="mobile-card mobile-card-compact">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="mobile-text-small font-medium">CPU Usage</span>
+                        <span class="mobile-text-sm font-bold" id="cpu-percent">0%</span>
+                    </div>
+                    <div class="mobile-progress">
+                        <div class="mobile-progress-bar" id="cpu-progress" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="mobile-card mobile-card-compact">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="mobile-text-small font-medium">Memory</span>
+                        <span class="mobile-text-sm font-bold" id="memory-percent">0%</span>
+                    </div>
+                    <div class="mobile-progress">
+                        <div class="mobile-progress-bar" id="memory-progress" style="width: 0%; background-color: var(--adhd-secondary);"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Component Health -->
+        <section class="mobile-stack" style="margin-top: var(--mobile-space-8);">
+            <h2 class="mobile-section-title">
+                <i class="fas fa-puzzle-piece"></i>
+                Component Health
+            </h2>
+            <div class="mobile-card">
+                <div id="component-health">
+                    <!-- Components will be loaded here -->
+                </div>
+            </div>
+        </section>
+        
+        <!-- ADHD Metrics -->
+        <section class="mobile-stack" style="margin-top: var(--mobile-space-8);">
+            <h2 class="mobile-section-title">
+                <i class="fas fa-brain"></i>
+                ADHD Support Metrics
+            </h2>
+            <div class="mobile-card">
+                <div class="mobile-stack-tight">
+                    <div class="flex justify-between items-center">
+                        <span class="mobile-text-body">Active Tasks</span>
+                        <span class="font-semibold" id="active-tasks">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="mobile-text-body">Pattern Matches</span>
+                        <span class="font-semibold" id="pattern-matches">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="mobile-text-body">Avg Cognitive Load</span>
+                        <span class="font-semibold" id="cognitive-load">0.0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="mobile-text-body">Nudges Sent</span>
+                        <span class="font-semibold" id="nudges-sent">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="mobile-text-body">Tasks Completed</span>
+                        <span class="font-semibold" id="tasks-completed">0</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Recent Activity -->
+        <section class="mobile-stack" style="margin-top: var(--mobile-space-8);">
+            <div class="flex justify-between items-center">
+                <h2 class="mobile-section-title" style="margin-bottom: 0;">
+                    <i class="fas fa-list"></i>
+                    Recent Activity
+                </h2>
+                <button onclick="refreshActivity()" class="mobile-btn mobile-btn-outline" style="padding: var(--mobile-space-2);">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="mobile-card" style="max-height: 300px; overflow-y: auto;">
+                <div id="activity-log">
+                    <!-- Activity items will be loaded here -->
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="mobile-modal-overlay hidden">
+        <div class="mobile-modal-container">
+            <div class="mobile-modal-header">
+                <h2 class="mobile-modal-title" id="detail-modal-title">Details</h2>
+                <button onclick="closeDetailModal()" class="mobile-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mobile-modal-body">
+                <div id="detail-modal-content">
+                    <!-- Detail content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="js/mobile-gestures.js"></script>
+    <script>
+        // Global variables
+        let refreshInterval;
+        let isRefreshing = false;
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadInitialData();
+            startAutoRefresh();
+        });
+        
+        // Load all dashboard data
+        async function loadInitialData() {
+            showLoading(true);
+            
+            try {
+                await Promise.all([
+                    loadHealthData(),
+                    loadSystemMetrics(),
+                    loadMetricsSummary(),
+                    loadActivity()
+                ]);
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+                showErrorState();
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Show/hide loading overlay
+        function showLoading(show) {
+            const overlay = document.getElementById('loading-overlay');
+            if (show) {
+                overlay.classList.remove('hidden');
+            } else {
+                overlay.classList.add('hidden');
+            }
+        }
+        
+        // Load health data
+        async function loadHealthData() {
+            try {
+                // Mock data for demonstration
+                const data = {
+                    status: 'healthy',
+                    uptime_seconds: 86400 * 3 + 3600 * 5, // 3 days, 5 hours
+                    components: {
+                        database: { status: 'healthy', response_time_ms: 12.5 },
+                        redis: { status: 'healthy', response_time_ms: 2.1 },
+                        llm_router: { status: 'healthy', response_time_ms: 245.0 },
+                        telegram_bot: { status: 'degraded', response_time_ms: 1250.0 },
+                        cognitive_loop: { status: 'healthy', response_time_ms: 98.5 }
+                    }
+                };
+                
+                // Update overall status
+                document.getElementById('overall-status').textContent = data.status.toUpperCase();
+                document.getElementById('overall-status').className = `mobile-metric-value mobile-status-${data.status}`;
+                
+                // Update uptime
+                const uptimeHours = Math.floor(data.uptime_seconds / 3600);
+                const uptimeDays = Math.floor(uptimeHours / 24);
+                document.getElementById('uptime').textContent = 
+                    uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
+                
+                // Update component health
+                const componentContainer = document.getElementById('component-health');
+                componentContainer.innerHTML = '';
+                
+                Object.entries(data.components).forEach(([name, info]) => {
+                    const div = document.createElement('div');
+                    div.className = 'mobile-component-item';
+                    div.innerHTML = `
+                        <div class="mobile-component-info">
+                            <div class="mobile-component-status mobile-status-${info.status}"></div>
+                            <span class="font-medium">${name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' ')}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="mobile-text-sm">${info.response_time_ms.toFixed(1)}ms</div>
+                            <div class="mobile-text-xs mobile-text-muted">${info.status}</div>
+                        </div>
+                    `;
+                    componentContainer.appendChild(div);
+                });
+                
+            } catch (error) {
+                console.error('Error loading health data:', error);
+                document.getElementById('overall-status').textContent = 'ERROR';
+                document.getElementById('overall-status').className = 'mobile-metric-value mobile-status-error';
+            }
+        }
+        
+        // Load system metrics
+        async function loadSystemMetrics() {
+            try {
+                // Mock system metrics
+                const data = {
+                    cpu_percent: 45.2,
+                    memory_percent: 67.8,
+                    disk_usage_percent: 34.1
+                };
+                
+                // Update CPU
+                document.getElementById('cpu-percent').textContent = `${data.cpu_percent.toFixed(1)}%`;
+                document.getElementById('cpu-progress').style.width = `${data.cpu_percent}%`;
+                
+                // Update Memory
+                document.getElementById('memory-percent').textContent = `${data.memory_percent.toFixed(1)}%`;
+                document.getElementById('memory-progress').style.width = `${data.memory_percent}%`;
+                
+                // Update response time
+                const responseTime = 45 + Math.random() * 30;
+                document.getElementById('avg-response-time').textContent = `${responseTime.toFixed(0)}ms`;
+                
+            } catch (error) {
+                console.error('Error loading system metrics:', error);
+            }
+        }
+        
+        // Load metrics summary
+        async function loadMetricsSummary() {
+            try {
+                // Mock ADHD metrics
+                const data = {
+                    metrics: {
+                        active_users: 7,
+                        total_tasks_created: 45,
+                        total_tasks_completed: 38,
+                        total_pattern_matches: 123,
+                        avg_cognitive_load: 0.65,
+                        total_nudges_sent: 28
+                    }
+                };
+                
+                // Update ADHD metrics
+                document.getElementById('active-users').textContent = data.metrics.active_users;
+                document.getElementById('active-tasks').textContent = 
+                    data.metrics.total_tasks_created - data.metrics.total_tasks_completed;
+                document.getElementById('pattern-matches').textContent = data.metrics.total_pattern_matches;
+                document.getElementById('cognitive-load').textContent = data.metrics.avg_cognitive_load.toFixed(2);
+                document.getElementById('nudges-sent').textContent = data.metrics.total_nudges_sent;
+                document.getElementById('tasks-completed').textContent = data.metrics.total_tasks_completed;
+                
+            } catch (error) {
+                console.error('Error loading metrics summary:', error);
+            }
+        }
+        
+        // Load activity log
+        function loadActivity() {
+            const activityLog = document.getElementById('activity-log');
+            
+            // Mock activity data
+            const activities = [
+                { time: '2 min ago', action: 'User completed task "Review project proposal"', icon: 'check-circle', color: 'healthy' },
+                { time: '5 min ago', action: 'Pattern match: "I\'m ready" → instant response', icon: 'bolt', color: 'warning' },
+                { time: '8 min ago', action: 'New user session started', icon: 'user-plus', color: 'info' },
+                { time: '12 min ago', action: 'Health check: All systems healthy', icon: 'heartbeat', color: 'healthy' },
+                { time: '15 min ago', action: 'Database query completed in 23ms', icon: 'database', color: 'info' },
+                { time: '20 min ago', action: 'Nudge sent to user for task reminder', icon: 'bell', color: 'warning' }
+            ];
+            
+            activityLog.innerHTML = '';
+            activities.forEach(activity => {
+                const div = document.createElement('div');
+                div.className = 'mobile-activity-item';
+                div.innerHTML = `
+                    <div class="mobile-activity-icon mobile-status-${activity.color}">
+                        <i class="fas fa-${activity.icon}"></i>
+                    </div>
+                    <div class="mobile-activity-content">
+                        <div class="mobile-activity-text">${activity.action}</div>
+                        <div class="mobile-activity-time">${activity.time}</div>
+                    </div>
+                `;
+                activityLog.appendChild(div);
+            });
+        }
+        
+        // Manual refresh with animation
+        async function refreshAll() {
+            if (isRefreshing) return;
+            
+            isRefreshing = true;
+            const refreshIcon = document.getElementById('refresh-icon');
+            refreshIcon.style.animation = 'spin 1s linear infinite';
+            
+            // Provide haptic feedback
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('medium');
+            }
+            
+            try {
+                await loadInitialData();
+            } finally {
+                setTimeout(() => {
+                    refreshIcon.style.animation = '';
+                    isRefreshing = false;
+                }, 1000);
+            }
+        }
+        
+        // Refresh only activity
+        function refreshActivity() {
+            loadActivity();
+            
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('light');
+            }
+        }
+        
+        // Start auto-refresh
+        function startAutoRefresh() {
+            refreshInterval = setInterval(() => {
+                if (!isRefreshing) {
+                    loadSystemMetrics();
+                    loadMetricsSummary();
+                }
+            }, 10000); // Refresh every 10 seconds
+        }
+        
+        // Show detail modal
+        function showDetailModal(type) {
+            const modal = document.getElementById('detail-modal');
+            const title = document.getElementById('detail-modal-title');
+            const content = document.getElementById('detail-modal-content');
+            
+            const detailData = {
+                status: {
+                    title: 'System Status Details',
+                    content: `
+                        <div class="mobile-stack-tight">
+                            <div class="mobile-alert mobile-alert-info">
+                                <div class="mobile-alert-icon"><i class="fas fa-info-circle"></i></div>
+                                <div>System is running normally with all core components operational.</div>
+                            </div>
+                            <div class="mobile-text-body">Last health check: 30 seconds ago</div>
+                            <div class="mobile-text-body">Next scheduled maintenance: Sunday 2:00 AM</div>
+                        </div>
+                    `
+                },
+                uptime: {
+                    title: 'Uptime Information',
+                    content: `
+                        <div class="mobile-stack-tight">
+                            <div class="mobile-text-body">Current uptime: 3 days, 5 hours</div>
+                            <div class="mobile-text-body">Last restart: Monday 4:00 AM (Planned maintenance)</div>
+                            <div class="mobile-text-body">Average uptime (30 days): 99.8%</div>
+                        </div>
+                    `
+                },
+                users: {
+                    title: 'Active Users',
+                    content: `
+                        <div class="mobile-stack-tight">
+                            <div class="mobile-text-body">Currently active: 7 users</div>
+                            <div class="mobile-text-body">Peak today: 23 users (2:30 PM)</div>
+                            <div class="mobile-text-body">Average daily active: 18 users</div>
+                        </div>
+                    `
+                },
+                response: {
+                    title: 'Response Time Metrics',
+                    content: `
+                        <div class="mobile-stack-tight">
+                            <div class="mobile-text-body">Current average: 45ms</div>
+                            <div class="mobile-text-body">Pattern matches: < 10ms</div>
+                            <div class="mobile-text-body">LLM responses: ~250ms</div>
+                            <div class="mobile-text-body">99th percentile: 850ms</div>
+                        </div>
+                    `
+                }
+            };
+            
+            const data = detailData[type];
+            if (data) {
+                title.textContent = data.title;
+                content.innerHTML = data.content;
+                modal.classList.remove('hidden');
+                document.body.classList.add('mobile-modal-open');
+                
+                if (window.mobileGestures) {
+                    window.mobileGestures.provideFeedback('light');
+                }
+            }
+        }
+        
+        // Close detail modal
+        function closeDetailModal() {
+            const modal = document.getElementById('detail-modal');
+            modal.classList.add('mobile-modal-closing');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('mobile-modal-closing');
+                document.body.classList.remove('mobile-modal-open');
+            }, 200);
+        }
+        
+        // Show error state
+        function showErrorState() {
+            document.getElementById('overall-status').textContent = 'ERROR';
+            document.getElementById('overall-status').className = 'mobile-metric-value mobile-status-error';
+            
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('error');
+            }
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>

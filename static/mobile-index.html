@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>MCP ADHD Assistant - Mobile</title>
+    
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-title" content="ADHD Assistant">
+    
+    <!-- Stylesheets -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/mobile-adhd.css" rel="stylesheet">
+    <link href="css/mobile-modals.css" rel="stylesheet">
+    
+    <style>
+        /* Page-specific styles */
+        .mobile-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: var(--mobile-space-4);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--mobile-shadow-md);
+        }
+        
+        .mobile-header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .mobile-brand {
+            display: flex;
+            align-items: center;
+            gap: var(--mobile-space-2);
+        }
+        
+        .mobile-brand h1 {
+            font-size: var(--mobile-text-lg);
+            font-weight: 700;
+            margin: 0;
+        }
+        
+        .mobile-status {
+            display: flex;
+            align-items: center;
+            gap: var(--mobile-space-2);
+            font-size: var(--mobile-text-sm);
+        }
+        
+        .mobile-status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        /* Chat interface styling */
+        .mobile-chat-container {
+            height: calc(100vh - 200px);
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .mobile-chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--mobile-space-4);
+            display: flex;
+            flex-direction: column;
+            gap: var(--mobile-space-4);
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .mobile-chat-input-container {
+            padding: var(--mobile-space-4);
+            background: var(--mobile-bg-primary);
+            border-top: 1px solid #e2e8f0;
+            position: sticky;
+            bottom: 0;
+        }
+        
+        .mobile-message {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--mobile-space-3);
+            animation: fadeInUp 0.3s ease;
+        }
+        
+        .mobile-message-user {
+            flex-direction: row-reverse;
+        }
+        
+        .mobile-message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .mobile-message-avatar-bot {
+            background-color: var(--adhd-primary);
+            color: white;
+        }
+        
+        .mobile-message-avatar-user {
+            background-color: var(--adhd-secondary);
+            color: white;
+        }
+        
+        .mobile-message-content {
+            background: var(--mobile-bg-accent);
+            padding: var(--mobile-space-3) var(--mobile-space-4);
+            border-radius: var(--mobile-radius-lg);
+            max-width: 85%;
+            font-size: var(--mobile-text-base);
+            line-height: 1.5;
+        }
+        
+        .mobile-message-user .mobile-message-content {
+            background-color: var(--adhd-primary);
+            color: white;
+        }
+        
+        .mobile-input-group {
+            display: flex;
+            gap: var(--mobile-space-2);
+            align-items: flex-end;
+        }
+        
+        .mobile-thinking {
+            opacity: 0.7;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body class="mobile-bg-secondary">
+    <!-- Emergency Button (Always Visible) -->
+    <button 
+        id="emergency-btn" 
+        onclick="showEmergencyModal()" 
+        class="mobile-btn-emergency"
+        title="Emergency Support"
+        aria-label="Get immediate crisis support"
+    >
+        <i class="fas fa-exclamation-triangle"></i>
+    </button>
+
+    <!-- Header -->
+    <header class="mobile-header mobile-prevent-refresh">
+        <div class="mobile-header-content">
+            <div class="mobile-brand">
+                <i class="fas fa-brain text-2xl"></i>
+                <div>
+                    <h1>ADHD Assistant</h1>
+                    <div class="mobile-text-small opacity-75">Executive Function Support</div>
+                </div>
+            </div>
+            <div class="mobile-status">
+                <div class="mobile-status-dot"></div>
+                <span>Online</span>
+                <button onclick="toggleUserMenu()" class="mobile-touch-target bg-white bg-opacity-20 rounded-full" style="margin-left: 12px;">
+                    <i class="fas fa-user"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="mobile-container">
+        <!-- Quick Actions -->
+        <section class="mobile-stack-tight" style="padding-top: var(--mobile-space-4);">
+            <h2 class="mobile-heading-3" style="margin-bottom: var(--mobile-space-3);">
+                <i class="fas fa-bolt text-yellow-500 mr-2"></i>
+                Quick Actions
+            </h2>
+            <div class="mobile-quick-grid">
+                <button 
+                    onclick="quickAction('ready')" 
+                    class="mobile-btn mobile-btn-secondary mobile-touch-target-large mobile-tap-enhanced"
+                    data-quick-task="ready"
+                    data-swipe-up-action="quick-task"
+                >
+                    <i class="fas fa-rocket text-xl"></i>
+                    <div class="mobile-text-small">Ready!</div>
+                </button>
+                
+                <button 
+                    onclick="quickAction('stuck')" 
+                    class="mobile-btn mobile-btn-warning mobile-touch-target-large mobile-tap-enhanced"
+                    data-quick-task="stuck"
+                    data-swipe-up-action="quick-task"
+                >
+                    <i class="fas fa-question-circle text-xl"></i>
+                    <div class="mobile-text-small">Stuck</div>
+                </button>
+                
+                <button 
+                    onclick="quickAction('overwhelmed')" 
+                    class="mobile-btn mobile-btn-danger mobile-touch-target-large mobile-tap-enhanced"
+                    data-quick-task="overwhelmed"
+                    data-swipe-up-action="quick-task"
+                >
+                    <i class="fas fa-dizzy text-xl"></i>
+                    <div class="mobile-text-small">Overwhelmed</div>
+                </button>
+                
+                <button 
+                    onclick="quickAction('break')" 
+                    class="mobile-btn mobile-btn-primary mobile-touch-target-large mobile-tap-enhanced"
+                    data-quick-task="break"
+                    data-swipe-up-action="quick-task"
+                >
+                    <i class="fas fa-coffee text-xl"></i>
+                    <div class="mobile-text-small">Break</div>
+                </button>
+            </div>
+        </section>
+
+        <!-- Chat Interface -->
+        <section class="mobile-card" style="margin-top: var(--mobile-space-6);">
+            <div class="mobile-chat-container">
+                <div id="chat-messages" class="mobile-chat-messages">
+                    <!-- Welcome Message -->
+                    <div class="mobile-message">
+                        <div class="mobile-message-avatar mobile-message-avatar-bot">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="mobile-message-content">
+                            <p>Hi! I'm your ADHD support assistant. 🧠✨</p>
+                            <p class="mobile-text-small" style="margin-top: var(--mobile-space-2); opacity: 0.8;">
+                                I'm here to help you stay focused and tackle your day!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="mobile-chat-input-container">
+                    <!-- Current Focus (Collapsible) -->
+                    <div class="mobile-stack-tight" style="margin-bottom: var(--mobile-space-4);">
+                        <button onclick="toggleFocusInput()" class="mobile-text-small text-left" style="color: var(--mobile-text-secondary);">
+                            <i class="fas fa-bullseye mr-1"></i>
+                            <span id="focus-toggle-text">Set Current Focus</span>
+                            <i class="fas fa-chevron-down ml-1" id="focus-chevron"></i>
+                        </button>
+                        <input 
+                            type="text" 
+                            id="task-focus" 
+                            placeholder="What are you working on?"
+                            class="mobile-input hidden"
+                            style="margin-top: var(--mobile-space-2);"
+                        >
+                    </div>
+
+                    <!-- Message Input -->
+                    <div class="mobile-input-group">
+                        <textarea 
+                            id="chat-input" 
+                            placeholder="Tell me what's on your mind..."
+                            class="mobile-input"
+                            rows="1"
+                            style="resize: none; min-height: var(--touch-target-min);"
+                            onkeydown="handleInputKeydown(event)"
+                        ></textarea>
+                        <button 
+                            onclick="sendMessage()" 
+                            class="mobile-btn mobile-btn-primary mobile-touch-target"
+                            id="send-btn"
+                        >
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+
+                    <!-- Response Style (Compact) -->
+                    <div style="margin-top: var(--mobile-space-3); display: flex; justify-content: space-between; align-items: center;">
+                        <select id="nudge-tier" class="mobile-select" style="max-width: 140px;">
+                            <option value="0">Gentle 🌱</option>
+                            <option value="1">Sarcastic 🙄</option>
+                            <option value="2">Sergeant ⚡</option>
+                        </select>
+                        <div class="mobile-text-small" style="color: var(--mobile-text-muted);">
+                            <span id="response-time">< 1s</span> • 
+                            <span id="response-source">Ready</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Quick Stats (Minimal on Mobile) -->
+        <section class="mobile-stack" style="margin-top: var(--mobile-space-6); margin-bottom: var(--mobile-space-8);">
+            <div class="mobile-grid-2" style="gap: var(--mobile-space-3);">
+                <div class="mobile-card mobile-card-compact text-center">
+                    <div class="mobile-text-small" style="color: var(--mobile-text-muted);">Response</div>
+                    <div class="mobile-text-xl" style="font-weight: 600; color: var(--adhd-success);" id="avg-response-time">< 1s</div>
+                </div>
+                <div class="mobile-card mobile-card-compact text-center">
+                    <div class="mobile-text-small" style="color: var(--mobile-text-muted);">Load</div>
+                    <div class="mobile-text-xl" style="font-weight: 600; color: var(--adhd-primary);" id="cognitive-load">Optimal</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Mobile-Optimized Authentication Modal -->
+    <div id="auth-modal" class="mobile-modal-overlay hidden">
+        <div class="mobile-modal-container mobile-auth-modal">
+            <div class="mobile-modal-header">
+                <h2 class="mobile-modal-title" id="auth-modal-title">Welcome!</h2>
+                <button onclick="closeAuthModal()" class="mobile-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mobile-modal-body">
+                <!-- Login Form -->
+                <div id="login-form">
+                    <div class="mobile-stack">
+                        <div class="mobile-modal-form-group">
+                            <label class="mobile-modal-form-label">Email</label>
+                            <input type="email" id="login-email" class="mobile-input" required>
+                        </div>
+                        <div class="mobile-modal-form-group">
+                            <label class="mobile-modal-form-label">Password</label>
+                            <input type="password" id="login-password" class="mobile-input" required autocomplete="current-password">
+                        </div>
+                        <button onclick="handleLogin(event)" class="mobile-btn mobile-btn-primary mobile-btn-full mobile-btn-large">
+                            <i class="fas fa-sign-in-alt mr-2"></i>
+                            Sign In
+                        </button>
+                        <button onclick="switchToRegister()" class="mobile-btn mobile-btn-outline mobile-btn-full">
+                            Don't have an account? Sign up
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Register Form -->
+                <div id="register-form" class="hidden">
+                    <div class="mobile-stack">
+                        <div class="mobile-modal-form-group">
+                            <label class="mobile-modal-form-label">Name</label>
+                            <input type="text" id="register-name" class="mobile-input" required>
+                        </div>
+                        <div class="mobile-modal-form-group">
+                            <label class="mobile-modal-form-label">Email</label>
+                            <input type="email" id="register-email" class="mobile-input" required>
+                        </div>
+                        <div class="mobile-modal-form-group">
+                            <label class="mobile-modal-form-label">Password</label>
+                            <input type="password" id="register-password" class="mobile-input" required autocomplete="new-password">
+                            <div class="mobile-text-small" style="margin-top: var(--mobile-space-2); color: var(--mobile-text-muted);">
+                                Must be 8+ characters with letters and numbers
+                            </div>
+                        </div>
+                        <button onclick="handleRegister(event)" class="mobile-btn mobile-btn-secondary mobile-btn-full mobile-btn-large">
+                            <i class="fas fa-user-plus mr-2"></i>
+                            Create Account
+                        </button>
+                        <button onclick="switchToLogin()" class="mobile-btn mobile-btn-outline mobile-btn-full">
+                            Already have an account? Sign in
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Loading/Error States -->
+                <div id="auth-loading" class="hidden mobile-modal-loading">
+                    <div class="mobile-modal-loading-spinner"></div>
+                    <div class="mobile-modal-loading-text">Please wait...</div>
+                </div>
+                <div id="auth-error" class="hidden mobile-status mobile-status-error" style="margin-top: var(--mobile-space-4);">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="auth-error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency Modal -->
+    <div id="emergency-modal" class="mobile-modal-overlay mobile-emergency-modal hidden">
+        <div class="mobile-modal-container">
+            <div class="mobile-modal-header">
+                <h2 class="mobile-modal-title">🚨 Crisis Support</h2>
+                <button onclick="closeEmergencyModal()" class="mobile-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="mobile-modal-body">
+                <div style="text-align: center;">
+                    <div style="font-size: var(--mobile-text-2xl); margin-bottom: var(--mobile-space-4);">
+                        You're not alone. Help is available.
+                    </div>
+                    
+                    <div class="mobile-stack">
+                        <a href="tel:988" class="mobile-btn mobile-btn-danger mobile-btn-full mobile-btn-large">
+                            <i class="fas fa-phone mr-2"></i>
+                            Call 988 - Suicide & Crisis Lifeline
+                        </a>
+                        
+                        <a href="sms:741741" class="mobile-btn mobile-btn-warning mobile-btn-full mobile-btn-large">
+                            <i class="fas fa-comment mr-2"></i>
+                            Text HOME to 741741 - Crisis Text Line
+                        </a>
+                        
+                        <button onclick="startEmergencyChat()" class="mobile-btn mobile-btn-primary mobile-btn-full mobile-btn-large">
+                            <i class="fas fa-comments mr-2"></i>
+                            Talk to Assistant (Crisis Mode)
+                        </button>
+                        
+                        <div style="margin-top: var(--mobile-space-6); padding: var(--mobile-space-4); background: rgba(255, 255, 255, 0.9); border-radius: var(--mobile-radius-lg);">
+                            <div class="mobile-text-small" style="color: var(--mobile-text-secondary);">
+                                <strong>Remember:</strong> This is temporary. Your feelings are valid. Professional help is available 24/7.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // Global state
+        let currentUser = null;
+        let sessionId = null;
+        let focusInputVisible = false;
+        
+        // Auto-resize textarea
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+        
+        // Handle input keydown for mobile
+        function handleInputKeydown(event) {
+            const textarea = event.target;
+            autoResize(textarea);
+            
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        // Toggle focus input visibility
+        function toggleFocusInput() {
+            const input = document.getElementById('task-focus');
+            const toggleText = document.getElementById('focus-toggle-text');
+            const chevron = document.getElementById('focus-chevron');
+            
+            focusInputVisible = !focusInputVisible;
+            
+            if (focusInputVisible) {
+                input.classList.remove('hidden');
+                toggleText.textContent = 'Current Focus';
+                chevron.classList.add('fa-chevron-up');
+                chevron.classList.remove('fa-chevron-down');
+                setTimeout(() => input.focus(), 100);
+            } else {
+                input.classList.add('hidden');
+                toggleText.textContent = input.value || 'Set Current Focus';
+                chevron.classList.add('fa-chevron-down');
+                chevron.classList.remove('fa-chevron-up');
+            }
+        }
+        
+        // Quick Actions with mobile feedback
+        function quickAction(action) {
+            const messages = {
+                ready: "I'm ready to work!",
+                stuck: "I'm stuck and don't know how to start",
+                overwhelmed: "I'm feeling really overwhelmed right now",
+                break: "I think I need to take a break"
+            };
+            
+            const textarea = document.getElementById('chat-input');
+            textarea.value = messages[action];
+            autoResize(textarea);
+            
+            // Provide haptic feedback
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('medium');
+            }
+            
+            sendMessage();
+        }
+        
+        // Enhanced message sending for mobile
+        async function sendMessage() {
+            const textarea = document.getElementById('chat-input');
+            const taskFocus = document.getElementById('task-focus');
+            const nudgeTier = document.getElementById('nudge-tier');
+            
+            const message = textarea.value.trim();
+            if (!message) return;
+            
+            // Check if user is authenticated (simplified for demo)
+            if (!currentUser) {
+                showAuthModal('login');
+                return;
+            }
+            
+            // Add user message
+            addMobileMessage(message, 'user');
+            
+            // Clear and reset textarea
+            textarea.value = '';
+            autoResize(textarea);
+            
+            // Show thinking indicator
+            const thinkingId = addMobileMessage('Thinking...', 'assistant', true);
+            
+            // Provide feedback
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('light');
+            }
+            
+            try {
+                const startTime = Date.now();
+                
+                // Simulate API call (replace with actual endpoint)
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+                
+                const responseTime = Date.now() - startTime;
+                
+                // Remove thinking indicator
+                document.getElementById(thinkingId).remove();
+                
+                // Add response message
+                const responses = [
+                    "Great! Let's break that down into smaller, manageable steps. What's the first tiny thing you could do?",
+                    "I hear you. When we feel stuck, sometimes the best approach is to start with just 5 minutes. What could you do for 5 minutes?",
+                    "Feeling overwhelmed is totally normal. Let's prioritize: what's the ONE most important thing right now?",
+                    "Taking breaks is crucial for ADHD brains! How about a 10-minute walk or some deep breathing?"
+                ];
+                
+                const response = responses[Math.floor(Math.random() * responses.length)];
+                
+                addMobileMessage(response, 'assistant', false, {
+                    source: Math.random() > 0.5 ? 'pattern_match' : 'local',
+                    processingTime: responseTime
+                });
+                
+                // Update metrics
+                updateMobileMetrics(responseTime);
+                
+            } catch (error) {
+                console.error('Chat error:', error);
+                document.getElementById(thinkingId).remove();
+                addMobileMessage('I had trouble processing that. Please try again.', 'assistant');
+            }
+        }
+        
+        // Add message optimized for mobile
+        function addMobileMessage(text, sender, isThinking = false, metadata = null) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.id = messageId;
+            messageDiv.className = `mobile-message ${sender === 'user' ? 'mobile-message-user' : ''}`;
+            
+            if (isThinking) {
+                messageDiv.classList.add('mobile-thinking');
+            }
+            
+            const avatarClass = sender === 'user' ? 'mobile-message-avatar-user' : 'mobile-message-avatar-bot';
+            const icon = sender === 'user' ? 'fa-user' : 'fa-robot';
+            
+            messageDiv.innerHTML = `
+                <div class="mobile-message-avatar ${avatarClass}">
+                    <i class="fas ${icon}"></i>
+                </div>
+                <div class="mobile-message-content">
+                    ${escapeHtml(text)}
+                    ${metadata ? `<div class="mobile-text-small" style="margin-top: var(--mobile-space-2); opacity: 0.7;">${metadata.source} • ${metadata.processingTime}ms</div>` : ''}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            return messageId;
+        }
+        
+        // Update mobile metrics
+        function updateMobileMetrics(responseTime) {
+            const timeDisplay = responseTime < 1000 ? `${responseTime}ms` : `${(responseTime/1000).toFixed(1)}s`;
+            document.getElementById('response-time').textContent = timeDisplay;
+            document.getElementById('avg-response-time').textContent = timeDisplay;
+        }
+        
+        // Authentication functions (simplified)
+        function showAuthModal(mode = 'login') {
+            const modal = document.getElementById('auth-modal');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const title = document.getElementById('auth-modal-title');
+            
+            if (mode === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                title.textContent = 'Welcome Back!';
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                title.textContent = 'Create Account';
+            }
+            
+            modal.classList.remove('hidden');
+            document.body.classList.add('mobile-modal-open');
+        }
+        
+        function closeAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            modal.classList.add('mobile-modal-closing');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('mobile-modal-closing');
+                document.body.classList.remove('mobile-modal-open');
+            }, 200);
+        }
+        
+        function switchToLogin() {
+            showAuthModal('login');
+        }
+        
+        function switchToRegister() {
+            showAuthModal('register');
+        }
+        
+        // Mock authentication
+        function handleLogin(event) {
+            if (event && event.preventDefault) event.preventDefault();
+            
+            // Simulate login
+            currentUser = { name: 'Demo User', email: 'demo@example.com' };
+            closeAuthModal();
+            
+            addMobileMessage("Welcome back! I'm ready to help you tackle your goals. 🎯", 'assistant', false, {
+                source: 'system',
+                processingTime: 1
+            });
+        }
+        
+        function handleRegister(event) {
+            if (event && event.preventDefault) event.preventDefault();
+            handleLogin(); // Simulate auto-login after registration
+        }
+        
+        // Emergency support
+        function showEmergencyModal() {
+            const modal = document.getElementById('emergency-modal');
+            modal.classList.remove('hidden');
+            document.body.classList.add('mobile-modal-open');
+            
+            if (window.mobileGestures) {
+                window.mobileGestures.provideFeedback('emergency');
+            }
+        }
+        
+        function closeEmergencyModal() {
+            const modal = document.getElementById('emergency-modal');
+            modal.classList.add('mobile-modal-closing');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('mobile-modal-closing');
+                document.body.classList.remove('mobile-modal-open');
+            }, 200);
+        }
+        
+        function startEmergencyChat() {
+            closeEmergencyModal();
+            addMobileMessage("I'm here with you. You took a brave step reaching out. Let's talk through this together - you don't have to face this alone.", 'assistant', false, {
+                source: 'crisis_support',
+                processingTime: 1
+            });
+        }
+        
+        // User menu (placeholder)
+        function toggleUserMenu() {
+            // Placeholder for user menu functionality
+            console.log('User menu toggle');
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-resize chat input
+            const chatInput = document.getElementById('chat-input');
+            chatInput.addEventListener('input', function() {
+                autoResize(this);
+            });
+            
+            // Mock authentication status
+            setTimeout(() => {
+                if (!currentUser) {
+                    addMobileMessage("Hi! I'm your ADHD support assistant. Sign in to get started with personalized support! 🧠✨", 'assistant', false, {
+                        source: 'system',
+                        processingTime: 1
+                    });
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

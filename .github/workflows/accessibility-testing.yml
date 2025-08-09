@@ -1,0 +1,280 @@
+name: Accessibility Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'static/**'
+      - 'templates/**'
+      - 'src/**'
+      - 'tests/accessibility/**'
+
+env:
+  BASE_URL: http://localhost:8000
+  PYTEST_WORKERS: 2
+
+jobs:
+  accessibility-audit:
+    name: Accessibility Testing Suite
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.11]
+        
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_adhd_server
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          xvfb \
+          fonts-liberation \
+          libasound2 \
+          libatk-bridge2.0-0 \
+          libdrm2 \
+          libgtk-3-0 \
+          libnspr4 \
+          libnss3 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxrandr2 \
+          xdg-utils
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        
+    - name: Install Playwright browsers
+      run: |
+        playwright install chromium
+        playwright install-deps chromium
+        
+    - name: Set up environment variables
+      run: |
+        cp .env.example .env || echo "# Test environment" > .env
+        echo "DATABASE_URL=postgresql://test_user:test_password@localhost:5432/test_adhd_server" >> .env
+        echo "REDIS_URL=redis://localhost:6379" >> .env
+        echo "SECRET_KEY=test-secret-key-for-accessibility-testing" >> .env
+        echo "OPENAI_API_KEY=sk-test-key-not-used-in-accessibility-tests" >> .env
+        
+    - name: Initialize test database
+      run: |
+        python -c "
+        import asyncio
+        from src.mcp_server.database import init_db
+        asyncio.run(init_db())
+        "
+        
+    - name: Start test server
+      run: |
+        python -m uvicorn src.mcp_server.main:app --host 127.0.0.1 --port 8000 &
+        sleep 10  # Wait for server to start
+        curl -f http://localhost:8000/health || exit 1
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_adhd_server
+        REDIS_URL: redis://localhost:6379
+        
+    - name: Run WCAG Compliance Tests
+      run: |
+        pytest tests/accessibility/test_wcag_compliance.py \
+          -v \
+          --maxfail=5 \
+          --tb=short \
+          --html=test-results/wcag-compliance-report.html \
+          --self-contained-html \
+          --junit-xml=test-results/wcag-compliance.xml
+      env:
+        HEADLESS: true
+        
+    - name: Run ADHD-Specific Accessibility Tests
+      run: |
+        pytest tests/accessibility/test_adhd_accessibility.py \
+          -v \
+          --maxfail=3 \
+          --tb=short \
+          --html=test-results/adhd-accessibility-report.html \
+          --self-contained-html \
+          --junit-xml=test-results/adhd-accessibility.xml
+      env:
+        HEADLESS: true
+        
+    - name: Run Multi-Disability Tests
+      run: |
+        pytest tests/accessibility/test_multi_disability.py \
+          -v \
+          --maxfail=3 \
+          --tb=short \
+          --html=test-results/multi-disability-report.html \
+          --self-contained-html \
+          --junit-xml=test-results/multi-disability.xml
+      env:
+        HEADLESS: true
+        
+    - name: Run Performance Accessibility Tests
+      run: |
+        pytest tests/accessibility/ \
+          -k "performance" \
+          -v \
+          --tb=short \
+          --html=test-results/performance-accessibility-report.html \
+          --self-contained-html \
+          --junit-xml=test-results/performance-accessibility.xml
+      env:
+        HEADLESS: true
+        
+    - name: Generate Accessibility Report Summary
+      if: always()
+      run: |
+        python scripts/generate_accessibility_report.py \
+          --results-dir test-results/accessibility \
+          --output test-results/accessibility-summary.json
+          
+    - name: Upload Accessibility Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-test-results-${{ matrix.python-version }}
+        path: |
+          test-results/
+          playwright-report/
+        retention-days: 30
+        
+    - name: Upload Accessibility Screenshots
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-failure-screenshots-${{ matrix.python-version }}
+        path: test-results/screenshots/
+        retention-days: 7
+        
+    - name: Comment Accessibility Results on PR
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          try {
+            const summaryPath = 'test-results/accessibility-summary.json';
+            if (fs.existsSync(summaryPath)) {
+              const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              
+              const comment = `
+              ## 🔍 Accessibility Test Results
+              
+              ### WCAG 2.1 AA Compliance
+              - **Status**: ${summary.wcag_compliance ? '✅ PASSING' : '❌ FAILING'}
+              - **Violations**: ${summary.wcag_violations || 0}
+              
+              ### ADHD-Specific Accessibility
+              - **Status**: ${summary.adhd_accessibility ? '✅ PASSING' : '❌ FAILING'}
+              - **Cognitive Load**: ${summary.cognitive_load_score || 'N/A'}/10
+              - **Crisis Features**: ${summary.crisis_features_accessible ? '✅ ACCESSIBLE' : '❌ NOT ACCESSIBLE'}
+              
+              ### Multi-Disability Support
+              - **Screen Reader + ADHD**: ${summary.screen_reader_adhd ? '✅' : '❌'}
+              - **Motor + ADHD**: ${summary.motor_adhd ? '✅' : '❌'}
+              - **Visual + ADHD**: ${summary.visual_adhd ? '✅' : '❌'}
+              - **Hearing + ADHD**: ${summary.hearing_adhd ? '✅' : '❌'}
+              
+              ### Performance for ADHD Users
+              - **Page Load Time**: ${summary.page_load_time || 'N/A'}ms (Target: <3000ms)
+              - **Interactive Response**: ${summary.interaction_time || 'N/A'}ms (Target: <100ms)
+              
+              ${summary.critical_issues ? `
+              ### ⚠️ Critical Issues
+              ${summary.critical_issues.map(issue => `- ${issue}`).join('\n')}
+              ` : ''}
+              
+              [View Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+          } catch (error) {
+            console.error('Error posting accessibility results:', error);
+          }
+          
+    - name: Fail on Critical Accessibility Issues
+      if: always()
+      run: |
+        if [ -f "test-results/accessibility-summary.json" ]; then
+          python -c "
+          import json
+          with open('test-results/accessibility-summary.json') as f:
+              summary = json.load(f)
+          
+          # Critical failures that should fail the build
+          critical_failures = []
+          
+          if not summary.get('wcag_compliance', True):
+              critical_failures.append('WCAG 2.1 AA compliance failure')
+          
+          if not summary.get('crisis_features_accessible', True):
+              critical_failures.append('Crisis features not accessible (life-critical)')
+          
+          if summary.get('cognitive_load_score', 0) > 8:
+              critical_failures.append('Cognitive load too high for ADHD users')
+          
+          if summary.get('page_load_time', 0) > 5000:
+              critical_failures.append('Page load time exceeds ADHD attention threshold')
+          
+          if critical_failures:
+              print('CRITICAL ACCESSIBILITY FAILURES:')
+              for failure in critical_failures:
+                  print(f'  - {failure}')
+              exit(1)
+          else:
+              print('All critical accessibility requirements met.')
+          "
+        fi

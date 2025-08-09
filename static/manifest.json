@@ -1,0 +1,57 @@
+{
+  "name": "MCP ADHD Assistant",
+  "short_name": "ADHD Assistant",
+  "description": "AI-powered executive function support designed for ADHD users",
+  "start_url": "/mobile-index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "categories": ["health", "productivity", "utilities"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Chat",
+      "short_name": "Chat",
+      "description": "Start a conversation with your ADHD assistant",
+      "url": "/mobile-index.html#chat",
+      "icons": [
+        {
+          "src": "favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    },
+    {
+      "name": "Emergency Support",
+      "short_name": "Emergency",
+      "description": "Access crisis support resources",
+      "url": "/mobile-index.html#emergency",
+      "icons": [
+        {
+          "src": "favicon.svg",
+          "sizes": "any"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
+}

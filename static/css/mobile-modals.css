@@ -1,0 +1,508 @@
+/* Mobile-Optimized Modal System for ADHD Users */
+/* Full-screen modals with easy navigation and accessibility */
+
+:root {
+    /* Modal-specific variables */
+    --modal-bg-overlay: rgba(0, 0, 0, 0.7);
+    --modal-bg-content: var(--mobile-bg-primary, #ffffff);
+    --modal-border-radius: var(--mobile-radius-xl, 1rem);
+    --modal-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --modal-header-height: 60px;
+    --modal-footer-height: 72px;
+    --modal-close-size: 48px;
+    --modal-animation-duration: var(--mobile-duration-base, 0.2s);
+}
+
+/* Modal overlay - full screen on mobile */
+.mobile-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--modal-bg-overlay);
+    z-index: var(--mobile-z-modal, 1050);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    overflow: hidden;
+    /* Prevent scrolling background */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Modal container - full screen on mobile */
+.mobile-modal-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    background-color: var(--modal-bg-content);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Modal header with large close button */
+.mobile-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--modal-header-height);
+    padding: 0 var(--mobile-space-4);
+    background-color: var(--modal-bg-content);
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.mobile-modal-title {
+    font-size: var(--mobile-text-xl);
+    font-weight: 600;
+    color: var(--mobile-text-primary);
+    margin: 0;
+    flex: 1;
+    text-align: center;
+    padding: 0 var(--mobile-space-4);
+}
+
+/* Large, touch-friendly close button */
+.mobile-modal-close {
+    width: var(--modal-close-size);
+    height: var(--modal-close-size);
+    border: none;
+    background-color: #f1f5f9;
+    color: var(--mobile-text-secondary);
+    border-radius: var(--mobile-radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--modal-animation-duration) ease;
+    font-size: var(--mobile-text-lg);
+    flex-shrink: 0;
+}
+
+.mobile-modal-close:hover,
+.mobile-modal-close:active {
+    background-color: #e2e8f0;
+    color: var(--mobile-text-primary);
+    transform: scale(1.05);
+}
+
+.mobile-modal-close:focus {
+    outline: none;
+    box-shadow: var(--mobile-focus-ring);
+}
+
+/* Modal body - scrollable content */
+.mobile-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: var(--mobile-space-6) var(--mobile-space-4);
+    background-color: var(--mobile-bg-secondary);
+}
+
+.mobile-modal-body-no-padding {
+    padding: 0;
+}
+
+/* Modal footer with action buttons */
+.mobile-modal-footer {
+    display: flex;
+    gap: var(--mobile-space-3);
+    padding: var(--mobile-space-4);
+    background-color: var(--modal-bg-content);
+    border-top: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    min-height: var(--modal-footer-height);
+    align-items: center;
+    justify-content: center;
+}
+
+.mobile-modal-footer-left {
+    justify-content: flex-start;
+}
+
+.mobile-modal-footer-right {
+    justify-content: flex-end;
+}
+
+.mobile-modal-footer-space-between {
+    justify-content: space-between;
+}
+
+/* Stack buttons vertically on small screens */
+.mobile-modal-footer-stack {
+    flex-direction: column;
+}
+
+/* Modal animations */
+.mobile-modal-overlay {
+    opacity: 0;
+    animation: modalFadeIn var(--modal-animation-duration) ease forwards;
+}
+
+.mobile-modal-container {
+    transform: translateY(100vh);
+    animation: modalSlideUp var(--modal-animation-duration) ease forwards;
+}
+
+/* Exit animations */
+.mobile-modal-overlay.mobile-modal-closing {
+    animation: modalFadeOut var(--modal-animation-duration) ease forwards;
+}
+
+.mobile-modal-container.mobile-modal-closing {
+    animation: modalSlideDown var(--modal-animation-duration) ease forwards;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalFadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(100vh);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+@keyframes modalSlideDown {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(100vh);
+    }
+}
+
+/* Specialized modal types */
+
+/* Auth modal - optimized for login/signup */
+.mobile-auth-modal .mobile-modal-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--mobile-space-8) var(--mobile-space-6);
+}
+
+.mobile-auth-modal .mobile-modal-container {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.mobile-auth-modal .mobile-modal-header,
+.mobile-auth-modal .mobile-modal-footer {
+    background-color: transparent;
+    border: none;
+}
+
+.mobile-auth-modal .mobile-modal-title {
+    color: white;
+    font-size: var(--mobile-text-2xl);
+}
+
+.mobile-auth-modal .mobile-modal-close {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.mobile-auth-modal .mobile-modal-close:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Error modal - for crisis situations */
+.mobile-error-modal .mobile-modal-container {
+    background-color: var(--mobile-bg-emergency, #fecaca);
+}
+
+.mobile-error-modal .mobile-modal-header {
+    background-color: var(--adhd-danger, #ef4444);
+    color: white;
+    border-bottom-color: var(--adhd-danger-dark, #dc2626);
+}
+
+.mobile-error-modal .mobile-modal-title {
+    color: white;
+    font-weight: 700;
+}
+
+.mobile-error-modal .mobile-modal-close {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.mobile-error-modal .mobile-modal-footer {
+    background-color: var(--mobile-bg-emergency, #fecaca);
+}
+
+/* Success modal - for celebrations */
+.mobile-success-modal .mobile-modal-container {
+    background-color: #dcfce7;
+}
+
+.mobile-success-modal .mobile-modal-header {
+    background-color: var(--adhd-success, #22c55e);
+    color: white;
+    border-bottom-color: var(--adhd-success-dark, #16a34a);
+}
+
+.mobile-success-modal .mobile-modal-title {
+    color: white;
+    font-weight: 700;
+}
+
+.mobile-success-modal .mobile-modal-close {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* Profile modal */
+.mobile-profile-modal .mobile-modal-body {
+    padding: var(--mobile-space-4);
+}
+
+/* Settings modal */
+.mobile-settings-modal .mobile-modal-body {
+    padding: 0;
+}
+
+.mobile-settings-section {
+    padding: var(--mobile-space-6) var(--mobile-space-4);
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mobile-settings-section:last-child {
+    border-bottom: none;
+}
+
+.mobile-settings-section-title {
+    font-size: var(--mobile-text-lg);
+    font-weight: 600;
+    color: var(--mobile-text-primary);
+    margin-bottom: var(--mobile-space-4);
+}
+
+/* Emergency modal - crisis support */
+.mobile-emergency-modal {
+    z-index: var(--mobile-z-emergency, 1100);
+}
+
+.mobile-emergency-modal .mobile-modal-overlay {
+    background-color: rgba(220, 38, 38, 0.8);
+    animation: emergencyPulse 1s ease-in-out infinite alternate;
+}
+
+.mobile-emergency-modal .mobile-modal-container {
+    background-color: white;
+    border: 4px solid var(--adhd-danger);
+}
+
+.mobile-emergency-modal .mobile-modal-header {
+    background-color: var(--adhd-danger);
+    color: white;
+}
+
+.mobile-emergency-modal .mobile-modal-body {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+@keyframes emergencyPulse {
+    from {
+        background-color: rgba(220, 38, 38, 0.7);
+    }
+    to {
+        background-color: rgba(220, 38, 38, 0.9);
+    }
+}
+
+/* Modal content helpers */
+.mobile-modal-section {
+    margin-bottom: var(--mobile-space-6);
+}
+
+.mobile-modal-section:last-child {
+    margin-bottom: 0;
+}
+
+.mobile-modal-form-group {
+    margin-bottom: var(--mobile-space-4);
+}
+
+.mobile-modal-form-label {
+    display: block;
+    font-size: var(--mobile-text-sm);
+    font-weight: 500;
+    color: var(--mobile-text-primary);
+    margin-bottom: var(--mobile-space-2);
+}
+
+/* Responsive adjustments for larger screens */
+@media (min-width: 640px) {
+    .mobile-modal-container {
+        width: 90vw;
+        height: 80vh;
+        max-width: 600px;
+        max-height: 800px;
+        border-radius: var(--modal-border-radius);
+        box-shadow: var(--modal-shadow);
+    }
+
+    .mobile-modal-footer-stack {
+        flex-direction: row;
+    }
+}
+
+@media (min-width: 768px) {
+    .mobile-modal-container {
+        width: 80vw;
+        max-width: 700px;
+    }
+
+    .mobile-modal-body {
+        padding: var(--mobile-space-8) var(--mobile-space-6);
+    }
+}
+
+@media (min-width: 1024px) {
+    .mobile-modal-container {
+        width: 70vw;
+        max-width: 800px;
+        height: auto;
+        max-height: 90vh;
+    }
+}
+
+/* Prevent body scroll when modal is open */
+body.mobile-modal-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+/* Focus trap styles */
+.mobile-modal-focus-trap {
+    outline: none;
+}
+
+/* Loading state for modals */
+.mobile-modal-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    gap: var(--mobile-space-4);
+}
+
+.mobile-modal-loading-spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid var(--adhd-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.mobile-modal-loading-text {
+    color: var(--mobile-text-muted);
+    font-size: var(--mobile-text-lg);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .mobile-modal-overlay,
+    .mobile-modal-container {
+        animation: none !important;
+    }
+
+    .mobile-modal-overlay.mobile-modal-closing {
+        animation: none !important;
+        opacity: 0;
+    }
+
+    .mobile-modal-container.mobile-modal-closing {
+        animation: none !important;
+        transform: translateY(100vh);
+    }
+
+    .mobile-emergency-modal .mobile-modal-overlay {
+        animation: none !important;
+    }
+
+    .mobile-modal-loading-spinner {
+        animation: none !important;
+        border: 4px solid var(--adhd-primary);
+    }
+}
+
+/* High contrast support */
+@media (prefers-contrast: high) {
+    .mobile-modal-container {
+        border: 3px solid #000000;
+    }
+
+    .mobile-modal-close {
+        border: 2px solid #000000;
+    }
+
+    .mobile-modal-header,
+    .mobile-modal-footer {
+        border-color: #000000;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --modal-bg-overlay: rgba(0, 0, 0, 0.8);
+        --modal-bg-content: #1e293b;
+    }
+
+    .mobile-modal-close {
+        background-color: #334155;
+        color: #cbd5e1;
+    }
+
+    .mobile-modal-close:hover {
+        background-color: #475569;
+        color: #f1f5f9;
+    }
+
+    .mobile-modal-body {
+        background-color: #0f172a;
+    }
+
+    .mobile-modal-header,
+    .mobile-modal-footer {
+        border-color: #334155;
+    }
+}

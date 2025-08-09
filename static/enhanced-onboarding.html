@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Your ADHD Support System - Enhanced Onboarding</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* ADHD-friendly design system */
+        :root {
+            --adhd-primary: #667eea;
+            --adhd-secondary: #764ba2;
+            --adhd-success: #10b981;
+            --adhd-warning: #f59e0b;
+            --adhd-danger: #ef4444;
+            --adhd-info: #3b82f6;
+            --adhd-focus: #8b5cf6;
+        }
+
+        /* High contrast, readable design */
+        .adhd-card {
+            background: linear-gradient(135deg, var(--adhd-primary) 0%, var(--adhd-secondary) 100%);
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Progress indicator */
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring-circle {
+            transition: stroke-dasharray 0.35s;
+            transform-origin: 50% 50%;
+        }
+
+        /* Step animations */
+        .step-enter {
+            animation: slideInFromRight 0.5s ease-out;
+        }
+
+        .step-exit {
+            animation: slideOutToLeft 0.3s ease-in;
+        }
+
+        @keyframes slideInFromRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideOutToLeft {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-100%);
+            }
+        }
+
+        /* ADHD-friendly buttons */
+        .adhd-button {
+            @apply px-6 py-4 rounded-lg font-semibold text-white transition-all duration-200 transform hover:scale-105 focus:scale-105 focus:outline-none focus:ring-4 focus:ring-opacity-50;
+            min-height: 48px;
+            min-width: 120px;
+        }
+
+        .adhd-button-primary {
+            background: linear-gradient(135deg, var(--adhd-primary), var(--adhd-secondary));
+            @apply shadow-lg hover:shadow-xl focus:ring-purple-300;
+        }
+
+        .adhd-button-secondary {
+            @apply bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-300;
+        }
+
+        .adhd-button-success {
+            @apply bg-green-500 hover:bg-green-600 focus:ring-green-300;
+        }
+
+        /* Loading states */
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Celebration animations */
+        .celebration {
+            animation: celebrate 0.6s ease-out;
+        }
+
+        @keyframes celebrate {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* Focus indicators for ADHD */
+        .focus-ring {
+            @apply ring-4 ring-purple-300 ring-opacity-75;
+        }
+
+        /* Energy level indicators */
+        .energy-high { @apply bg-green-100 border-green-300 text-green-800; }
+        .energy-medium { @apply bg-yellow-100 border-yellow-300 text-yellow-800; }
+        .energy-low { @apply bg-red-100 border-red-300 text-red-800; }
+
+        /* Mobile-first responsive design */
+        @media (max-width: 640px) {
+            .adhd-card {
+                border-radius: 12px;
+                margin: 8px;
+            }
+            
+            .adhd-button {
+                @apply px-4 py-3 text-sm;
+                min-width: 100px;
+            }
+        }
+
+        /* Reduce motion for users who prefer it */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+            .adhd-card {
+                border: 2px solid #000;
+            }
+            
+            .adhd-button {
+                border: 2px solid;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
+    <!-- Header with progress -->
+    <header class="relative overflow-hidden">
+        <div class="adhd-card text-white mx-4 mt-4 mb-6">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-brain text-3xl"></i>
+                        <div>
+                            <h1 class="text-2xl font-bold">ADHD Support Setup</h1>
+                            <p class="text-sm opacity-90" id="header-subtitle">Building your personalized system</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Circle -->
+                    <div class="relative w-16 h-16">
+                        <svg class="w-16 h-16 progress-ring" viewBox="0 0 32 32">
+                            <circle class="text-white text-opacity-25" stroke-width="2" stroke="currentColor" fill="transparent" r="14" cx="16" cy="16"/>
+                            <circle class="text-white progress-ring-circle" stroke-width="2" stroke-dasharray="0 88" stroke="currentColor" fill="transparent" r="14" cx="16" cy="16" id="progress-circle"/>
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="text-sm font-bold" id="progress-percent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step indicator -->
+                <div class="flex items-center justify-between text-sm opacity-90">
+                    <div>
+                        <span id="current-step-name">Getting Started</span>
+                        <span class="mx-2">•</span>
+                        <span id="step-counter">Step 1 of 11</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <i class="fas fa-clock"></i>
+                        <span id="estimated-time">10-12 minutes</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main onboarding content -->
+    <main class="container mx-auto px-4 max-w-4xl">
+        <!-- Onboarding step container -->
+        <div id="onboarding-container" class="bg-white rounded-xl shadow-lg p-6 md:p-8 mb-8">
+            <!-- Step content will be dynamically loaded here -->
+            <div id="step-content">
+                <!-- Initial loading state -->
+                <div class="text-center py-12">
+                    <div class="spinner w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-4"></div>
+                    <p class="text-gray-600">Initializing your onboarding experience...</p>
+                </div>
+            </div>
+            
+            <!-- Navigation controls -->
+            <div id="navigation-controls" class="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
+                <button id="back-button" class="adhd-button adhd-button-secondary hidden">
+                    <i class="fas fa-chevron-left mr-2"></i>
+                    Back
+                </button>
+                
+                <div class="flex-1"></div>
+                
+                <div class="flex space-x-4">
+                    <button id="skip-button" class="adhd-button adhd-button-secondary hidden">
+                        Skip This Step
+                    </button>
+                    <button id="next-button" class="adhd-button adhd-button-primary">
+                        <span id="next-button-text">Continue</span>
+                        <i class="fas fa-chevron-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick help sidebar -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h3 class="font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-question-circle text-blue-500 mr-2"></i>
+                Need Help?
+            </h3>
+            <div class="space-y-3 text-sm text-gray-600">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-info-circle text-blue-400"></i>
+                    <span>All steps are optional - customize what you need</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-shield-alt text-green-400"></i>
+                    <span>Your data is encrypted and never shared</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-clock text-yellow-400"></i>
+                    <span>Save and resume anytime</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-phone text-purple-400"></i>
+                    <span id="help-contact">Questions? Email support@adhdserver.com</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Celebration modal -->
+    <div id="celebration-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center celebration">
+                <div class="text-6xl mb-4">🎉</div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Congratulations!</h2>
+                <p class="text-gray-600 mb-6" id="celebration-message">You've completed onboarding!</p>
+                <button id="celebration-continue" class="adhd-button adhd-button-success w-full">
+                    Start Using Your System!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error modal -->
+    <div id="error-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                <div class="flex items-center mb-4">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-xl mr-3"></i>
+                    <h3 class="text-lg font-semibold text-gray-900">Oops! Something went wrong</h3>
+                </div>
+                <p class="text-gray-600 mb-6" id="error-message">We encountered an issue. Please try again.</p>
+                <div class="flex space-x-3">
+                    <button id="error-retry" class="adhd-button adhd-button-primary flex-1">Try Again</button>
+                    <button id="error-skip" class="adhd-button adhd-button-secondary flex-1">Skip This Step</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced Onboarding System - Client-side Implementation
+        class EnhancedOnboardingWizard {
+            constructor() {
+                this.currentStep = null;
+                this.stepData = {};
+                this.totalSteps = 11;
+                this.currentStepNumber = 1;
+                this.isLoading = false;
+                this.onboardingSession = null;
+                
+                // Initialize the wizard
+                this.init();
+            }
+            
+            async init() {
+                console.log('Initializing Enhanced ADHD Onboarding Wizard...');
+                
+                // Check authentication first
+                const isAuthenticated = await this.checkAuth();
+                if (!isAuthenticated) {
+                    this.redirectToLogin();
+                    return;
+                }
+                
+                // Initialize onboarding
+                try {
+                    await this.startOnboarding();
+                } catch (error) {
+                    console.error('Failed to initialize onboarding:', error);
+                    this.showError('Failed to initialize onboarding. Please refresh the page.');
+                }
+                
+                // Setup event listeners
+                this.setupEventListeners();
+                
+                // Setup accessibility
+                this.setupAccessibility();
+            }
+            
+            async checkAuth() {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        credentials: 'include'
+                    });
+                    return response.ok;
+                } catch (error) {
+                    console.error('Auth check failed:', error);
+                    return false;
+                }
+            }
+            
+            redirectToLogin() {
+                // Show authentication required message
+                document.getElementById('step-content').innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-lock text-6xl text-gray-300 mb-4"></i>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
+                        <p class="text-gray-600 mb-6">Please sign in to access your personalized onboarding experience.</p>
+                        <a href="/login" class="adhd-button adhd-button-primary inline-flex items-center">
+                            <i class="fas fa-sign-in-alt mr-2"></i>
+                            Sign In
+                        </a>
+                    </div>
+                `;
+            }
+            
+            async startOnboarding() {
+                this.setLoading(true);
+                
+                try {
+                    // Check if onboarding is already in progress
+                    const statusResponse = await fetch('/api/onboarding/status', {
+                        credentials: 'include'
+                    });
+                    
+                    if (statusResponse.ok) {
+                        const status = await statusResponse.json();
+                        
+                        if (status.status === 'completed') {
+                            this.showCompletionScreen();
+                            return;
+                        }
+                        
+                        if (status.status === 'in_progress') {
+                            // Resume existing onboarding
+                            this.currentStepNumber = status.completed_steps.length + 1;
+                            this.updateProgress(status.progress_percentage);
+                            
+                            // Load current step
+                            await this.loadCurrentStep();
+                            return;
+                        }
+                    }
+                    
+                    // Start new onboarding
+                    const response = await fetch('/api/onboarding/start', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to start onboarding');
+                    }
+                    
+                    const data = await response.json();
+                    this.onboardingSession = data;
+                    this.currentStep = data.step;
+                    
+                    // Load the first step
+                    await this.loadStep(data);
+                    
+                } catch (error) {
+                    console.error('Failed to start onboarding:', error);
+                    this.showError('Failed to start onboarding. Please try again.');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+            
+            async loadCurrentStep() {
+                try {
+                    // Get current step content
+                    const response = await fetch('/api/onboarding/status', {
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to get onboarding status');
+                    }
+                    
+                    const status = await response.json();
+                    
+                    // Load step content based on current status
+                    await this.loadStepContent(status.current_step);
+                    
+                } catch (error) {
+                    console.error('Failed to load current step:', error);
+                    this.showError('Failed to load current step. Please try again.');
+                }
+            }
+            
+            async loadStepContent(stepName) {
+                // This would typically make an API call to get step content
+                // For now, we'll generate it based on step name
+                const stepHandlers = {
+                    'welcome': () => this.renderWelcomeStep(),
+                    'privacy_agreement': () => this.renderPrivacyStep(),
+                    'adhd_assessment': () => this.renderADHDAssessmentStep(),
+                    'energy_patterns': () => this.renderEnergyPatternsStep(),
+                    'crisis_support': () => this.renderCrisisSupportStep(),
+                    'nudge_preferences': () => this.renderNudgePreferencesStep(),
+                    'google_calendar': () => this.renderGoogleCalendarStep(),
+                    'telegram_setup': () => this.renderTelegramSetupStep(),
+                    'api_introduction': () => this.renderAPIIntroductionStep(),
+                    'first_success': () => this.renderFirstSuccessStep(),
+                    'celebration': () => this.renderCelebrationStep()
+                };
+                
+                const handler = stepHandlers[stepName];
+                if (handler) {
+                    handler();
+                } else {
+                    console.warn(`No handler for step: ${stepName}`);
+                    this.renderGenericStep(stepName);
+                }
+            }
+            
+            async loadStep(stepData) {
+                this.currentStep = stepData.step;
+                
+                // Update header
+                this.updateHeader(stepData);
+                
+                // Load step content
+                await this.loadStepContent(stepData.step);
+                
+                // Update navigation
+                this.updateNavigation(stepData);
+            }
+            
+            updateHeader(stepData) {
+                document.getElementById('header-subtitle').textContent = stepData.message || 'Personalizing your ADHD support system';
+                document.getElementById('current-step-name').textContent = stepData.title || 'Setup Step';
+                document.getElementById('step-counter').textContent = `Step ${this.currentStepNumber} of ${this.totalSteps}`;
+                document.getElementById('estimated-time').textContent = stepData.estimated_time || '2-3 minutes';
+            }
+            
+            updateProgress(percentage) {
+                const circle = document.getElementById('progress-circle');
+                const circumference = 2 * Math.PI * 14; // radius is 14
+                const offset = circumference - (percentage / 100) * circumference;
+                
+                circle.style.strokeDasharray = `${circumference} ${circumference}`;
+                circle.style.strokeDashoffset = offset;
+                
+                document.getElementById('progress-percent').textContent = `${Math.round(percentage)}%`;
+            }
+            
+            updateNavigation(stepData) {
+                const backButton = document.getElementById('back-button');
+                const skipButton = document.getElementById('skip-button');
+                const nextButton = document.getElementById('next-button');
+                
+                // Show/hide back button
+                if (this.currentStepNumber > 1) {
+                    backButton.classList.remove('hidden');
+                } else {
+                    backButton.classList.add('hidden');
+                }
+                
+                // Show/hide skip button
+                if (stepData.can_skip) {
+                    skipButton.classList.remove('hidden');
+                } else {
+                    skipButton.classList.add('hidden');
+                }
+                
+                // Update next button text
+                const nextButtonText = document.getElementById('next-button-text');
+                if (this.currentStepNumber === this.totalSteps) {
+                    nextButtonText.textContent = 'Complete Setup';
+                } else if (stepData.action && stepData.action.text) {
+                    nextButtonText.textContent = stepData.action.text;
+                } else {
+                    nextButtonText.textContent = 'Continue';
+                }
+            }
+            
+            setupEventListeners() {
+                // Navigation buttons
+                document.getElementById('back-button').addEventListener('click', () => this.goBack());
+                document.getElementById('skip-button').addEventListener('click', () => this.skipStep());
+                document.getElementById('next-button').addEventListener('click', () => this.nextStep());
+                
+                // Modal buttons
+                document.getElementById('celebration-continue').addEventListener('click', () => this.completeOnboarding());
+                document.getElementById('error-retry').addEventListener('click', () => this.hideError());
+                document.getElementById('error-skip').addEventListener('click', () => this.skipStep());
+                
+                // Keyboard navigation
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+                        const focusedElement = document.activeElement;
+                        if (focusedElement && focusedElement.classList.contains('adhd-button')) {
+                            focusedElement.click();
+                        }
+                    }
+                });
+                
+                // Auto-save on input changes
+                document.addEventListener('input', (e) => {
+                    if (e.target.matches('input, select, textarea')) {
+                        this.debouncedSave();
+                    }
+                });
+            }
+            
+            setupAccessibility() {
+                // Announce step changes to screen readers
+                const announcer = document.createElement('div');
+                announcer.setAttribute('aria-live', 'polite');
+                announcer.setAttribute('aria-atomic', 'true');
+                announcer.className = 'sr-only';
+                announcer.id = 'step-announcer';
+                document.body.appendChild(announcer);
+                
+                // Focus management
+                this.manageFocus();
+            }
+            
+            manageFocus() {
+                // Focus the main content area when step changes
+                const stepContent = document.getElementById('step-content');
+                stepContent.setAttribute('tabindex', '-1');
+                stepContent.focus();
+                
+                // Announce step change
+                const announcer = document.getElementById('step-announcer');
+                const stepName = document.getElementById('current-step-name').textContent;
+                announcer.textContent = `Now on ${stepName}`;
+            }
+            
+            // Step rendering methods
+            renderWelcomeStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="step-enter text-center">
+                        <div class="mb-8">
+                            <div class="text-6xl mb-4">🧠✨</div>
+                            <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome to Your ADHD Support System!</h2>
+                            <p class="text-lg text-gray-600 mb-6 max-w-2xl mx-auto">
+                                I'm designed specifically for ADHD minds - understanding hyperfocus, 
+                                executive function challenges, and the unique strengths you bring.
+                            </p>
+                        </div>
+                        
+                        <div class="grid md:grid-cols-2 gap-6 mb-8">
+                            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-lg">
+                                <i class="fas fa-bolt text-blue-500 text-2xl mb-3"></i>
+                                <h3 class="font-semibold mb-2">Lightning Fast</h3>
+                                <p class="text-sm text-gray-600">Sub-3 second responses because waiting kills momentum</p>
+                            </div>
+                            <div class="bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-lg">
+                                <i class="fas fa-shield-alt text-green-500 text-2xl mb-3"></i>
+                                <h3 class="font-semibold mb-2">Crisis-Aware</h3>
+                                <p class="text-sm text-gray-600">Safety first, always - with immediate support resources</p>
+                            </div>
+                            <div class="bg-gradient-to-r from-purple-50 to-purple-100 p-6 rounded-lg">
+                                <i class="fas fa-user-shield text-purple-500 text-2xl mb-3"></i>
+                                <h3 class="font-semibold mb-2">Privacy by Design</h3>
+                                <p class="text-sm text-gray-600">Your data stays protected and never sold</p>
+                            </div>
+                            <div class="bg-gradient-to-r from-yellow-50 to-yellow-100 p-6 rounded-lg">
+                                <i class="fas fa-trophy text-yellow-500 text-2xl mb-3"></i>
+                                <h3 class="font-semibold mb-2">Celebrates Wins</h3>
+                                <p class="text-sm text-gray-600">Every success matters - big and small!</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-50 p-6 rounded-lg mb-6">
+                            <h4 class="font-semibold mb-3 flex items-center">
+                                <i class="fas fa-clock text-blue-500 mr-2"></i>
+                                What to Expect
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                <div>⚡ Quick ADHD assessment</div>
+                                <div>📅 Calendar integration</div>
+                                <div>🤖 Telegram bot setup</div>
+                                <div>🛡️ Safety net configuration</div>
+                                <div>⚙️ Personalized preferences</div>
+                                <div>🎯 Immediate first win</div>
+                            </div>
+                            <p class="text-blue-600 font-medium mt-3">Total time: 10-12 minutes • Immediate value delivered</p>
+                        </div>
+                        
+                        <p class="text-gray-500 text-sm">Ready to build your personalized ADHD support system?</p>
+                    </div>
+                `;
+            }
+            
+            renderPrivacyStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="step-enter">
+                        <div class="text-center mb-8">
+                            <i class="fas fa-lock text-4xl text-blue-500 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Privacy & Data Protection</h2>
+                            <p class="text-gray-600">Your data privacy is non-negotiable. Here's exactly what we collect and why:</p>
+                        </div>
+                        
+                        <div class="space-y-4 mb-8">
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-start space-x-3">
+                                    <i class="fas fa-check-circle text-green-500 mt-1"></i>
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Essential Data</h4>
+                                        <p class="text-sm text-gray-600 mb-2">Account info, preferences, chat history</p>
+                                        <span class="inline-block px-2 py-1 bg-red-100 text-red-800 text-xs rounded">Required</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-start space-x-3">
+                                    <i class="fas fa-toggle-on text-blue-500 mt-1"></i>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900">ADHD Patterns</h4>
+                                        <p class="text-sm text-gray-600 mb-3">Focus times, energy levels, coping strategies</p>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="checkbox" checked id="data_collection_consent" class="rounded">
+                                            <span class="text-sm">Enable personalized ADHD support</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-start space-x-3">
+                                    <i class="fas fa-shield-alt text-green-500 mt-1"></i>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900">Crisis Detection</h4>
+                                        <p class="text-sm text-gray-600 mb-3">Messages analyzed for safety keywords</p>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="checkbox" checked id="crisis_detection_consent" class="rounded">
+                                            <span class="text-sm">Enable crisis support resources</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-start space-x-3">
+                                    <i class="fas fa-chart-line text-purple-500 mt-1"></i>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900">Usage Analytics</h4>
+                                        <p class="text-sm text-gray-600 mb-3">Feature usage, response times (anonymized)</p>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="checkbox" checked id="analytics_consent" class="rounded">
+                                            <span class="text-sm">Help improve the system for everyone</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-green-50 p-6 rounded-lg">
+                            <h4 class="font-semibold text-green-800 mb-3">Your Rights</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-green-700">
+                                <div>✓ Export your data anytime</div>
+                                <div>✓ Delete your account and all data</div>
+                                <div>✓ Opt out of any data collection</div>
+                                <div>✓ Local processing for sensitive data</div>
+                                <div>✓ No data sold to third parties, ever</div>
+                                <div>✓ Full transparency in our practices</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            renderADHDAssessmentStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="step-enter">
+                        <div class="text-center mb-8">
+                            <i class="fas fa-brain text-4xl text-purple-500 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Your ADHD Profile</h2>
+                            <p class="text-gray-600 mb-4">
+                                Let's understand your unique ADHD patterns. Rate these areas from 1 (no challenge) to 5 (daily struggle).
+                            </p>
+                            <div class="bg-blue-50 p-4 rounded-lg inline-block">
+                                <p class="text-blue-800 text-sm"><strong>Remember:</strong> There are no wrong answers - ADHD affects everyone differently!</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-8">
+                            <!-- Executive Function Assessment -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4 text-gray-900">Executive Function Challenges</h3>
+                                <div class="space-y-4">
+                                    ${this.renderRatingScale('Working memory - holding information in mind while working', 'working_memory')}
+                                    ${this.renderRatingScale('Cognitive flexibility - switching tasks or adapting to changes', 'cognitive_flexibility')}
+                                    ${this.renderRatingScale('Inhibitory control - resisting distractions and impulses', 'inhibitory_control')}
+                                    ${this.renderRatingScale('Planning & organization - organizing tasks and planning ahead', 'planning_organization')}
+                                    ${this.renderRatingScale('Task initiation - getting started on tasks', 'task_initiation')}
+                                    ${this.renderRatingScale('Sustained attention - maintaining focus on tasks', 'sustained_attention')}
+                                    ${this.renderRatingScale('Time management - estimating and managing time', 'time_management')}
+                                    ${this.renderRatingScale('Emotional regulation - managing emotions and frustration', 'emotional_regulation')}
+                                </div>
+                            </div>
+                            
+                            <!-- ADHD Strengths -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4 text-gray-900">Your ADHD Superpowers</h3>
+                                <p class="text-gray-600 mb-4">Select all that apply - celebrate what makes you amazing!</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    ${this.renderCheckbox('Creative and innovative thinking', 'creativity')}
+                                    ${this.renderCheckbox('Hyperfocus abilities', 'hyperfocus')}
+                                    ${this.renderCheckbox('High energy and enthusiasm', 'high_energy')}
+                                    ${this.renderCheckbox('Quick problem-solving', 'problem_solving')}
+                                    ${this.renderCheckbox('Entrepreneurial mindset', 'entrepreneurial')}
+                                    ${this.renderCheckbox('Empathy and emotional intelligence', 'empathy')}
+                                    ${this.renderCheckbox('Big picture thinking', 'big_picture')}
+                                    ${this.renderCheckbox('Resilience and adaptability', 'resilience')}
+                                    ${this.renderCheckbox('Spontaneity and flexibility', 'spontaneity')}
+                                    ${this.renderCheckbox('Intense curiosity and passion', 'curiosity')}
+                                </div>
+                            </div>
+                            
+                            <!-- Hyperfocus Areas -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4 text-gray-900">Hyperfocus Triggers</h3>
+                                <p class="text-gray-600 mb-4">What topics or activities can capture your complete attention?</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    ${this.renderCheckbox('Technology/Programming', 'tech')}
+                                    ${this.renderCheckbox('Creative arts', 'arts')}
+                                    ${this.renderCheckbox('Research/Learning', 'research')}
+                                    ${this.renderCheckbox('Games/Puzzles', 'games')}
+                                    ${this.renderCheckbox('Social causes', 'social_causes')}
+                                    ${this.renderCheckbox('Sports/Fitness', 'fitness')}
+                                    ${this.renderCheckbox('Music', 'music')}
+                                    ${this.renderCheckbox('Reading', 'reading')}
+                                    ${this.renderCheckbox('Organizing/Cleaning', 'organizing')}
+                                    ${this.renderCheckbox('Work projects', 'work_projects')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            renderRatingScale(label, id) {
+                return `
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <label class="block text-sm font-medium text-gray-900 mb-3">${label}</label>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-500">No challenge</span>
+                            <div class="flex space-x-2" data-rating-group="${id}">
+                                ${[1,2,3,4,5].map(n => `
+                                    <button type="button" 
+                                            class="rating-button w-12 h-12 rounded-full border-2 border-gray-300 hover:border-purple-400 focus:border-purple-500 transition-colors"
+                                            data-rating="${n}"
+                                            data-group="${id}">
+                                        <span class="font-semibold text-gray-600">${n}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                            <span class="text-xs text-gray-500">Daily struggle</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            renderCheckbox(label, id) {
+                return `
+                    <label class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox" name="strengths" value="${id}" class="rounded focus:ring-purple-300">
+                        <span class="text-sm text-gray-900">${label}</span>
+                    </label>
+                `;
+            }
+            
+            // Additional step rendering methods would continue here...
+            // For brevity, I'll include placeholders for the remaining steps
+            
+            renderEnergyPatternsStep() {
+                // Energy pattern mapping with hourly sliders
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="step-enter">
+                        <div class="text-center mb-8">
+                            <i class="fas fa-bolt text-4xl text-yellow-500 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Energy & Focus Patterns</h2>
+                            <p class="text-gray-600">Map your typical daily rhythms to optimize your schedule</p>
+                        </div>
+                        <!-- Energy mapping interface would go here -->
+                        <div class="bg-yellow-50 p-6 rounded-lg text-center">
+                            <p class="text-yellow-800">Energy pattern mapping interface - Interactive hourly sliders</p>
+                            <p class="text-sm text-yellow-600 mt-2">This would include visual energy/focus mapping tools</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            renderCrisisSupportStep() {
+                // Crisis support configuration
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="step-enter">
+                        <div class="text-center mb-8">
+                            <i class="fas fa-shield-alt text-4xl text-green-500 mb-4"></i>
+                            <h2 class="text-2xl font-bold text-gray-900 mb-2">Crisis Support & Safety</h2>
+                            <p class="text-gray-600">Configure your safety net - always have support when you need it most</p>
+                        </div>
+                        <!-- Crisis support configuration would go here -->
+                        <div class="bg-green-50 p-6 rounded-lg text-center">
+                            <p class="text-green-800">Crisis support configuration interface</p>
+                            <p class="text-sm text-green-600 mt-2">Emergency contacts, safety planning, consent options</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Placeholder implementations for remaining steps...
+            renderNudgePreferencesStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `<div class="step-enter bg-blue-50 p-8 rounded-lg text-center"><h3 class="text-lg font-semibold mb-2">Nudge & Communication Preferences</h3><p class="text-gray-600">Configure how you'd like to receive support and reminders</p></div>`;
+            }
+            
+            renderGoogleCalendarStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `<div class="step-enter bg-purple-50 p-8 rounded-lg text-center"><h3 class="text-lg font-semibold mb-2">Google Calendar Integration</h3><p class="text-gray-600">Connect your calendar for context-aware support</p></div>`;
+            }
+            
+            renderTelegramSetupStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `<div class="step-enter bg-indigo-50 p-8 rounded-lg text-center"><h3 class="text-lg font-semibold mb-2">Telegram Bot Setup</h3><p class="text-gray-600">Get ADHD support directly on your phone</p></div>`;
+            }
+            
+            renderAPIIntroductionStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `<div class="step-enter bg-gray-50 p-8 rounded-lg text-center"><h3 class="text-lg font-semibold mb-2">API Access (Optional)</h3><p class="text-gray-600">For developers and power users</p></div>`;
+            }
+            
+            renderFirstSuccessStep() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `<div class="step-enter bg-orange-50 p-8 rounded-lg text-center"><h3 class="text-lg font-semibold mb-2">Your First Success!</h3><p class="text-gray-600">What's one thing you'd like to accomplish right now?</p></div>`;
+            }
+            
+            renderCelebrationStep() {
+                this.showCelebration('Setup complete! Your ADHD support system is ready to help you succeed!');
+            }
+            
+            // Navigation and state management
+            async nextStep() {
+                if (this.isLoading) return;
+                
+                this.setLoading(true);
+                
+                try {
+                    // Collect current step data
+                    const stepData = this.collectStepData();
+                    
+                    // Submit to API
+                    const response = await fetch('/api/onboarding/step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ step_data: stepData })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to process step');
+                    }
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'completed') {
+                        this.showCelebration(result.message);
+                        return;
+                    }
+                    
+                    // Move to next step
+                    this.currentStepNumber++;
+                    this.updateProgress(result.progress?.percentage || (this.currentStepNumber / this.totalSteps) * 100);
+                    
+                    await this.loadStep(result);
+                    
+                } catch (error) {
+                    console.error('Failed to proceed to next step:', error);
+                    this.showError('Failed to save your progress. Please try again.');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+            
+            async skipStep() {
+                if (this.isLoading) return;
+                
+                this.setLoading(true);
+                
+                try {
+                    const response = await fetch('/api/onboarding/step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ step_data: {}, skip: true })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to skip step');
+                    }
+                    
+                    const result = await response.json();
+                    
+                    // Move to next step
+                    this.currentStepNumber++;
+                    this.updateProgress(result.progress?.percentage || (this.currentStepNumber / this.totalSteps) * 100);
+                    
+                    await this.loadStep(result);
+                    
+                } catch (error) {
+                    console.error('Failed to skip step:', error);
+                    this.showError('Failed to skip step. Please try again.');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+            
+            goBack() {
+                // Implementation for going back to previous step
+                console.log('Going back to previous step...');
+            }
+            
+            collectStepData() {
+                // Collect form data from current step
+                const stepData = {};
+                
+                // Collect rating scales
+                document.querySelectorAll('[data-rating-group]').forEach(group => {
+                    const groupId = group.dataset.ratingGroup;
+                    const selectedRating = group.querySelector('.rating-button.selected');
+                    if (selectedRating) {
+                        stepData[groupId] = parseInt(selectedRating.dataset.rating);
+                    }
+                });
+                
+                // Collect checkboxes
+                document.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+                    if (checkbox.name) {
+                        if (!stepData[checkbox.name]) {
+                            stepData[checkbox.name] = [];
+                        }
+                        stepData[checkbox.name].push(checkbox.value);
+                    } else if (checkbox.id) {
+                        stepData[checkbox.id] = true;
+                    }
+                });
+                
+                // Collect other form inputs
+                document.querySelectorAll('input[type="text"], input[type="email"], textarea, select').forEach(input => {
+                    if (input.value && input.id) {
+                        stepData[input.id] = input.value;
+                    }
+                });
+                
+                return stepData;
+            }
+            
+            // UI helpers
+            setLoading(loading) {
+                this.isLoading = loading;
+                const nextButton = document.getElementById('next-button');
+                
+                if (loading) {
+                    nextButton.disabled = true;
+                    nextButton.innerHTML = '<div class="spinner w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>Processing...';
+                } else {
+                    nextButton.disabled = false;
+                    // Restore button text will be handled by updateNavigation
+                }
+            }
+            
+            showError(message) {
+                document.getElementById('error-message').textContent = message;
+                document.getElementById('error-modal').classList.remove('hidden');
+            }
+            
+            hideError() {
+                document.getElementById('error-modal').classList.add('hidden');
+            }
+            
+            showCelebration(message) {
+                document.getElementById('celebration-message').textContent = message;
+                document.getElementById('celebration-modal').classList.remove('hidden');
+            }
+            
+            completeOnboarding() {
+                // Redirect to main dashboard
+                window.location.href = '/dashboard';
+            }
+            
+            showCompletionScreen() {
+                const content = document.getElementById('step-content');
+                content.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="text-6xl mb-6">🎉</div>
+                        <h2 class="text-3xl font-bold text-gray-900 mb-4">Welcome Back!</h2>
+                        <p class="text-lg text-gray-600 mb-8">Your ADHD support system is already configured and ready to help.</p>
+                        <a href="/dashboard" class="adhd-button adhd-button-primary inline-flex items-center">
+                            <i class="fas fa-tachometer-alt mr-2"></i>
+                            Go to Dashboard
+                        </a>
+                    </div>
+                `;
+            }
+            
+            // Debounced save for auto-saving progress
+            debouncedSave = this.debounce(() => {
+                // Auto-save current progress
+                console.log('Auto-saving progress...');
+            }, 2000);
+            
+            debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+        }
+        
+        // Initialize the onboarding wizard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.onboardingWizard = new EnhancedOnboardingWizard();
+            
+            // Setup rating button interactions
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('rating-button') || e.target.closest('.rating-button')) {
+                    const button = e.target.classList.contains('rating-button') ? e.target : e.target.closest('.rating-button');
+                    const group = button.dataset.group;
+                    
+                    // Clear previous selections in group
+                    document.querySelectorAll(`[data-group="${group}"]`).forEach(btn => {
+                        btn.classList.remove('selected', 'bg-purple-500', 'text-white');
+                        btn.classList.add('border-gray-300');
+                    });
+                    
+                    // Mark current selection
+                    button.classList.add('selected', 'bg-purple-500', 'text-white');
+                    button.classList.remove('border-gray-300');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

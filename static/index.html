@@ -6,6 +6,8 @@
     <title>MCP ADHD Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/mobile-adhd.css" rel="stylesheet">
+    <link href="css/mobile-modals.css" rel="stylesheet">
     <style>
         /* Custom ADHD-friendly styling */
         .adhd-card {
@@ -37,7 +39,18 @@
         .safety-response {
             background: linear-gradient(45deg, #f87171, #ef4444);
         }
+        /* Visual feedback for mobile interactions */
+        body.mobile-visual-feedback {
+            background-color: var(--feedback-color, rgba(59, 130, 246, 0.1));
+            transition: background-color 0.2s ease;
+        }
+        
+        .mobile-tap-active {
+            transform: scale(0.95);
+            transition: transform 0.15s ease;
+        }
     </style>
+    <script src="js/mobile-gestures.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <!-- Header -->

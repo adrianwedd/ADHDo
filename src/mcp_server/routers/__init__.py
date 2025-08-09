@@ -14,6 +14,8 @@ from .beta_routes import beta_router
 from .evolution_routes import evolution_router
 from .docs_routes import docs_router
 from .calendar_routes import router as calendar_router
+from .onboarding_routes import onboarding_router
+from .adhd_routes import router as adhd_router
 
 __all__ = [
     "auth_router",
@@ -24,5 +26,7 @@ __all__ = [
     "beta_router",
     "evolution_router",
     "docs_router",
-    "calendar_router"
+    "calendar_router",
+    "onboarding_router",
+    "adhd_router"
 ]
