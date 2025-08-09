@@ -18,6 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from mcp_server.metrics import metrics_collector
 from mcp_server.adhd_errors import create_adhd_error_response
+from mcp_server.monitoring import monitoring_system
 
 logger = structlog.get_logger(__name__)
 
