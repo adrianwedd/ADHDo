@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧬 Evolution Observatory - Artificial Evolution Real-Time Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a0f1c 0%, #1a1f2e 50%, #2a2f3e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 255, 0, 0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff00;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 2rem;
+            padding: 2rem;
+            height: calc(100vh - 100px);
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        }
+
+        .panel h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .evolution-graph {
+            grid-column: 1 / -1;
+            height: 300px;
+        }
+
+        .species-panel {
+            min-height: 250px;
+        }
+
+        .metrics-panel {
+            min-height: 250px;
+        }
+
+        .strategy-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .strategy-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+        }
+
+        .strategy-item:hover {
+            transform: translateX(5px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .strategy-high { border-left-color: #00ff88; }
+        .strategy-medium { border-left-color: #ffaa00; }
+        .strategy-low { border-left-color: #ff4444; }
+
+        .fitness-bar {
+            width: 100px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .fitness-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4444, #ffaa00, #00ff88);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            display: block;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .species-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .species-name {
+            font-weight: 600;
+        }
+
+        .species-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .evolution-controls {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .control-btn {
+            padding: 1rem 2rem;
+            background: rgba(103, 126, 234, 0.2);
+            border: 1px solid #667eea;
+            color: white;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(103, 126, 234, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .chart-container {
+            height: 200px;
+            position: relative;
+            margin-top: 1rem;
+        }
+
+        .dna-strand {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 2rem;
+            opacity: 0.3;
+            animation: rotate 10s infinite linear;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .emergence-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 0, 255, 0.1);
+            border: 1px solid rgba(255, 0, 255, 0.3);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: #ff00ff;
+            animation: glow 2s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(255, 0, 255, 0.3); }
+            to { box-shadow: 0 0 20px rgba(255, 0, 255, 0.6); }
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100px;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧬 Evolution Observatory</h1>
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span>Evolution Engine Active</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- Evolution Timeline Graph -->
+        <div class="panel evolution-graph">
+            <h2>📈 Evolution Timeline</h2>
+            <div class="chart-container">
+                <canvas id="evolutionChart" width="100%" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Active Strategies -->
+        <div class="panel">
+            <h2>🧬 Active Strategies</h2>
+            <div class="dna-strand">🧬</div>
+            <div class="strategy-list" id="strategyList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading evolution data...
+                </div>
+            </div>
+        </div>
+
+        <!-- Species Evolution -->
+        <div class="panel species-panel">
+            <h2>🌿 Species Evolution</h2>
+            <div class="emergence-indicator">Emergence Detected</div>
+            <div id="speciesList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Analyzing species data...
+                </div>
+            </div>
+        </div>
+
+        <!-- Evolution Metrics -->
+        <div class="panel metrics-panel">
+            <h2>📊 Evolution Metrics</h2>
+            <div class="metric-grid" id="metricsGrid">
+                <div class="metric-card">
+                    <span class="metric-value" id="populationSize">---</span>
+                    <span class="metric-label">Population Size</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-value" id="avgFitness">---</span>
+                    <span class="metric-label">Avg Fitness</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-value" id="generationCount">---</span>
+                    <span class="metric-label">Generation</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-value" id="speciesCount">---</span>
+                    <span class="metric-label">Species</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evolution Controls -->
+    <div class="evolution-controls">
+        <button class="control-btn" onclick="triggerEvolution()">🚀 Trigger Evolution</button>
+        <button class="control-btn" onclick="resetPopulation()">🔄 Reset Population</button>
+    </div>
+
+    <script>
+        class EvolutionObservatory {
+            constructor() {
+                this.evolutionData = [];
+                this.currentGeneration = 0;
+                this.isEvolutionRunning = false;
+                this.websocket = null;
+                this.initializeChart();
+                this.initializeWebSocket();
+                this.startRealTimeUpdates();
+            }
+
+            initializeChart() {
+                this.canvas = document.getElementById('evolutionChart');
+                this.ctx = this.canvas.getContext('2d');
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+            }
+
+            initializeWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/evolution`;
+                
+                console.log('Connecting to Evolution Observatory WebSocket:', wsUrl);
+                
+                try {
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        console.log('🧬 Evolution Observatory WebSocket connected');
+                        // Request initial status
+                        this.websocket.send('get_status');
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'evolution_status') {
+                                console.log('📊 Received evolution status via WebSocket:', data);
+                                this.currentData = {
+                                    strategies: data.strategies,
+                                    species: data.species,
+                                    population: data.population,
+                                    avgFitness: data.avgFitness,
+                                    generation: data.generation,
+                                    speciesCount: data.speciesCount
+                                };
+                                this.currentGeneration = data.generation;
+                                this.renderUI();
+                            }
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error);
+                        }
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('🔌 Evolution Observatory WebSocket disconnected, reconnecting...');
+                        // Reconnect after 3 seconds
+                        setTimeout(() => this.initializeWebSocket(), 3000);
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('Evolution Observatory WebSocket error:', error);
+                    };
+                    
+                    // Keep connection alive with ping/pong
+                    setInterval(() => {
+                        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                            this.websocket.send('ping');
+                        }
+                    }, 30000); // Ping every 30 seconds
+                    
+                } catch (error) {
+                    console.error('Failed to initialize WebSocket:', error);
+                    console.log('Falling back to REST API polling');
+                }
+            }
+
+            async startRealTimeUpdates() {
+                // Simulate real-time evolution data
+                setInterval(() => {
+                    this.updateEvolutionData();
+                    this.renderUI();
+                }, 2000);
+
+                // Initial load
+                await this.loadEvolutionData();
+                this.renderUI();
+            }
+
+            async loadEvolutionData() {
+                // Load evolution data from the real API
+                try {
+                    const response = await fetch('/api/evolution/status');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.currentData = {
+                            strategies: data.strategies,
+                            species: data.species,
+                            population: data.population,
+                            avgFitness: data.avgFitness,
+                            generation: data.generation,
+                            speciesCount: data.speciesCount
+                        };
+                        console.log('Loaded real evolution data:', data);
+                    } else {
+                        console.warn('API not available, using simulated data');
+                        this.simulateEvolutionData();
+                    }
+                } catch (error) {
+                    console.warn('Failed to load evolution data, using simulated data:', error);
+                    this.simulateEvolutionData();
+                }
+            }
+
+            simulateEvolutionData() {
+                // Generate realistic evolution simulation data
+                const strategies = [
+                    { id: 'intelligent_caching', fitness: 0.88, complexity: 7, species: 'parallel_specialists' },
+                    { id: 'self_healing_pipeline', fitness: 0.75, complexity: 8, species: 'complex_optimizers' },
+                    { id: 'adaptive_test_selection', fitness: 0.65, complexity: 9, species: 'complex_optimizers' },
+                    { id: 'evolutionary_job_optimization', fitness: 0.82, complexity: 6, species: 'parallel_specialists' },
+                    { id: 'predictive_failure_prevention', fitness: 0.45, complexity: 10, species: 'complex_optimizers' },
+                    { id: 'recursive_ci_improvement', fitness: 0.30, complexity: 10, species: 'complex_optimizers' }
+                ];
+
+                const species = [
+                    { name: 'parallel_specialists', population: 2, avgFitness: 0.85, maxFitness: 0.88 },
+                    { name: 'complex_optimizers', population: 4, avgFitness: 0.54, maxFitness: 0.75 }
+                ];
+
+                this.currentData = {
+                    strategies,
+                    species,
+                    population: strategies.length,
+                    avgFitness: strategies.reduce((sum, s) => sum + s.fitness, 0) / strategies.length,
+                    generation: this.currentGeneration,
+                    speciesCount: species.length
+                };
+            }
+
+            updateEvolutionData() {
+                // Simulate evolution progress
+                this.currentGeneration++;
+                
+                // Simulate fitness changes over time
+                if (this.currentData && this.currentData.strategies) {
+                    this.currentData.strategies.forEach(strategy => {
+                        // Small random fitness changes to simulate evolution
+                        const change = (Math.random() - 0.5) * 0.02;
+                        strategy.fitness = Math.max(0.1, Math.min(1.0, strategy.fitness + change));
+                    });
+                    
+                    // Update derived metrics
+                    this.currentData.avgFitness = this.currentData.strategies.reduce((sum, s) => sum + s.fitness, 0) / this.currentData.strategies.length;
+                    this.currentData.generation = this.currentGeneration;
+                }
+
+                // Store evolution timeline data
+                if (this.currentData) {
+                    this.evolutionData.push({
+                        generation: this.currentGeneration,
+                        avgFitness: this.currentData.avgFitness,
+                        timestamp: Date.now()
+                    });
+
+                    // Keep only last 50 data points
+                    if (this.evolutionData.length > 50) {
+                        this.evolutionData.shift();
+                    }
+                }
+            }
+
+            renderUI() {
+                if (!this.currentData) return;
+
+                this.renderStrategies();
+                this.renderSpecies();
+                this.renderMetrics();
+                this.renderEvolutionChart();
+            }
+
+            renderStrategies() {
+                const container = document.getElementById('strategyList');
+                if (!this.currentData.strategies) return;
+
+                container.innerHTML = this.currentData.strategies.map(strategy => {
+                    const fitnessClass = strategy.fitness > 0.7 ? 'strategy-high' : 
+                                       strategy.fitness > 0.5 ? 'strategy-medium' : 'strategy-low';
+                    
+                    return `
+                        <div class="strategy-item ${fitnessClass}">
+                            <div>
+                                <div style="font-weight: 600;">${strategy.id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                                <div style="font-size: 0.8rem; opacity: 0.7;">Species: ${strategy.species}</div>
+                            </div>
+                            <div>
+                                <div class="fitness-bar">
+                                    <div class="fitness-fill" style="width: ${strategy.fitness * 100}%"></div>
+                                </div>
+                                <div style="text-align: center; margin-top: 0.3rem; font-size: 0.9rem;">
+                                    ${(strategy.fitness * 100).toFixed(1)}%
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            renderSpecies() {
+                const container = document.getElementById('speciesList');
+                if (!this.currentData.species) return;
+
+                container.innerHTML = this.currentData.species.map(species => `
+                    <div class="species-item">
+                        <div class="species-name">${species.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                        <div class="species-stats">
+                            <span>Pop: ${species.population}</span>
+                            <span>Avg: ${(species.avgFitness * 100).toFixed(1)}%</span>
+                            <span>Max: ${(species.maxFitness * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            renderMetrics() {
+                if (!this.currentData) return;
+
+                document.getElementById('populationSize').textContent = this.currentData.population;
+                document.getElementById('avgFitness').textContent = (this.currentData.avgFitness * 100).toFixed(1) + '%';
+                document.getElementById('generationCount').textContent = this.currentData.generation;
+                document.getElementById('speciesCount').textContent = this.currentData.speciesCount;
+            }
+
+            renderEvolutionChart() {
+                if (!this.evolutionData.length) return;
+
+                const ctx = this.ctx;
+                const canvas = this.canvas;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw grid
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.lineWidth = 1;
+
+                for (let i = 0; i <= 10; i++) {
+                    const y = (canvas.height / 10) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+
+                for (let i = 0; i <= 10; i++) {
+                    const x = (canvas.width / 10) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+
+                // Draw evolution line
+                if (this.evolutionData.length > 1) {
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+
+                    const maxGeneration = Math.max(...this.evolutionData.map(d => d.generation));
+                    const minGeneration = Math.min(...this.evolutionData.map(d => d.generation));
+                    const generationRange = maxGeneration - minGeneration || 1;
+
+                    this.evolutionData.forEach((point, index) => {
+                        const x = (point.generation - minGeneration) / generationRange * canvas.width;
+                        const y = canvas.height - (point.avgFitness * canvas.height);
+
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+
+                    ctx.stroke();
+
+                    // Draw points
+                    ctx.fillStyle = '#667eea';
+                    this.evolutionData.forEach(point => {
+                        const x = (point.generation - minGeneration) / generationRange * canvas.width;
+                        const y = canvas.height - (point.avgFitness * canvas.height);
+                        
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
+
+                // Draw labels
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '12px SF Pro Display';
+                ctx.fillText('Generation →', canvas.width - 80, canvas.height - 10);
+                
+                ctx.save();
+                ctx.translate(15, canvas.height / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText('← Fitness', 0, 0);
+                ctx.restore();
+            }
+        }
+
+        // Initialize the observatory
+        const observatory = new EvolutionObservatory();
+
+        // Control functions
+        async function triggerEvolution() {
+            console.log('🧬 Triggering evolution cycle...');
+            
+            try {
+                const response = await fetch('/api/evolution/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`🧬 Evolution cycle completed! Generated ${result.generations} generations with ${result.new_strategies} strategies. Fitness: ${(result.fitness_change * 100).toFixed(1)}%`);
+                    // Reload data to show changes
+                    if (observatory.websocket && observatory.websocket.readyState === WebSocket.OPEN) {
+                        observatory.websocket.send('get_status');
+                    } else {
+                        await observatory.loadEvolutionData();
+                        observatory.renderUI();
+                    }
+                } else {
+                    alert(`❌ Evolution cycle failed: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to trigger evolution:', error);
+                alert('❌ Failed to trigger evolution cycle. Check console for details.');
+            }
+        }
+
+        async function resetPopulation() {
+            console.log('🔄 Resetting evolution population...');
+            
+            try {
+                const response = await fetch('/api/evolution/reset', {
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`🔄 Population reset! Started fresh with ${result.new_population_size} strategies at generation ${result.generation}.`);
+                    // Reload data to show changes
+                    if (observatory.websocket && observatory.websocket.readyState === WebSocket.OPEN) {
+                        observatory.websocket.send('get_status');
+                    } else {
+                        await observatory.loadEvolutionData();
+                        observatory.renderUI();
+                    }
+                } else {
+                    alert(`❌ Population reset failed: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Failed to reset population:', error);
+                alert('❌ Failed to reset population. Check console for details.');
+            }
+        }
+
+        // Make it globally accessible
+        window.EvolutionObservatory = observatory;
+    </script>
+</body>
+</html>
