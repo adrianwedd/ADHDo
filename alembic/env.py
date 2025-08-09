@@ -53,6 +53,10 @@ def run_migrations_offline() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url") or settings.database_url
+    # Convert async SQLite URL to sync SQLite URL for Alembic
+    if url.startswith("sqlite+aiosqlite://"):
+        url = url.replace("sqlite+aiosqlite://", "sqlite://")
+        
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -71,8 +75,17 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Convert async SQLite URL to sync SQLite URL for Alembic
+    db_url = config.get_main_option("sqlalchemy.url") or settings.database_url
+    if db_url.startswith("sqlite+aiosqlite://"):
+        db_url = db_url.replace("sqlite+aiosqlite://", "sqlite://")
+    
+    # Create configuration with the corrected URL
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = db_url
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

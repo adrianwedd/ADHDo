@@ -98,7 +98,7 @@ class GitHubIssue(Base):
     )
     feature_completion_score: Mapped[float] = mapped_column(
         Float, 
-        CheckConstraint("feature_completion_score >= 0.0 AND feature_completion_score <= 1.0"),
+        CheckConstraint("feature_completion_score >= 0.0 AND feature_completion_score <= 1.0", name="ck_github_issues_feature_completion_score"),
         default=0.0
     )
     
@@ -173,7 +173,7 @@ class GitHubAutomationAction(Base):
     # Execution metadata
     confidence_score: Mapped[float] = mapped_column(
         Float,
-        CheckConstraint("confidence_score >= 0.0 AND confidence_score <= 1.0"),
+        CheckConstraint("confidence_score >= 0.0 AND confidence_score <= 1.0", name="ck_automation_actions_confidence_score"),
         nullable=False
     )
     reasoning: Mapped[str] = mapped_column(Text, nullable=False)
@@ -243,13 +243,13 @@ class FeatureDetection(Base):
     feature_category: Mapped[str] = mapped_column(String(100), nullable=False)
     completion_status: Mapped[str] = mapped_column(
         String(50),
-        CheckConstraint("completion_status IN ('not_started', 'in_progress', 'completed', 'verified')")
+        CheckConstraint("completion_status IN ('not_started', 'in_progress', 'completed', 'verified')", name="ck_feature_completions_completion_status")
     )
     
     # Detection metadata
     confidence_score: Mapped[float] = mapped_column(
         Float,
-        CheckConstraint("confidence_score >= 0.0 AND confidence_score <= 1.0"),
+        CheckConstraint("confidence_score >= 0.0 AND confidence_score <= 1.0", name="ck_feature_completions_confidence_score"),
         nullable=False
     )
     detection_method: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -264,7 +264,7 @@ class FeatureDetection(Base):
     analysis_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
     false_positive_score: Mapped[float] = mapped_column(
         Float,
-        CheckConstraint("false_positive_score >= 0.0 AND false_positive_score <= 1.0"),
+        CheckConstraint("false_positive_score >= 0.0 AND false_positive_score <= 1.0", name="ck_feature_completions_false_positive_score"),
         default=0.0
     )
     
@@ -395,7 +395,7 @@ class RateLimitTracking(Base):
     api_endpoint: Mapped[str] = mapped_column(String(255), nullable=False)
     rate_limit_type: Mapped[str] = mapped_column(
         String(20),
-        CheckConstraint("rate_limit_type IN ('core', 'search', 'graphql', 'integration_manifest')"),
+        CheckConstraint("rate_limit_type IN ('core', 'search', 'graphql', 'integration_manifest')", name="ck_api_rate_limits_rate_limit_type"),
         default="core"
     )
     

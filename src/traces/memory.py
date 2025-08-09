@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
+from redis.exceptions import ConnectionError, TimeoutError
 import structlog
 from pydantic import BaseModel
 
@@ -38,7 +39,14 @@ class TraceMemoryBackend:
                 password=settings.redis_password,
                 db=settings.redis_db,
                 decode_responses=True,
-                max_connections=20
+                max_connections=50,  # Increased pool size for better integration
+                retry_on_timeout=True,
+                retry_on_error=[ConnectionError, TimeoutError],
+                socket_keepalive=True,
+                socket_keepalive_options={},
+                socket_connect_timeout=5,  # Increased for stability
+                socket_timeout=3,  # Increased for better reliability
+                health_check_interval=30,  # Connection health monitoring
             )
             self.redis = redis.Redis(connection_pool=self._connection_pool)
             

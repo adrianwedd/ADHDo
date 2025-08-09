@@ -394,7 +394,7 @@ class RateLimiter:
             self.consecutive_rate_limits = 0
             logger.info("Conservative rate limiting mode disabled")
     
-    def get_predicted_wait_time(
+    async def get_predicted_wait_time(
         self,
         endpoint: Optional[str] = None
     ) -> float:

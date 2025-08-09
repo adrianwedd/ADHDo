@@ -457,6 +457,19 @@ async def serve_dashboard():
             content={"detail": "Dashboard not found. Please ensure static files are available."}
         )
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon for browsers."""
+    import os
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
+    favicon_path = os.path.join(static_dir, "favicon.ico")
+    
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon")
+    else:
+        # Return a minimal 404 for favicon requests to avoid log noise
+        return Response(status_code=404)
+
 # API info endpoint
 @app.get("/api")
 async def api_info():
@@ -1211,16 +1224,6 @@ async def agent_submit_response(agent_id: str, response: dict):
     return {"status": "response_processed"}
 
 
-if __name__ == "__main__":
-    import uvicorn
-    
-    uvicorn.run(
-        "mcp_server.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-
-
 # === BETA ONBOARDING ENDPOINTS ===
 
 @app.post("/api/beta/create-invite", tags=["Beta"])
@@ -1405,5 +1408,14 @@ async def get_beta_stats() -> dict:
 
 # === END BETA ONBOARDING ENDPOINTS ===
 
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "mcp_server.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
         log_level=settings.log_level.lower()
     )

@@ -71,6 +71,34 @@ class Settings(BaseSettings):
     )
     frame_cache_ttl: int = Field(default=3600, description="Frame cache TTL (seconds)")
     
+    # System Health Configuration
+    disk_warning_threshold: float = Field(
+        default=85.0, 
+        description="Disk usage warning threshold (%)"
+    )
+    disk_critical_threshold: float = Field(
+        default=95.0, 
+        description="Disk usage critical threshold (%)"
+    )
+    redis_performance_threshold: float = Field(
+        default=50.0, 
+        description="Redis response time threshold (ms)"
+    )
+    
+    # Integration Performance Configuration
+    database_performance_threshold: float = Field(
+        default=100.0,
+        description="Database response time threshold (ms)"
+    )
+    integration_efficiency_threshold: float = Field(
+        default=70.0,
+        description="Minimum integration efficiency threshold (%)"
+    )
+    parallel_operations_enabled: bool = Field(
+        default=True,
+        description="Enable parallel data operations for better integration"
+    )
+    
     # Agent Configuration
     default_agent_temperature: float = Field(
         default=0.7, 

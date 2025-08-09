@@ -257,7 +257,7 @@
                             </div>
                             <div class="mb-6">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                                <input type="password" id="login-password" required 
+                                <input type="password" id="login-password" required autocomplete="current-password"
                                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                             </div>
                             <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-lg font-medium transition duration-200 min-h-[44px] flex items-center justify-center">
@@ -286,7 +286,7 @@
                             </div>
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                                <input type="password" id="register-password" required 
+                                <input type="password" id="register-password" required autocomplete="new-password"
                                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                                 <div class="text-xs text-gray-600 mt-1">
                                     Must be 8+ characters with letters and numbers
@@ -865,8 +865,6 @@
             
             return false;
         }
-        
-        });
     </script>
 </body>
 </html>

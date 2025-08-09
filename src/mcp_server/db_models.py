@@ -9,7 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 
 from mcp_server.database import Base
 
@@ -59,12 +59,12 @@ class User(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now(),
-        onupdate=func.now()
+        server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')
     )
     last_login: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -166,12 +166,12 @@ class Task(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now(),
-        onupdate=func.now()
+        server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -243,7 +243,7 @@ class TraceMemory(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     
     # Relationships
@@ -280,13 +280,13 @@ class Session(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_accessed: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now(),
-        onupdate=func.now()
+        server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')
     )
     
     # Relationships
@@ -336,7 +336,7 @@ class APIKey(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -394,7 +394,7 @@ class SystemHealth(Base):
     # Timestamps
     measured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
-        server_default=func.now()
+        server_default=text('CURRENT_TIMESTAMP')
     )
     
     # Indexes

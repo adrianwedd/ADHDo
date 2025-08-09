@@ -35,6 +35,14 @@ async def init_database() -> None:
             echo=settings.debug,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=20,  # Increased pool size for better integration
+            max_overflow=30,  # Allow overflow connections during peak
+            pool_timeout=10,  # Connection acquisition timeout
+            connect_args={
+                "server_settings": {
+                    "jit": "off"  # Disable JIT for consistent performance
+                }
+            }
         )
         
         SessionLocal = async_sessionmaker(

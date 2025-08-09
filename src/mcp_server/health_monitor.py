@@ -71,6 +71,15 @@ class HealthMonitor:
         self.metrics_history: List[SystemMetrics] = []
         self.max_history = 1000  # Keep last 1000 metrics points
         
+        # Performance optimization: different TTL for stable components
+        self.component_ttl = {
+            "redis": 60,      # Redis stable - check less frequently  
+            "database": 45,   # Database stable - moderate checks
+            "llm": 15,        # LLM fast - can check more frequently
+            "system": 30,     # System metrics - standard interval
+            "application": 30 # Application - standard interval
+        }
+        
     async def get_overall_health(self) -> Dict[str, Any]:
         """Get comprehensive system health status."""
         logger.info("Performing comprehensive health check")
@@ -159,29 +168,39 @@ class HealthMonitor:
         start_time = time.time()
         
         try:
-            # Test Redis connection and basic operations
-            await trace_memory.connect()
+            # Check if Redis is already connected, skip connection if so
+            if not trace_memory.redis:
+                await trace_memory.connect()
             
-            # Test write/read
-            test_key = "health_check_test"
-            test_value = {"timestamp": datetime.utcnow().isoformat(), "test": "data"}
+            # Test connection health before proceeding
+            if not await self._test_redis_connection():
+                # Reconnect if connection is stale
+                await trace_memory.connect()
             
-            await trace_memory.store_trace({
-                "trace_id": test_key,
-                "content": test_value
-            })
+            # Simple ping test (fastest Redis operation)
+            ping_start = time.time()
+            await trace_memory.redis.ping()
+            ping_time = (time.time() - ping_start) * 1000
             
-            retrieved = await trace_memory.get_trace(test_key)
+            # Simple set/get test with pipeline for better performance  
+            test_key = "health_check_simple"
+            test_value = "test_data"
             
-            # Clean up
-            if hasattr(trace_memory, 'redis'):
-                await trace_memory.redis.delete(test_key)
+            # Use pipeline for batch operations
+            pipe = trace_memory.redis.pipeline()
+            pipe.set(test_key, test_value, ex=60)
+            pipe.get(test_key) 
+            results = await pipe.execute()
+            retrieved_value = results[1]  # Get result from the second command
+            
+            # Clean up (fire and forget - don't wait)
+            asyncio.create_task(trace_memory.redis.delete(test_key))
             
             response_time = (time.time() - start_time) * 1000
             
             # Check if read/write worked
-            if retrieved and retrieved.get("content") == test_value:
-                status = HealthStatus.HEALTHY if response_time < 100 else HealthStatus.DEGRADED
+            if retrieved_value == test_value:
+                status = HealthStatus.HEALTHY if response_time < settings.redis_performance_threshold else HealthStatus.DEGRADED
             else:
                 status = HealthStatus.DEGRADED
             
@@ -191,7 +210,8 @@ class HealthMonitor:
                 response_time_ms=response_time,
                 details={
                     "connection": "active",
-                    "read_write_test": "passed",
+                    "ping_time_ms": round(ping_time, 2),
+                    "read_write_test": "passed" if retrieved_value == test_value else "failed",
                     "cache_operations": "functional"
                 }
             )
@@ -210,7 +230,7 @@ class HealthMonitor:
         start_time = time.time()
         
         try:
-            async with get_database_session() as session:
+            async for session in get_database_session():
                 db_service = DatabaseService(session)
                 
                 # Test basic query
@@ -239,6 +259,7 @@ class HealthMonitor:
                         "write_test": "passed"
                     }
                 )
+                break  # Only need one session iteration
                 
         except Exception as e:
             return HealthCheck(
@@ -254,10 +275,10 @@ class HealthMonitor:
         start_time = time.time()
         
         try:
-            from mcp_server.llm_client import llm_client
+            from mcp_server.llm_client import llm_router
             
             # Test pattern matching (should be instant)
-            quick_response = llm_client._get_quick_response("I'm ready to work!")
+            quick_response = llm_router._get_quick_response("I'm ready to work!")
             
             if quick_response:
                 # Pattern matching working
@@ -266,9 +287,9 @@ class HealthMonitor:
                 # Test actual LLM if configured
                 llm_test_start = time.time()
                 try:
-                    if hasattr(llm_client, 'client') and llm_client.client:
+                    if hasattr(llm_router, 'local_client') and llm_router.local_client:
                         # Quick test prompt
-                        response = await llm_client.generate_response(
+                        response = await llm_router.local_client.generate(
                             "Test", max_tokens=10, temperature=0.1
                         )
                         llm_response_time = (time.time() - llm_test_start) * 1000
@@ -340,12 +361,12 @@ class HealthMonitor:
                 status = HealthStatus.DEGRADED
                 issues.append("Elevated memory usage")
             
-            if metrics.disk_usage_percent > 95:
+            if metrics.disk_usage_percent > settings.disk_critical_threshold:
                 status = HealthStatus.UNHEALTHY
-                issues.append("Disk nearly full")
-            elif metrics.disk_usage_percent > 80:
+                issues.append(f"Disk critically full ({metrics.disk_usage_percent:.1f}%)")
+            elif metrics.disk_usage_percent > settings.disk_warning_threshold:
                 status = HealthStatus.DEGRADED
-                issues.append("Low disk space")
+                issues.append(f"Low disk space ({metrics.disk_usage_percent:.1f}%)")
             
             return HealthCheck(
                 component="system",
@@ -487,7 +508,7 @@ class HealthMonitor:
     ) -> None:
         """Persist health data to database."""
         try:
-            async with get_database_session() as session:
+            async for session in get_database_session():
                 db_service = DatabaseService(session)
                 
                 # Store each component's health
@@ -520,6 +541,7 @@ class HealthMonitor:
                 )
                 
                 await session.commit()
+                break  # Only need one session iteration
                 
         except Exception as e:
             logger.warning("Failed to persist health data", error=str(e))
@@ -529,9 +551,10 @@ class HealthMonitor:
         if component == "overall":
             return await self.get_overall_health()
         
-        # Check cache first
+        # Check cache first with component-specific TTL
         cached = self.health_cache.get(component)
-        if cached and (datetime.utcnow() - cached.last_check).total_seconds() < self.cache_ttl:
+        component_cache_ttl = self.component_ttl.get(component, self.cache_ttl)
+        if cached and (datetime.utcnow() - cached.last_check).total_seconds() < component_cache_ttl:
             return {
                 "component": component,
                 "status": cached.status.value,
@@ -574,6 +597,17 @@ class HealthMonitor:
         except Exception as e:
             logger.error("Health check failed for component", component=component, error=str(e))
             raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+    
+    async def _test_redis_connection(self) -> bool:
+        """Test if Redis connection is healthy."""
+        try:
+            if trace_memory.redis:
+                # Quick ping test with timeout
+                await asyncio.wait_for(trace_memory.redis.ping(), timeout=0.5)
+                return True
+        except Exception:
+            pass
+        return False
 
 
 # Global health monitor instance

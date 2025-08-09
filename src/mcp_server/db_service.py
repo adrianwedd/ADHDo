@@ -72,7 +72,7 @@ class DatabaseService:
         if not user or not user.password_hash:
             return None
         
-        # Simple password check (in production, use proper hashing)
+        # Verify password using PBKDF2 hashing (legacy - main auth uses bcrypt)
         if self._verify_password(password, user.password_hash):
             await self.users.update_last_login(user.user_id)
             return user
@@ -80,7 +80,7 @@ class DatabaseService:
         return None
     
     def _hash_password(self, password: str) -> str:
-        """Hash password with salt."""
+        """Hash password using PBKDF2 with SHA-256 (legacy - main auth uses bcrypt)."""
         salt = secrets.token_hex(16)
         pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
         return f"{salt}:{pwd_hash.hex()}"
@@ -352,6 +352,8 @@ class DatabaseService:
         status: str,
         response_time_ms: Optional[float] = None,
         error_rate: Optional[float] = None,
+        memory_usage_mb: Optional[float] = None,
+        cpu_usage_percent: Optional[float] = None,
         details: Optional[Dict[str, Any]] = None
     ) -> None:
         """Record system health metrics."""
@@ -360,6 +362,8 @@ class DatabaseService:
             'status': status,
             'response_time_ms': response_time_ms,
             'error_rate': error_rate,
+            'memory_usage_mb': memory_usage_mb,
+            'cpu_usage_percent': cpu_usage_percent,
             'details': details or {}
         }
         await self.health.record_health(health_data)

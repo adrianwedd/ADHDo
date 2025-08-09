@@ -3,7 +3,7 @@ Authentication and Authorization for MCP ADHD Server.
 
 Implements session-based authentication with registration/login endpoints.
 """
-import hashlib
+import bcrypt
 import secrets
 import time
 import re
@@ -271,18 +271,24 @@ class AuthManager:
         logger.info("Created user", user_id=user.user_id, name=user.name)
     
     def _hash_password(self, password: str) -> str:
-        """Hash password using SHA-256 with salt."""
-        salt = secrets.token_hex(16)
-        password_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-        return f"{salt}:{password_hash}"
+        """Hash password using bcrypt with salt."""
+        # Convert password to bytes
+        password_bytes = password.encode('utf-8')
+        # Generate salt and hash password
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        # Return as string for storage
+        return hashed.decode('utf-8')
     
     def _verify_password(self, password: str, hashed: str) -> bool:
-        """Verify password against hash."""
+        """Verify password against bcrypt hash."""
         try:
-            salt, hash_value = hashed.split(':', 1)
-            password_hash = hashlib.sha256((salt + password).encode()).hexdigest()
-            return password_hash == hash_value
-        except ValueError:
+            # Convert inputs to bytes
+            password_bytes = password.encode('utf-8')
+            hashed_bytes = hashed.encode('utf-8')
+            # Use bcrypt to verify
+            return bcrypt.checkpw(password_bytes, hashed_bytes)
+        except (ValueError, TypeError):
             return False
     
     def register_user(self, registration: RegistrationRequest) -> AuthResponse:

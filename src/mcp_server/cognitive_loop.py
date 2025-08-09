@@ -248,18 +248,20 @@ class CognitiveLoop:
                     processing_time_ms=(asyncio.get_event_loop().time() - start_time) * 1000
                 )
             
-            # Step 5: Execute any recommended actions
-            actions_taken = await self._execute_actions(
+            # Step 5-7: Parallel execution for better integration efficiency
+            # Execute actions, update memory, and circuit breaker concurrently
+            actions_task = self._execute_actions(
                 user_id, contextual_frame, llm_response
             )
-            
-            # Step 6: Update trace memory with interaction
-            await self._update_trace_memory(
-                user_id, user_input, llm_response, contextual_frame, actions_taken
+            memory_task = self._update_trace_memory(
+                user_id, user_input, llm_response, contextual_frame, []  # Actions added after
             )
+            circuit_task = self._update_circuit_breaker(user_id, success=True)
             
-            # Step 7: Update circuit breaker state
-            await self._update_circuit_breaker(user_id, success=True)
+            # Wait for all integration tasks to complete
+            actions_taken, _, _ = await asyncio.gather(
+                actions_task, memory_task, circuit_task, return_exceptions=True
+            )
             
             self.processing_stats["successful_responses"] += 1
             

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Any
 from uuid import uuid4
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -289,8 +289,8 @@ async def get_repository_issues(
     owner: str,
     name: str,
     status: Optional[str] = None,
-    limit: int = Field(default=50, le=500),
-    offset: int = Field(default=0, ge=0),
+    limit: int = Query(default=50, le=500),
+    offset: int = Query(default=0, ge=0),
     db_session: AsyncSession = Depends(get_database_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -573,7 +573,7 @@ async def _process_webhook_background(
 
 @github_router.get("/metrics/summary")
 async def get_automation_metrics(
-    hours: int = Field(default=24, ge=1, le=168),  # 1 hour to 1 week
+    hours: int = Query(default=24, ge=1, le=168),  # 1 hour to 1 week
     db_session: AsyncSession = Depends(get_database_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -648,7 +648,7 @@ async def get_automation_metrics(
 
 @github_router.get("/audit/summary")
 async def get_audit_summary(
-    hours: int = Field(default=24, ge=1, le=168),
+    hours: int = Query(default=24, ge=1, le=168),
     audit_logger: AuditLogger = Depends(get_audit_logger),
     current_user: User = Depends(get_current_user)
 ):

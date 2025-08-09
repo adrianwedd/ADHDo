@@ -42,10 +42,12 @@ class OllamaClient:
     def __init__(self, model: str = "deepseek-r1:1.5b"):
         self.model = model
         self.base_url = "http://localhost:11434"
-        # Keep connection alive to reduce latency
+        # Optimized connection settings for ADHD response times (<3s target)
         self.client = httpx.AsyncClient(
-            timeout=30.0,
-            limits=httpx.Limits(max_connections=5, max_keepalive_connections=2)
+            timeout=httpx.Timeout(8.0, connect=2.0),  # Reduced timeout for faster failure
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            # HTTP/2 disabled for lower latency
+            http2=False
         )
         self._cache: Dict[str, LLMResponse] = {}
         self._cache_max_size = 200  # Increased cache size
@@ -60,8 +62,8 @@ class OllamaClient:
         self, 
         prompt: str, 
         system_prompt: Optional[str] = None,
-        max_tokens: int = 75,  # Reduced for faster generation
-        temperature: float = 0.7
+        max_tokens: int = 40,  # Further reduced for ADHD quick responses
+        temperature: float = 0.6  # Lower temp for faster, more focused responses
     ) -> LLMResponse:
         """Generate response using local Ollama model."""
         start_time = time.time()
@@ -98,13 +100,15 @@ class OllamaClient:
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
-                    # Optimized for speed - ADHD needs quick responses
-                    "top_p": 0.9,     # Faster sampling
-                    "top_k": 30,      # Smaller search space
-                    "repeat_penalty": 1.05,  # Lower penalty for speed
+                    # Ultra-optimized for sub-3s ADHD responses
+                    "top_p": 0.8,     # More focused sampling
+                    "top_k": 20,      # Even smaller search space
+                    "repeat_penalty": 1.02,  # Minimal penalty for speed
                     "seed": 42,       # Consistent seed for caching
-                    "num_ctx": 2048,  # Smaller context window for speed
-                    "stop": ["Human:", "User:", "\n\n\n", "\n\n"]
+                    "num_ctx": 1024,  # Minimal context for maximum speed
+                    "num_thread": 4,  # Optimize for Raspberry Pi
+                    "num_gpu": 0,     # CPU-only for consistency
+                    "stop": ["Human:", "User:", "\n\n\n", "\n\n", "<think>", "</think>"]
                 }
             }
             
@@ -428,38 +432,41 @@ class LLMRouter:
         """Check for patterns that can be answered instantly."""
         text_lower = user_input.lower()
         
-        if any(word in text_lower for word in ["ready", "let's go", "time to"]):
+        # Expanded ADHD-specific quick response patterns
+        if any(phrase in text_lower for phrase in ["ready", "let's go", "time to", "let's do this", "i'm ready"]):
             return self._quick_responses["ready"]
-        elif any(word in text_lower for word in ["stuck", "can't start", "don't know how"]):
+        elif any(phrase in text_lower for phrase in ["stuck", "can't start", "don't know how", "procrastinating", "avoiding"]):
             return self._quick_responses["stuck"]  
-        elif any(word in text_lower for word in ["overwhelmed", "too much", "stressed"]):
+        elif any(phrase in text_lower for phrase in ["overwhelmed", "too much", "stressed", "can't cope", "everything at once"]):
             return self._quick_responses["overwhelmed"]
-        elif any(word in text_lower for word in ["tired", "low energy", "exhausted"]):
+        elif any(phrase in text_lower for phrase in ["tired", "low energy", "exhausted", "drained", "no motivation"]):
             return self._quick_responses["energy_low"]
-        elif any(word in text_lower for word in ["focused", "in the zone", "hyperfocus"]):
+        elif any(phrase in text_lower for phrase in ["focused", "in the zone", "hyperfocus", "flow state", "concentrating"]):
             return self._quick_responses["hyperfocus"]
-        elif any(word in text_lower for word in ["start", "begin", "first step"]):
+        elif any(phrase in text_lower for phrase in ["start", "begin", "first step", "how do i", "where to begin"]):
             return self._quick_responses["start"]
+        elif any(phrase in text_lower for phrase in ["hello", "hi", "hey", "good morning", "good afternoon"]):
+            return "Hi! I'm here to help you stay focused. What would you like to work on? 🌟"
+        elif any(phrase in text_lower for phrase in ["help me focus", "need focus", "can't concentrate", "distracted", "concentrate on"]):
+            return "Let's find your focus together. What's one small task you could tackle right now? 🎯"
+        elif any(phrase in text_lower for phrase in ["break down", "break it down", "too big", "complex task", "project is", "task is"]):
+            return "Perfect instinct! What's the absolute smallest piece of this task? Let's start tiny. 🔍"
             
         return None
     
     async def initialize(self) -> None:
-        """Initialize the LLM router with model warmup and prefetching."""
+        """Initialize the LLM router with minimal warmup for fast startup."""
         if self._initialized:
             return
             
         try:
-            logger.info("Initializing LLM router for optimal performance")
+            logger.info("Fast-initializing LLM router for ADHD response times")
             
-            # Warm up local model and prefetch common responses
-            await asyncio.gather(
-                self.local_client._warmup_model(),
-                self.local_client.prefetch_common_responses(),
-                return_exceptions=True
-            )
+            # Skip warmup completely for fastest startup - rely on pattern matching
+            # Model will warm up naturally on first real request
             
             self._initialized = True
-            logger.info("LLM router initialized successfully")
+            logger.info("LLM router fast-initialized successfully")
             
         except Exception as e:
             logger.error("LLM router initialization failed", error=str(e))
