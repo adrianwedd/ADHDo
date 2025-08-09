@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from mcp_server.metrics import metrics_collector
+from mcp_server.adhd_errors import create_adhd_error_response
 
 logger = structlog.get_logger(__name__)
 
@@ -87,10 +88,11 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 exc_info=True
             )
             
-            # Return error response
-            return JSONResponse(
+            # Return ADHD-friendly error response
+            return create_adhd_error_response(
+                error=e,
                 status_code=500,
-                content={"detail": "Internal server error"}
+                request=request
             )
         
         finally:
@@ -166,11 +168,10 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
                 timeout_seconds=self.timeout_seconds
             )
             
-            return JSONResponse(
+            return create_adhd_error_response(
+                error=f"Request timeout after {self.timeout_seconds} seconds",
                 status_code=504,
-                content={
-                    "detail": f"Request timeout after {self.timeout_seconds} seconds"
-                }
+                request=request
             )
         except Exception as e:
             logger.error(
@@ -212,10 +213,11 @@ class HealthCheckMiddleware(BaseHTTPMiddleware):
                     exc_info=True
                 )
                 
-                # Return minimal error response for health checks
-                return JSONResponse(
+                # Return minimal but ADHD-friendly error response for health checks
+                return create_adhd_error_response(
+                    error="Health check failed - service temporarily unavailable",
                     status_code=503,
-                    content={"status": "unhealthy", "error": "service_unavailable"}
+                    request=request
                 )
         
         # Normal processing for other requests
@@ -313,14 +315,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Check if IP is currently blocked
         if client_ip in _blocked_ips and _blocked_ips[client_ip] > now:
             remaining_time = int(_blocked_ips[client_ip] - now)
-            return JSONResponse(
+            response = create_adhd_error_response(
+                error="Rate limit exceeded - access temporarily blocked",
                 status_code=429,
-                content={
-                    "detail": "Rate limit exceeded. Access blocked.",
-                    "retry_after": remaining_time
-                },
-                headers={"Retry-After": str(remaining_time)}
+                request=request
             )
+            response.headers["Retry-After"] = str(remaining_time)
+            return response
         
         # Get rate limits for endpoint
         limits = self.endpoint_limits.get(endpoint, {
@@ -342,19 +343,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     block_duration=self.block_duration
                 )
             
-            return JSONResponse(
+            response = create_adhd_error_response(
+                error="Rate limit exceeded",
                 status_code=429,
-                content={
-                    "detail": "Rate limit exceeded",
-                    "limit": limits["rpm"],
-                    "window": "60 seconds"
-                },
-                headers={
-                    "X-RateLimit-Limit": str(limits["rpm"]),
-                    "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Reset": str(int(now + 60))
-                }
+                request=request
             )
+            response.headers.update({
+                "X-RateLimit-Limit": str(limits["rpm"]),
+                "X-RateLimit-Remaining": "0", 
+                "X-RateLimit-Reset": str(int(now + 60))
+            })
+            return response
         
         # Process request
         response = await call_next(request)
@@ -491,9 +490,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                 max_size=self.max_request_size,
                 client_ip=request.client.host
             )
-            return JSONResponse(
+            return create_adhd_error_response(
+                error="Request too large",
                 status_code=413,
-                content={"detail": "Request entity too large"}
+                request=request
             )
         
         # Validate content type for POST/PUT requests
@@ -512,9 +512,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                     content_type=content_type,
                     client_ip=request.client.host
                 )
-                return JSONResponse(
+                return create_adhd_error_response(
+                    error="Unsupported media type",
                     status_code=415,
-                    content={"detail": "Unsupported media type"}
+                    request=request
                 )
         
         # Check for suspicious patterns in URL
@@ -525,9 +526,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                 url=url_path,
                 client_ip=request.client.host
             )
-            return JSONResponse(
+            return create_adhd_error_response(
+                error="Invalid request - suspicious URL pattern",
                 status_code=400,
-                content={"detail": "Invalid request"}
+                request=request
             )
         
         # For JSON requests, validate the body
@@ -547,9 +549,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                             client_ip=request.client.host,
                             endpoint=url_path
                         )
-                        return JSONResponse(
+                        return create_adhd_error_response(
+                            error="Invalid request content",
                             status_code=400,
-                            content={"detail": "Invalid request content"}
+                            request=request
                         )
                     
                     # Validate JSON structure
@@ -560,9 +563,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                             "Request rejected due to invalid JSON",
                             client_ip=request.client.host
                         )
-                        return JSONResponse(
+                        return create_adhd_error_response(
+                            error="Invalid JSON format",
                             status_code=400,
-                            content={"detail": "Invalid JSON format"}
+                            request=request
                         )
             except Exception as e:
                 logger.error(
@@ -570,9 +574,10 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                     error=str(e),
                     client_ip=request.client.host
                 )
-                return JSONResponse(
+                return create_adhd_error_response(
+                    error="Invalid request",
                     status_code=400,
-                    content={"detail": "Invalid request"}
+                    request=request
                 )
         
         # Process request
@@ -605,9 +610,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 client_ip=request.client.host,
                 headers=dict(request.headers)
             )
-            return JSONResponse(
+            return create_adhd_error_response(
+                error="Invalid request headers",
                 status_code=400,
-                content={"detail": "Invalid request headers"}
+                request=request
             )
         
         # Process request

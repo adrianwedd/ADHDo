@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Calendar Integration - MCP ADHD Server</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            color: #2d3748;
+            margin: 0 0 16px 0;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+        
+        .header .subtitle {
+            color: #718096;
+            font-size: 1.2em;
+            margin-bottom: 8px;
+        }
+        
+        .adhd-benefits {
+            background: #f7fafc;
+            border-left: 4px solid #4fd1c7;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .adhd-benefits h3 {
+            color: #2d3748;
+            margin: 0 0 16px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .adhd-benefits h3:before {
+            content: "🧠";
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+        
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        
+        .benefit-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px 0;
+        }
+        
+        .benefit-item .icon {
+            font-size: 1.2em;
+            margin-right: 12px;
+            margin-top: 2px;
+        }
+        
+        .benefit-item .text {
+            color: #4a5568;
+        }
+        
+        .benefit-item .text strong {
+            color: #2d3748;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .setup-section {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+        }
+        
+        .setup-section h3 {
+            color: #2d3748;
+            margin: 0 0 16px 0;
+            font-size: 1.3em;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .button.secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        
+        .button.secondary:hover {
+            background: #cbd5e0;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .status {
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+            display: none;
+        }
+        
+        .status.success {
+            background: #f0fff4;
+            border: 1px solid #9ae6b4;
+            color: #276749;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            border: 1px solid #fc8181;
+            color: #742a2a;
+        }
+        
+        .status.loading {
+            background: #fef5e7;
+            border: 1px solid #f6ad55;
+            color: #975a16;
+        }
+        
+        .features-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .feature-card h4 {
+            color: #2d3748;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-card h4 span {
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+        
+        .feature-card p {
+            color: #6c757d;
+            margin: 0;
+            line-height: 1.5;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 20px;
+            }
+            
+            .benefits-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗓️ Calendar Integration</h1>
+            <p class="subtitle">Connect your Google Calendar for ADHD-optimized time management</p>
+        </div>
+        
+        <div class="adhd-benefits">
+            <h3>Why This Helps Your ADHD Brain</h3>
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <span class="icon">⚡</span>
+                    <div class="text">
+                        <strong>Transition Warnings</strong>
+                        Get alerts 15 and 5 minutes before events to help with time blindness
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <span class="icon">📋</span>
+                    <div class="text">
+                        <strong>Preparation Lists</strong>
+                        Automatic checklists for what you need before each event
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <span class="icon">🧠</span>
+                    <div class="text">
+                        <strong>Overwhelm Detection</strong>
+                        Warns when your schedule is too packed and suggests adjustments
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <span class="icon">🔄</span>
+                    <div class="text">
+                        <strong>Context Switching Help</strong>
+                        Smart alerts to help transition between different types of activities
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <span class="icon">⏰</span>
+                    <div class="text">
+                        <strong>Time Awareness</strong>
+                        Visual time indicators and remaining time estimates
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <span class="icon">🎯</span>
+                    <div class="text">
+                        <strong>Energy Matching</strong>
+                        Recommendations for scheduling high-energy tasks during peak hours
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="setup-section">
+            <h3>🚀 Set Up Calendar Integration</h3>
+            <p>Connect your Google Calendar to unlock all ADHD time management features. Your calendar data stays private and is only used to provide you with personalized support.</p>
+            
+            <div id="setup-buttons">
+                <button class="button" onclick="connectCalendar()">
+                    Connect Google Calendar
+                </button>
+                <button class="button secondary" onclick="testFeatures()" style="margin-left: 12px;">
+                    Preview Features
+                </button>
+            </div>
+            
+            <div id="status" class="status"></div>
+        </div>
+        
+        <div class="features-preview" id="features-preview" style="display: none;">
+            <div class="feature-card">
+                <h4><span>📱</span>Smart Notifications</h4>
+                <p>Get contextual reminders via Telegram, browser notifications, or your smart home devices. Messages adapt to your current energy and stress levels.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4><span>📊</span>Schedule Analysis</h4>
+                <p>Weekly insights showing overwhelm patterns, energy mismatches, and optimization suggestions. Helps you learn your own patterns over time.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4><span>🔮</span>Proactive Support</h4>
+                <p>The system learns when you struggle with certain transitions and proactively offers help before you get stuck.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h4><span>🏠</span>Environmental Integration</h4>
+                <p>If connected to Home Assistant, can adjust lights, music, and other environmental factors to support your transitions.</p>
+            </div>
+        </div>
+        
+        <div class="setup-section">
+            <h3>🔒 Privacy & Security</h3>
+            <p>Your calendar data is processed locally and never stored unnecessarily. We only access your calendar to provide real-time ADHD support features. You can disconnect at any time and all data will be removed.</p>
+            
+            <ul style="color: #6c757d; line-height: 1.6;">
+                <li>OAuth 2.0 secure authentication with Google</li>
+                <li>Read-only access to your calendar events</li>
+                <li>Data processed locally for privacy</li>
+                <li>No permanent storage of calendar contents</li>
+                <li>Easy disconnection and data removal</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            const status = document.getElementById('status');
+            status.style.display = 'none';
+        }
+        
+        async function connectCalendar() {
+            try {
+                showStatus('Initiating Google Calendar connection...', 'loading');
+                
+                // Get authorization URL from server
+                const response = await fetch('/api/calendar/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        redirect_uri: window.location.origin + '/api/calendar/callback'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.authorization_url) {
+                    // Redirect to Google for authorization
+                    window.location.href = data.authorization_url;
+                } else {
+                    throw new Error('No authorization URL received');
+                }
+                
+            } catch (error) {
+                console.error('Calendar connection error:', error);
+                showStatus('Failed to connect calendar. Please try again or check if you\'re logged in.', 'error');
+            }
+        }
+        
+        function testFeatures() {
+            const preview = document.getElementById('features-preview');
+            if (preview.style.display === 'none') {
+                preview.style.display = 'grid';
+                showStatus('🎯 These features will be available once you connect your calendar!', 'loading');
+            } else {
+                preview.style.display = 'none';
+                hideStatus();
+            }
+        }
+        
+        // Check if we came back from OAuth callback
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('connected') === 'true') {
+            showStatus('🎉 Calendar connected successfully! ADHD time management features are now active.', 'success');
+        } else if (urlParams.get('error')) {
+            showStatus('❌ Connection failed: ' + urlParams.get('error'), 'error');
+        }
+    </script>
+</body>
+</html>

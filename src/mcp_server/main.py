@@ -63,7 +63,7 @@ from mcp_server.exception_handlers import register_exception_handlers
 # Import core routers only - defer optional ones
 from mcp_server.routers import (
     auth_router, health_router, chat_router, user_router,
-    webhook_router, beta_router, docs_router
+    webhook_router, beta_router, docs_router, calendar_router
 )
 
 # Mark startup stage
@@ -486,6 +486,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router, tags=["Webhooks"])
     app.include_router(beta_router, tags=["Beta"])
     app.include_router(docs_router, tags=["Documentation"])  # Enhanced documentation portal
+    app.include_router(calendar_router, tags=["Calendar"])  # ADHD time management features
     
     # Lazy load optional routers based on configuration
     if should_enable_service('evolution_engine'):
@@ -646,7 +647,8 @@ def create_app() -> FastAPI:
             "chat": "/chat",
             "authentication": "/api/auth",
             "beta": "/api/beta",
-            "performance": "/api/performance"
+            "performance": "/api/performance",
+            "calendar": "/api/calendar"
         }
         
         # Add evolution endpoint only if enabled

@@ -64,6 +64,9 @@ from mcp_server.config import settings
 from mcp_server.models import MCPFrame, UserState, NudgeTier, TraceMemory as TraceMemoryModel
 from mcp_server.llm_client import llm_router, LLMResponse
 from frames.builder import frame_builder, ContextualFrame
+from calendar.context import EnhancedFrameBuilder
+from calendar.client import CalendarClient
+from calendar.processor import ADHDCalendarProcessor
 from nudge.engine import nudge_engine
 from traces.memory import trace_memory
 
@@ -191,6 +194,14 @@ class CognitiveLoop:
             "circuit_breaker_trips": 0,
             "successful_responses": 0
         }
+        
+        # Initialize calendar-enhanced frame builder if calendar is enabled
+        if settings.google_calendar_enabled:
+            calendar_client = CalendarClient()
+            calendar_processor = ADHDCalendarProcessor()
+            self.enhanced_frame_builder = EnhancedFrameBuilder(calendar_client, calendar_processor)
+        else:
+            self.enhanced_frame_builder = None
     
     async def process_user_input(
         self,
@@ -215,14 +226,29 @@ class CognitiveLoop:
             if circuit_state.is_open and not circuit_state.should_test():
                 return await self._handle_circuit_open(user_id, circuit_state)
             
-            # Step 2: Build contextual frame
+            # Step 2: Build contextual frame (with calendar integration if available)
             logger.info("Building contextual frame", user_id=user_id, task_focus=task_focus)
-            contextual_frame = await frame_builder.build_frame(
-                user_id=user_id,
-                agent_id="main_cognitive_loop",
-                task_focus=task_focus,
-                include_patterns=True
-            )
+            
+            if self.enhanced_frame_builder:
+                # Use enhanced frame builder with calendar context
+                contextual_frame = await self.enhanced_frame_builder.build_frame(
+                    user_id=user_id,
+                    agent_id="main_cognitive_loop",
+                    task_focus=task_focus,
+                    include_patterns=True,
+                    include_calendar=True
+                )
+                logger.info("Enhanced frame with calendar context", 
+                           user_id=user_id, 
+                           cognitive_load=contextual_frame.cognitive_load)
+            else:
+                # Use standard frame builder
+                contextual_frame = await frame_builder.build_frame(
+                    user_id=user_id,
+                    agent_id="main_cognitive_loop",
+                    task_focus=task_focus,
+                    include_patterns=True
+                )
             
             # Step 3: Process through LLM router (includes safety monitoring)
             logger.info("Processing through LLM router", 
@@ -299,13 +325,24 @@ class CognitiveLoop:
         This is called by background processes, Home Assistant webhooks, etc.
         """
         try:
-            # Build frame for proactive nudging
-            contextual_frame = await frame_builder.build_frame(
-                user_id=user_id,
-                agent_id="proactive_nudge_system",
-                task_focus=f"Task reminder: {task_id}",
-                include_patterns=True
-            )
+            # Build frame for proactive nudging (with calendar context if available)
+            if self.enhanced_frame_builder:
+                # Use enhanced frame builder with calendar context for better nudge timing
+                contextual_frame = await self.enhanced_frame_builder.build_frame(
+                    user_id=user_id,
+                    agent_id="proactive_nudge_system",
+                    task_focus=f"Task reminder: {task_id}",
+                    include_patterns=True,
+                    include_calendar=True
+                )
+            else:
+                # Use standard frame builder
+                contextual_frame = await frame_builder.build_frame(
+                    user_id=user_id,
+                    agent_id="proactive_nudge_system",
+                    task_focus=f"Task reminder: {task_id}",
+                    include_patterns=True
+                )
             
             # Generate proactive nudge content
             nudge_prompt = await self._generate_proactive_nudge_prompt(

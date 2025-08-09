@@ -46,6 +46,14 @@ class Settings(BaseSettings):
         description="Google Calendar credentials file path"
     )
     google_calendar_id: str = Field(default="primary", description="Google Calendar ID")
+    google_calendar_redirect_uri: str = Field(
+        default="http://localhost:8000/api/calendar/callback",
+        description="OAuth redirect URI for calendar authentication"
+    )
+    google_calendar_enabled: bool = Field(
+        default=False,
+        description="Enable Google Calendar integration"
+    )
     
     # Home Assistant Configuration (Optional)
     home_assistant_url: Optional[str] = Field(

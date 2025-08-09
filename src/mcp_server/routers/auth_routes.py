@@ -18,6 +18,10 @@ from ..models import User
 from ..database import get_database_session
 from ..repositories import UserRepository, APIKeyRepository
 from ..health_monitor import health_monitor
+from ..adhd_errors import (
+    create_adhd_error_response, authentication_error, validation_error,
+    system_error
+)
 
 auth_router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -37,9 +41,10 @@ async def register_user(registration: RegistrationRequest, request: Request) -> 
         existing_user = await user_repo.get_by_email(registration.email)
         
         if existing_user:
-            raise HTTPException(
-                status_code=400, 
-                detail="User with this email already exists"
+            return create_adhd_error_response(
+                error="User with this email already exists", 
+                status_code=400,
+                request=request
             )
         
         # Create user through auth manager
@@ -54,7 +59,7 @@ async def register_user(registration: RegistrationRequest, request: Request) -> 
         raise
     except Exception as e:
         health_monitor.record_error("user_registration", str(e))
-        raise HTTPException(status_code=500, detail="Registration failed")
+        return system_error("Registration failed")
 
 
 @auth_router.post("/login", response_model=AuthResponse)  
@@ -70,7 +75,11 @@ async def login_user(login: LoginRequest, request: Request) -> AuthResponse:
         
         if not result.success:
             health_monitor.record_metric("failed_login_attempts", 1)
-            raise HTTPException(status_code=401, detail=result.message)
+            return create_adhd_error_response(
+                error=f"Login failed: {result.message}",
+                status_code=401,
+                request=request
+            )
         
         # Record successful login
         health_monitor.record_metric("successful_logins", 1)
@@ -81,7 +90,7 @@ async def login_user(login: LoginRequest, request: Request) -> AuthResponse:
         raise
     except Exception as e:
         health_monitor.record_error("user_login", str(e))
-        raise HTTPException(status_code=500, detail="Login failed")
+        return system_error("Login failed")
 
 
 @auth_router.post("/logout", response_model=AuthResponse)
@@ -91,7 +100,7 @@ async def logout_user(request: Request) -> AuthResponse:
         # Extract token from headers
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="No valid token provided")
+            return authentication_error("No valid token provided")
         
         token = auth_header.split(" ")[1]
         
@@ -106,7 +115,7 @@ async def logout_user(request: Request) -> AuthResponse:
         raise
     except Exception as e:
         health_monitor.record_error("user_logout", str(e))
-        raise HTTPException(status_code=500, detail="Logout failed")
+        return system_error("Logout failed")
 
 
 @auth_router.get("/me")
@@ -124,7 +133,7 @@ async def get_current_user_profile(current_user: User = Depends(get_current_user
         }
     except Exception as e:
         health_monitor.record_error("get_user_profile", str(e))
-        raise HTTPException(status_code=500, detail="Failed to retrieve profile")
+        return system_error("Failed to retrieve profile")
 
 
 @auth_router.put("/me", response_model=AuthResponse)
@@ -145,7 +154,7 @@ async def update_user_profile(
         
     except Exception as e:
         health_monitor.record_error("update_user_profile", str(e))
-        raise HTTPException(status_code=500, detail="Profile update failed")
+        return system_error("Profile update failed")
 
 
 @auth_router.post("/forgot-password", response_model=AuthResponse)
@@ -171,7 +180,7 @@ async def request_password_reset(
         
     except Exception as e:
         health_monitor.record_error("password_reset_request", str(e))
-        raise HTTPException(status_code=500, detail="Password reset request failed")
+        return system_error("Password reset request failed")
 
 
 @auth_router.post("/reset-password", response_model=AuthResponse)
@@ -197,7 +206,7 @@ async def confirm_password_reset(
         
     except Exception as e:
         health_monitor.record_error("password_reset_confirm", str(e))
-        raise HTTPException(status_code=500, detail="Password reset failed")
+        return system_error("Password reset failed")
 
 
 # Legacy auth endpoints (keeping for backward compatibility)
@@ -208,7 +217,7 @@ async def login(request: LoginRequest, response: JSONResponse):
         result = await auth_manager.authenticate_user(request.email, request.password)
         
         if not result.success:
-            raise HTTPException(status_code=401, detail=result.message)
+            return authentication_error(result.message)
         
         # Set HTTP-only cookie
         response.set_cookie(
@@ -226,7 +235,7 @@ async def login(request: LoginRequest, response: JSONResponse):
         raise
     except Exception as e:
         health_monitor.record_error("legacy_login", str(e))
-        raise HTTPException(status_code=500, detail="Login failed")
+        return system_error("Login failed")
 
 
 @auth_router.post("/logout")
@@ -239,7 +248,7 @@ async def logout(response: JSONResponse, current_user: User = Depends(get_curren
         
     except Exception as e:
         health_monitor.record_error("legacy_logout", str(e))
-        raise HTTPException(status_code=500, detail="Logout failed")
+        return system_error("Logout failed")
 
 
 @auth_router.post("/api-keys")
@@ -262,7 +271,7 @@ async def create_api_key(
         
     except Exception as e:
         health_monitor.record_error("create_api_key", str(e))
-        raise HTTPException(status_code=500, detail="API key creation failed")
+        return system_error("API key creation failed")
 
 
 @auth_router.delete("/api-keys/{key_id}")
@@ -281,7 +290,7 @@ async def revoke_api_key(
         
     except Exception as e:
         health_monitor.record_error("revoke_api_key", str(e))
-        raise HTTPException(status_code=500, detail="API key revocation failed")
+        return system_error("API key revocation failed")
 
 
 @auth_router.get("/me")
@@ -296,4 +305,4 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         }
     except Exception as e:
         health_monitor.record_error("get_current_user_info", str(e))
-        raise HTTPException(status_code=500, detail="Failed to get user info")
+        return system_error("Failed to get user info")

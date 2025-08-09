@@ -14,6 +14,7 @@ from ..auth import get_current_user
 from ..database import get_database_session
 from ..repositories import UserRepository, TaskRepository
 from ..health_monitor import health_monitor
+from ..adhd_errors import system_error, not_found_error
 from nudge.engine import nudge_engine
 
 user_router = APIRouter(tags=["Users", "Tasks"])
@@ -37,7 +38,7 @@ async def create_user(user: User):
         
     except Exception as e:
         health_monitor.record_error("create_user", str(e))
-        raise HTTPException(status_code=500, detail="Failed to create user")
+        return system_error("Failed to create user")
 
 
 @user_router.get("/users/{user_id}", response_model=User)
@@ -53,7 +54,7 @@ async def get_user(user_id: str):
         user = await user_repo.get_user(user_id)
         
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            return not_found_error("User")
         
         return user
         
@@ -61,7 +62,7 @@ async def get_user(user_id: str):
         raise
     except Exception as e:
         health_monitor.record_error("get_user", str(e))
-        raise HTTPException(status_code=500, detail="Failed to retrieve user")
+        return system_error("Failed to retrieve user")
 
 
 @user_router.post("/tasks", response_model=Task)
@@ -88,7 +89,7 @@ async def create_task(task: Task, current_user: User = Depends(get_current_user)
         
     except Exception as e:
         health_monitor.record_error("create_task", str(e))
-        raise HTTPException(status_code=500, detail="Failed to create task")
+        return system_error("Failed to create task")
 
 
 @user_router.get("/tasks/{task_id}", response_model=Task)
@@ -103,11 +104,15 @@ async def get_task(task_id: str, current_user: User = Depends(get_current_user))
         task = await task_repo.get_task(task_id)
         
         if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+            return not_found_error("Task")
         
         # Ensure user can only access their own tasks
         if task.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied to this task")
+            from ..adhd_errors import create_adhd_error_response
+            return create_adhd_error_response(
+                error="Access denied to this task",
+                status_code=403
+            )
         
         return task
         
@@ -115,7 +120,7 @@ async def get_task(task_id: str, current_user: User = Depends(get_current_user))
         raise
     except Exception as e:
         health_monitor.record_error("get_task", str(e))
-        raise HTTPException(status_code=500, detail="Failed to retrieve task")
+        return system_error("Failed to retrieve task")
 
 
 @user_router.put("/tasks/{task_id}/complete")
@@ -132,7 +137,7 @@ async def complete_task(task_id: str, current_user: User = Depends(get_current_u
         # Verify task ownership and complete
         task = await task_repo.get_task(task_id)
         if not task or task.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail="Task not found")
+            return not_found_error("Task")
         
         completed_task = await task_repo.complete_task(task_id)
         
@@ -151,7 +156,7 @@ async def complete_task(task_id: str, current_user: User = Depends(get_current_u
         raise
     except Exception as e:
         health_monitor.record_error("complete_task", str(e))
-        raise HTTPException(status_code=500, detail="Failed to complete task")
+        return system_error("Failed to complete task")
 
 
 @user_router.post("/nudge/{user_id}")
@@ -166,7 +171,11 @@ async def trigger_nudge(user_id: str, task_id: str = None, current_user: User = 
         # Users can only trigger nudges for themselves (unless admin)
         if user_id != current_user.id:
             # Add admin check here if needed
-            raise HTTPException(status_code=403, detail="Can only trigger nudges for yourself")
+            from ..adhd_errors import create_adhd_error_response
+            return create_adhd_error_response(
+                error="Can only trigger nudges for yourself",
+                status_code=403
+            )
         
         # Trigger through nudge engine
         nudge_result = await nudge_engine.trigger_manual_nudge(user_id, task_id)
@@ -184,4 +193,5 @@ async def trigger_nudge(user_id: str, task_id: str = None, current_user: User = 
         raise
     except Exception as e:
         health_monitor.record_error("trigger_nudge", str(e))
-        raise HTTPException(status_code=500, detail="Failed to trigger nudge")
+        from ..exception_handlers import ADHDFeatureException
+        raise ADHDFeatureException("nudge_trigger", "Failed to trigger manual nudge", recoverable=True)
