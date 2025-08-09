@@ -4,6 +4,7 @@ Authentication and Authorization for MCP ADHD Server.
 Implements session-based authentication with registration/login endpoints.
 """
 import bcrypt
+import hashlib
 import secrets
 import time
 import re
