@@ -64,9 +64,9 @@ from mcp_server.config import settings
 from mcp_server.models import MCPFrame, UserState, NudgeTier, TraceMemory as TraceMemoryModel
 from mcp_server.llm_client import llm_router, LLMResponse
 from frames.builder import frame_builder, ContextualFrame
-from calendar.context import EnhancedFrameBuilder
-from calendar.client import CalendarClient
-from calendar.processor import ADHDCalendarProcessor
+from calendar_integration.context import EnhancedFrameBuilder
+from calendar_integration.client import CalendarClient
+from calendar_integration.processor import ADHDCalendarProcessor
 from nudge.engine import nudge_engine
 from traces.memory import trace_memory
 

@@ -20,14 +20,14 @@ import structlog
 from mcp_server.auth import get_current_user
 from mcp_server.config import settings
 from mcp_server.models import User
-from calendar.client import CalendarClient, GoogleCalendarAuthError, GoogleCalendarAPIError
-from calendar.models import (
+from calendar_integration.client import CalendarClient, GoogleCalendarAuthError, GoogleCalendarAPIError
+from calendar_integration.models import (
     CalendarEvent, CalendarInsight, CalendarPreferences, 
     ScheduleOptimizationSuggestion, TransitionAlert
 )
-from calendar.processor import ADHDCalendarProcessor
-from calendar.nudges import calendar_nudger
-from calendar.context import CalendarContextBuilder
+from calendar_integration.processor import ADHDCalendarProcessor
+from calendar_integration.nudges import calendar_nudger
+from calendar_integration.context import CalendarContextBuilder
 
 logger = structlog.get_logger()
 
