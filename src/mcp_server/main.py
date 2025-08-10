@@ -70,6 +70,7 @@ from mcp_server.routers import (
     auth_router, health_router, chat_router, user_router,
     webhook_router, beta_router, docs_router, calendar_router, onboarding_router, adhd_router
 )
+from mcp_server.routers.claude_auth_router import router as claude_auth_router
 
 # Import background processing routes  
 from mcp_server.routers.background_routes import background_router
@@ -588,6 +589,7 @@ def create_app() -> FastAPI:
     app.include_router(docs_router, tags=["Documentation"])  # Enhanced documentation portal
     app.include_router(calendar_router, tags=["Calendar"])  # ADHD time management features
     app.include_router(adhd_router, tags=["Advanced ADHD Support"])  # Enhanced ADHD features and personalization
+    app.include_router(claude_auth_router, tags=["Claude Authentication"])  # Claude Pro/Max integration
     
     # Include background processing router if enabled
     if settings.background_processing_enabled:

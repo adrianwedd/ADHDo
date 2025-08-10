@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from mcp_server.config import settings
 from mcp_server.models import MCPFrame, UserState, NudgeTier
+from mcp_server.claude_client import claude_client, ClaudeResponse
 
 logger = structlog.get_logger()
 
@@ -44,8 +45,8 @@ class OllamaClient:
         self.base_url = "http://localhost:11434"
         # Optimized connection settings for ADHD response times (<3s target)
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(8.0, connect=2.0),  # Reduced timeout for faster failure
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            timeout=httpx.Timeout(20.0, connect=5.0),  # Longer timeout for reasoning models
+            limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
             # HTTP/2 disabled for lower latency
             http2=False
         )
@@ -101,14 +102,14 @@ class OllamaClient:
                     "temperature": temperature,
                     "num_predict": max_tokens,
                     # Ultra-optimized for sub-3s ADHD responses
-                    "top_p": 0.8,     # More focused sampling
-                    "top_k": 20,      # Even smaller search space
-                    "repeat_penalty": 1.02,  # Minimal penalty for speed
-                    "seed": 42,       # Consistent seed for caching
-                    "num_ctx": 1024,  # Minimal context for maximum speed
+                    "top_p": 0.9,     # Slightly more diverse for better responses
+                    "top_k": 40,      # Larger search space for reasoning model
+                    "repeat_penalty": 1.05,  # Reduce repetition
+                    "seed": None,     # Allow variability for better responses
+                    "num_ctx": 2048,  # Larger context for reasoning
                     "num_thread": 4,  # Optimize for Raspberry Pi
                     "num_gpu": 0,     # CPU-only for consistency
-                    "stop": ["Human:", "User:", "\n\n\n", "\n\n", "<think>", "</think>"]
+                    "stop": ["Human:", "User:", "\n\n\n"]  # Allow model to complete reasoning
                 }
             }
             
@@ -121,8 +122,56 @@ class OllamaClient:
             result = response.json()
             latency_ms = (time.time() - start_time) * 1000
             
+            # Extract response and clean DeepSeek R1 thinking tags
+            raw_content = result["message"]["content"]
+            
+            # Handle DeepSeek R1 responses with <think> tags
+            import re
+            
+            # First try to get content outside of <think> tags
+            clean_content = re.sub(r'<think>.*?</think>', '', raw_content, flags=re.DOTALL)
+            clean_content = clean_content.strip()
+            
+            # If no content outside think tags, extract from inside (DeepSeek R1 behavior)
+            if not clean_content or clean_content == '<think>':
+                # DeepSeek R1 may put everything in thinking - extract meaningful parts
+                think_match = re.search(r'<think>(.*?)</think>', raw_content, flags=re.DOTALL)
+                if think_match:
+                    thinking_content = think_match.group(1).strip()
+                    
+                    # Extract actionable advice from the thinking
+                    sentences = [s.strip() for s in thinking_content.split('.') if s.strip()]
+                    
+                    # Find sentences with actionable words
+                    actionable_words = ['start', 'try', 'do', 'create', 'make', 'set', 'organize', 'focus', 'break']
+                    actionable_sentences = []
+                    
+                    for sentence in sentences[:5]:  # Check first 5 sentences
+                        if any(word in sentence.lower() for word in actionable_words):
+                            actionable_sentences.append(sentence)
+                            if len(actionable_sentences) >= 2:  # Max 2 sentences
+                                break
+                    
+                    if actionable_sentences:
+                        clean_content = '. '.join(actionable_sentences)
+                        if not clean_content.endswith('.'):
+                            clean_content += '.'
+                    else:
+                        # Take first meaningful sentence if no actionable found
+                        for sentence in sentences[:3]:
+                            if len(sentence) > 20 and not sentence.startswith('Okay') and not sentence.startswith('Well'):
+                                clean_content = sentence + '.' if not sentence.endswith('.') else sentence
+                                break
+                
+                elif raw_content.strip() == '<think>':  # Incomplete response
+                    clean_content = "Let me break that down for you. What specific part of your morning feels most chaotic?"
+            
+            # Final fallback if still empty
+            if not clean_content:
+                clean_content = "I'm here to help! What would you like to work on?"
+            
             llm_response = LLMResponse(
-                text=result["message"]["content"].strip(),
+                text=clean_content,
                 source="local",
                 latency_ms=latency_ms,
                 model_used=self.model
@@ -135,7 +184,7 @@ class OllamaClient:
             return llm_response
             
         except Exception as e:
-            logger.error("Local LLM generation failed", error=str(e))
+            logger.error("Local LLM generation failed", error=str(e), exc_info=True)
             return LLMResponse(
                 text="I'm having trouble thinking right now. Let me try a simpler approach.",
                 source="fallback",
@@ -302,6 +351,7 @@ class LLMRouter:
     
     def __init__(self):
         self.local_client = OllamaClient("deepseek-r1:1.5b")
+        self.claude_client = claude_client
         self.safety_monitor = SafetyMonitor()
         self.complexity_classifier = ComplexityClassifier()
         self.cloud_client = None  # TODO: Add OpenRouter client
@@ -371,12 +421,20 @@ class LLMRouter:
         if complexity == TaskComplexity.SIMPLE:
             return await self._handle_local(user_input, context, nudge_tier)
         elif complexity == TaskComplexity.MODERATE:
-            # Try local first, could fallback to cloud later
-            return await self._handle_local(user_input, context, nudge_tier)
+            # Try local first, fallback to Claude if available
+            local_response = await self._handle_local(user_input, context, nudge_tier)
+            
+            # If local response is low confidence and Claude is available, use Claude
+            if local_response.confidence < 0.7 and self.claude_client.is_available():
+                return await self._handle_claude(user_input, context, nudge_tier, 'gentle_nudge')
+            
+            return local_response
         elif complexity == TaskComplexity.COMPLEX:
-            # For now, use local with disclaimer
-            # TODO: Add cloud routing with user consent
-            return await self._handle_local_complex(user_input, context, nudge_tier)
+            # Use Claude if available, otherwise local with disclaimer
+            if self.claude_client.is_available():
+                return await self._handle_claude(user_input, context, nudge_tier, 'complex_breakdown')
+            else:
+                return await self._handle_local_complex(user_input, context, nudge_tier)
     
     async def _handle_local(
         self, 
@@ -460,13 +518,24 @@ class LLMRouter:
             return
             
         try:
-            logger.info("Fast-initializing LLM router for ADHD response times")
+            logger.info("Initializing LLM router for ADHD response times")
             
-            # Skip warmup completely for fastest startup - rely on pattern matching
-            # Model will warm up naturally on first real request
+            # Check Ollama availability
+            ollama_available = await self.local_client.is_available()
+            
+            if ollama_available:
+                logger.info("✅ Ollama available - local reasoning model ready")
+            else:
+                logger.info("⚠️ Ollama not available - using pattern matching only")
+            
+            # Check if Claude is available
+            if self.claude_client.is_available():
+                logger.info("✅ Claude browser auth available - using for complex tasks")
+            else:
+                logger.info("ℹ️ Claude not authenticated - local + pattern matching mode")
             
             self._initialized = True
-            logger.info("LLM router fast-initialized successfully")
+            logger.info("🎯 LLM router initialized - ready for <3s ADHD responses")
             
         except Exception as e:
             logger.error("LLM router initialization failed", error=str(e))
@@ -484,12 +553,73 @@ class LLMRouter:
         
         # Add disclaimer for complex requests
         if response.confidence > 0.5:  # Only if we got a reasonable response
-            response.text += (
-                "\n\n💡 *For more nuanced guidance, I could use cloud AI "
-                "with your permission (fully anonymized).*"
-            )
+            if self.claude_client.is_available():
+                response.text += (
+                    "\n\n💡 *I can provide more detailed guidance using your Claude Pro subscription if needed.*"
+                )
+            else:
+                response.text += (
+                    "\n\n💡 *For more nuanced guidance, connect your Claude Pro account via /api/auth/claude.*"
+                )
         
         return response
+    
+    async def _handle_claude(
+        self,
+        user_input: str,
+        context: Optional[MCPFrame],
+        nudge_tier: NudgeTier,
+        use_case: str = 'gentle_nudge'
+    ) -> LLMResponse:
+        """Handle request with Claude using browser auth."""
+        
+        try:
+            # Build system prompt based on nudge tier and context
+            system_prompt = None
+            if nudge_tier == NudgeTier.GENTLE:
+                system_prompt = self.adhd_system_prompts["gentle_nudge"]
+            elif nudge_tier in [NudgeTier.SARCASTIC, NudgeTier.SERGEANT]:
+                system_prompt = self.adhd_system_prompts["accountability"]
+            
+            # Add context if available
+            if context and context.task_focus:
+                context_info = f"\nCurrent focus: {context.task_focus}"
+                
+                # Extract user state from context
+                user_state = None
+                for ctx_item in context.context:
+                    if ctx_item.type.value == "user_state":
+                        user_state = ctx_item.data.get("current_state")
+                        break
+                
+                if user_state:
+                    context_info += f"\nUser state: {user_state}"
+                
+                if system_prompt:
+                    system_prompt += context_info
+            
+            # Generate response with Claude
+            claude_response = await self.claude_client.generate_response(
+                user_input=user_input,
+                system_prompt=system_prompt,
+                use_case=use_case,
+                max_tokens=150  # ADHD-optimized length
+            )
+            
+            # Convert Claude response to LLMResponse
+            return LLMResponse(
+                text=claude_response.text,
+                source="claude_browser",
+                confidence=claude_response.confidence,
+                latency_ms=claude_response.latency_ms,
+                cost_usd=claude_response.cost_estimate_usd,
+                model_used=claude_response.model
+            )
+            
+        except Exception as e:
+            logger.error("Claude request failed, falling back to local", error=str(e))
+            # Fallback to local LLM
+            return await self._handle_local(user_input, context, nudge_tier)
 
 
 # Global router instance

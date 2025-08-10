@@ -61,6 +61,18 @@ from frames.builder import frame_builder
 from traces.memory import trace_memory
 from nudge.engine import nudge_engine
 
+# Import Claude integration
+claude_available = False
+claude_client = None
+claude_router = None
+
+try:
+    from mcp_server.claude_client import claude_client
+    claude_available = True
+    logger.info("✅ Claude client loaded successfully")
+except ImportError as e:
+    logger.warning(f"Claude integration not available: {e}")
+
 # In-memory fallbacks
 memory_store = {
     'sessions': {},
@@ -204,7 +216,9 @@ async def health_check():
             "database": database_engine is not None,
             "frame_builder": True,
             "trace_memory": True,
-            "nudge_engine": True
+            "nudge_engine": True,
+            "claude_integration": claude_available,
+            "claude_authenticated": claude_client.is_available() if claude_available and claude_client else False
         },
         "mode": "minimal"
     }
@@ -321,6 +335,109 @@ async def get_user_state(user_id: str):
     except Exception as e:
         logger.error(f"Failed to get user state: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve user state")
+
+# Claude authentication endpoints (simplified - no complex router dependencies)
+if claude_available and claude_client:
+    @app.post("/claude/authenticate")
+    async def authenticate_claude_simple(request: dict):
+        """Simple Claude authentication endpoint."""
+        try:
+            session_token = request.get("session_token")
+            if not session_token:
+                return {
+                    "success": False,
+                    "message": (
+                        "To use your Claude Pro/Max subscription:\n\n"
+                        "1. Go to claude.ai and sign in\n"
+                        "2. Open browser developer tools (F12)\n"
+                        "3. Go to Application > Storage > Cookies\n"
+                        "4. Copy the 'sessionKey' value\n"
+                        "5. Send POST to /claude/authenticate with {'session_token': 'your_token'}\n\n"
+                        "This allows advanced reasoning for complex ADHD support."
+                    ),
+                    "requires_browser": True
+                }
+            
+            success = await claude_client.authenticate_with_token(session_token)
+            
+            if success:
+                return {
+                    "success": True,
+                    "message": "Claude authenticated! You can now use Claude Pro/Max models for complex ADHD support.",
+                    "available_models": [
+                        "claude-3-haiku-20240307",
+                        "claude-3-sonnet-20240229", 
+                        "claude-3-opus-20240229",
+                        "claude-3-5-sonnet-20241022"
+                    ]
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Invalid Claude session token. Please check your token and try again."
+                }
+        except Exception as e:
+            logger.error("Claude authentication error", error=str(e))
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    @app.get("/claude/status")
+    async def claude_status_simple():
+        """Get Claude authentication status."""
+        try:
+            if not claude_client.is_available():
+                return {
+                    "authenticated": False,
+                    "message": "Claude not authenticated. Use /claude/authenticate"
+                }
+            
+            usage_stats = None
+            if claude_client.browser_session:
+                usage_stats = claude_client.browser_session.get_usage_stats()
+            
+            return {
+                "authenticated": True,
+                "subscription_type": "claude_pro",
+                "usage_stats": usage_stats,
+                "available_models": [
+                    "claude-3-haiku-20240307",
+                    "claude-3-sonnet-20240229", 
+                    "claude-3-opus-20240229",
+                    "claude-3-5-sonnet-20241022"
+                ]
+            }
+        except Exception as e:
+            return {"error": str(e)}
+    
+    @app.get("/claude/test")
+    async def claude_test_simple():
+        """Test Claude connection with ADHD-focused prompt."""
+        try:
+            if not claude_client.is_available():
+                return {
+                    "available": False,
+                    "message": "Claude not authenticated. Use /claude/authenticate"
+                }
+            
+            test_response = await claude_client.generate_response(
+                "I need help staying focused on my work",
+                use_case="gentle_nudge"
+            )
+            
+            return {
+                "available": True,
+                "test_response": test_response.text,
+                "model": test_response.model,
+                "latency_ms": round(test_response.latency_ms, 1),
+                "confidence": test_response.confidence
+            }
+        except Exception as e:
+            return {
+                "available": False,
+                "error": str(e)
+            }
 
 # Circuit breaker status
 @app.get("/circuit-breaker/{user_id}")

@@ -487,6 +487,13 @@ class BrowserAuth:
 
 # Pre-configured OAuth configs for popular services
 OAUTH_CONFIGS = {
+    'claude': {
+        'client_id': 'claude-mcp-adhd',
+        'client_secret': 'browser-auth-claude',
+        'authorization_url': 'https://claude.ai/auth/oauth2/authorize',
+        'token_url': 'https://claude.ai/api/auth/oauth2/token',
+        'scope': 'chat:write model:access organization:read'
+    },
     'gmail': {
         'client_id': '',  # To be filled by user
         'client_secret': '',  # To be filled by user
