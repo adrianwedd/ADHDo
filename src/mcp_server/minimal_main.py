@@ -461,19 +461,33 @@ async def get_circuit_breaker_status(user_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+    import socket
     
-    print("🧠 Starting MCP ADHD Server - Minimal Mode")
+    # Get local network IP
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+    
+    # Try to get actual network IP
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(('8.8.8.8', 80))
+            local_ip = s.getsockname()[0]
+    except:
+        pass
+    
+    # ADHD-friendly port - memorable and conflict-free (23443 = "ADHD" on phone keypad!)
+    port = int(os.environ.get("PORT", 23443))
+    
+    print("🧠 Starting MCP ADHD Server - Network Mode")
     print("🔧 Sophisticated cognitive loop with optional enterprise features")
-    print("📍 Server will be available at http://localhost:8000")
-    print("📖 API docs at http://localhost:8000/docs")
-    
-    # Auto-detect port
-    port = int(os.environ.get("PORT", 8000))
+    print(f"🌐 Local network: http://{local_ip}:{port}")
+    print(f"📍 Localhost: http://localhost:{port}")
+    print("📖 API docs available at both URLs + /docs")
     
     # Check if port is in use and find alternative
-    import socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    if sock.connect_ex(('localhost', port)) == 0:
+    sock.settimeout(1)
+    if sock.connect_ex(('0.0.0.0', port)) == 0:
         port += 1
         print(f"🔄 Port {port-1} in use, trying {port}")
     sock.close()
@@ -481,7 +495,7 @@ if __name__ == "__main__":
     try:
         uvicorn.run(
             app,
-            host="0.0.0.0",
+            host="0.0.0.0",  # Listen on all interfaces
             port=port,
             log_level="info"
         )
