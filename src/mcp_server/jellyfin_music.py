@@ -139,7 +139,7 @@ class JellyfinMusicController:
                             name=item.get('Name', 'Unknown'),
                             artist=item.get('AlbumArtist', item.get('Artists', ['Unknown'])[0] if item.get('Artists') else 'Unknown'),
                             duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
-                            stream_url=f"{self.jellyfin_url.replace('localhost', '10.30.17.41')}/Audio/{item['Id']}/stream?api_key={self.api_key}"
+                            stream_url=f"{self.jellyfin_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
                         )
                         
                         # Categorize by genre or use smart categorization
@@ -248,8 +248,9 @@ class JellyfinMusicController:
             
             # Cast to Chromecast if connected
             if self.state.chromecast_connected and self.media_controller:
-                # Replace localhost with actual IP for Chromecast access
-                stream_url = track.stream_url.replace('localhost', '10.30.17.41')
+                # Use the URL as-is (already has the tunnel URL)
+                stream_url = track.stream_url
+                logger.info(f"🔗 Stream URL: {stream_url}")
                 
                 self.media_controller.play_media(
                     stream_url,

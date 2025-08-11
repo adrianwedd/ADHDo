@@ -193,16 +193,11 @@ class NestNudgeSystem:
                 logger.warning("No suitable device found for nudge")
                 return False
             
-            # Generate TTS audio
-            tts = gTTS(text=message, lang='en', slow=False)
-            
-            # Save to temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
-                tts.save(tmp_file.name)
-                # Store filename for serving
-                self._audio_files = getattr(self, '_audio_files', {})
-                self._audio_files[os.path.basename(tmp_file.name)] = tmp_file.name
-                audio_url = f"http://10.30.17.41:23443/nudge-audio/{os.path.basename(tmp_file.name)}"
+            # Use Google TTS directly (external URL works, local URLs don't)
+            import urllib.parse
+            encoded_message = urllib.parse.quote(message)
+            audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_message}&tl=en&client=tw-ob"
+            logger.info(f"🌐 Using external TTS URL (workaround for network issue): {audio_url[:80]}...")
             
             # Send nudge using fresh discovery approach (like working direct test)
             loop = asyncio.get_event_loop()
@@ -219,9 +214,6 @@ class NestNudgeSystem:
                 # Update last nudge time
                 self.last_nudge_time[target_device.name] = datetime.now()
                 logger.info(f"📢 Nudge sent to {target_device.name}: {message[:50]}...")
-                
-                # Clean up temp file after a delay
-                asyncio.create_task(self._cleanup_audio_file(tmp_file.name, delay=30))
                 return True
             else:
                 logger.error(f"Failed to send nudge to {target_device.name}")

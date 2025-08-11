@@ -100,3 +100,25 @@ dump.rdb
 # Playwright
 test-results/
 playwright-report/
+
+# Cloudflare tunnel files
+cloudflared.deb
+cloudflare-tunnel.yml
+*.pem
+tunnel-*.txt
+*-tunnel.json
+
+# Test files
+test_*.py
+test_*.json
+
+# Temporary files
+*.txt
+!requirements.txt
+!requirements-*.txt
+!README.txt
+
+# Audio test files
+*.mp3
+*.wav
+audio_files/

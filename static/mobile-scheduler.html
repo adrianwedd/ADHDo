@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>ADHD Scheduler - Smart Nudges</title>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-blue: #3B82F6;
+            --secondary-green: #10B981;
+            --warning-amber: #F59E0B;
+            --danger-red: #EF4444;
+            --success-green: #059669;
+            --bg-gray: #F8FAFC;
+            --card-white: #FFFFFF;
+            --text-dark: #1F2937;
+            --text-muted: #6B7280;
+            --border-light: #E5E7EB;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-gray);
+            color: var(--text-dark);
+            padding-bottom: 80px; /* Space for bottom nav */
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-blue), #1E40AF);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 0.875rem;
+        }
+        
+        .container {
+            padding: 1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: var(--card-white);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-dark);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-light);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.2s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .form-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-light);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            background: white;
+            transition: border-color 0.2s ease;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 1rem;
+        }
+        
+        .btn-primary {
+            background: var(--primary-blue);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger {
+            background: var(--danger-red);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: var(--text-muted);
+            color: white;
+        }
+        
+        .btn-full {
+            width: 100%;
+        }
+        
+        .schedule-item {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+        
+        .schedule-item.active {
+            border-color: var(--success-green);
+            background: rgba(16, 185, 129, 0.05);
+        }
+        
+        .schedule-header {
+            display: flex;
+            justify-content: between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+        
+        .schedule-title {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0.25rem;
+        }
+        
+        .schedule-time {
+            color: var(--primary-blue);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .schedule-status {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .schedule-status.enabled {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-green);
+        }
+        
+        .schedule-status.disabled {
+            background: rgba(107, 114, 128, 0.1);
+            color: var(--text-muted);
+        }
+        
+        .schedule-details {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        
+        .schedule-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn-sm {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+        }
+        
+        .quick-setup {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .quick-btn {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--primary-blue);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            text-align: center;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .quick-btn:hover {
+            background: rgba(59, 130, 246, 0.15);
+            transform: translateY(-1px);
+        }
+        
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .success-message, .error-message {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+        
+        .success-message {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-green);
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger-red);
+        }
+        
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid var(--border-light);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-around;
+        }
+        
+        .nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.75rem;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: color 0.2s ease;
+        }
+        
+        .nav-btn.active {
+            color: var(--primary-blue);
+        }
+        
+        .nav-btn i {
+            font-size: 1.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-clock"></i> Smart Scheduler</h1>
+        <p>ADHD-optimized intelligent nudging with 70+ message variations</p>
+    </div>
+    
+    <div class="container">
+        <!-- Success/Error Messages -->
+        <div id="messageContainer"></div>
+        
+        <!-- Quick Setup Section -->
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-zap"></i> Quick Setup
+            </div>
+            <div class="quick-setup">
+                <div class="quick-btn" onclick="setupBedtime()">
+                    <div><i class="fas fa-bed" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i></div>
+                    <div><strong>Bedtime</strong></div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">10:00 PM</div>
+                </div>
+                <div class="quick-btn" onclick="setupMedication()">
+                    <div><i class="fas fa-pills" style="font-size: 1.5rem; margin-bottom: 0.5rem;"></i></div>
+                    <div><strong>Medication</strong></div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">8:00 AM</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Active Schedules -->
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-calendar-check"></i> Active Schedules
+                <button class="btn btn-secondary btn-sm" onclick="refreshSchedules()" style="margin-left: auto;">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+            <div id="schedulesList">
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                    <div>Loading schedules...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Custom Schedule Form -->
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-plus-circle"></i> Create Custom Schedule
+            </div>
+            <form id="scheduleForm">
+                <div class="form-group">
+                    <label class="form-label">Schedule Type</label>
+                    <select class="form-select" id="scheduleType">
+                        <option value="bedtime">Bedtime</option>
+                        <option value="medication">Medication</option>
+                        <option value="break_time">Break Time</option>
+                        <option value="focus_session">Focus Session</option>
+                        <option value="custom">Custom Reminder</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Target Time</label>
+                    <input type="time" class="form-input" id="targetTime" value="22:00" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Title</label>
+                    <input type="text" class="form-input" id="scheduleTitle" placeholder="e.g., Bedtime" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Context (helps with message generation)</label>
+                    <input type="text" class="form-input" id="scheduleContext" 
+                           placeholder="e.g., Good sleep is crucial for ADHD brain regulation">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Tone</label>
+                    <select class="form-select" id="scheduleTone">
+                        <option value="encouraging">Encouraging</option>
+                        <option value="firm">Firm</option>
+                        <option value="playful">Playful</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Pre-nudge Warning (minutes before)</label>
+                    <select class="form-select" id="preNudgeMinutes">
+                        <option value="5">5 minutes</option>
+                        <option value="10">10 minutes</option>
+                        <option value="15" selected>15 minutes</option>
+                        <option value="30">30 minutes</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-full">
+                    <i class="fas fa-plus"></i> Create Schedule
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <a href="mobile-dashboard.html" class="nav-btn">
+            <i class="fas fa-home"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="#" class="nav-btn active">
+            <i class="fas fa-clock"></i>
+            <span>Scheduler</span>
+        </a>
+        <a href="#" class="nav-btn">
+            <i class="fas fa-music"></i>
+            <span>Music</span>
+        </a>
+        <a href="#" class="nav-btn">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+        </a>
+    </div>
+    
+    <script>
+        // API base URL
+        const API_BASE = window.location.origin;
+        
+        // Load schedules on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshSchedules();
+            
+            // Update schedule type context
+            document.getElementById('scheduleType').addEventListener('change', function() {
+                updateFormForScheduleType(this.value);
+            });
+        });
+        
+        function updateFormForScheduleType(type) {
+            const titleInput = document.getElementById('scheduleTitle');
+            const contextInput = document.getElementById('scheduleContext');
+            const timeInput = document.getElementById('targetTime');
+            
+            switch(type) {
+                case 'bedtime':
+                    titleInput.value = 'Bedtime';
+                    contextInput.value = 'Good sleep is crucial for ADHD brain regulation and executive function';
+                    timeInput.value = '22:00';
+                    break;
+                case 'medication':
+                    titleInput.value = 'Medication';
+                    contextInput.value = 'Consistent medication timing is key for ADHD symptom management';
+                    timeInput.value = '08:00';
+                    break;
+                case 'break_time':
+                    titleInput.value = 'Break Time';
+                    contextInput.value = 'Regular breaks help prevent ADHD burnout and maintain focus';
+                    timeInput.value = '14:00';
+                    break;
+                case 'focus_session':
+                    titleInput.value = 'Focus Session';
+                    contextInput.value = 'Dedicated focus time helps maximize ADHD productivity';
+                    timeInput.value = '09:00';
+                    break;
+                default:
+                    titleInput.value = '';
+                    contextInput.value = '';
+                    timeInput.value = '12:00';
+            }
+        }
+        
+        async function refreshSchedules() {
+            try {
+                const response = await fetch(`${API_BASE}/schedule/list`);
+                const data = await response.json();
+                
+                if (data.schedules) {
+                    renderSchedules(data.schedules);
+                } else {
+                    showError('Failed to load schedules');
+                }
+            } catch (error) {
+                showError('Network error loading schedules');
+            }
+        }
+        
+        function renderSchedules(schedules) {
+            const container = document.getElementById('schedulesList');
+            
+            if (schedules.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                        <i class="fas fa-calendar-plus" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <div>No schedules yet. Create your first one!</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = schedules.map(schedule => `
+                <div class="schedule-item ${schedule.enabled ? 'active' : ''}">
+                    <div class="schedule-status ${schedule.enabled ? 'enabled' : 'disabled'}">
+                        ${schedule.enabled ? 'Active' : 'Disabled'}
+                    </div>
+                    <div class="schedule-title">${schedule.title}</div>
+                    <div class="schedule-time">
+                        <i class="fas fa-clock"></i> ${schedule.target_time}
+                        ${schedule.pre_nudge_minutes ? `(${schedule.pre_nudge_minutes}min warning)` : ''}
+                    </div>
+                    <div class="schedule-details">
+                        ${schedule.context || 'No context provided'}
+                    </div>
+                    <div class="schedule-actions">
+                        ${schedule.acknowledged ? 
+                            '<button class="btn btn-secondary btn-sm" onclick="unacknowledge(\'' + schedule.schedule_id + '\')"><i class="fas fa-undo"></i> Reactivate</button>' :
+                            '<button class="btn btn-primary btn-sm" onclick="acknowledgeSchedule(\'' + schedule.schedule_id + '\')"><i class="fas fa-check"></i> Done</button>'
+                        }
+                        <button class="btn btn-secondary btn-sm" onclick="snoozeSchedule('${schedule.schedule_id}', 10)">
+                            <i class="fas fa-snooze"></i> Snooze 10m
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${schedule.schedule_id}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function setupBedtime() {
+            showMessage('Setting up bedtime schedule...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/schedule/bedtime?target_time=22:00&tone=encouraging`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`✅ ${data.message}`, 'success');
+                    refreshSchedules();
+                } else {
+                    showError(data.message || 'Failed to setup bedtime schedule');
+                }
+            } catch (error) {
+                showError('Network error setting up bedtime schedule');
+            }
+        }
+        
+        async function setupMedication() {
+            const data = {
+                target_time: '08:00',
+                title: 'Medication',
+                context: 'Consistent medication timing is key for ADHD symptom management',
+                schedule_type: 'medication',
+                tone: 'encouraging',
+                pre_nudge_minutes: 5
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/schedule/add`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage('✅ Medication schedule created!', 'success');
+                    refreshSchedules();
+                } else {
+                    showError(result.message || 'Failed to create medication schedule');
+                }
+            } catch (error) {
+                showError('Network error creating medication schedule');
+            }
+        }
+        
+        document.getElementById('scheduleForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                target_time: document.getElementById('targetTime').value,
+                title: document.getElementById('scheduleTitle').value,
+                context: document.getElementById('scheduleContext').value,
+                schedule_type: document.getElementById('scheduleType').value,
+                tone: document.getElementById('scheduleTone').value,
+                pre_nudge_minutes: parseInt(document.getElementById('preNudgeMinutes').value)
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/schedule/add`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage(`✅ ${result.message}`, 'success');
+                    document.getElementById('scheduleForm').reset();
+                    refreshSchedules();
+                } else {
+                    showError(result.message || 'Failed to create schedule');
+                }
+            } catch (error) {
+                showError('Network error creating schedule');
+            }
+        });
+        
+        async function acknowledgeSchedule(scheduleId) {
+            try {
+                const response = await fetch(`${API_BASE}/schedule/${scheduleId}/acknowledge`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage('✅ Schedule acknowledged', 'success');
+                    refreshSchedules();
+                } else {
+                    showError(result.message || 'Failed to acknowledge schedule');
+                }
+            } catch (error) {
+                showError('Network error acknowledging schedule');
+            }
+        }
+        
+        async function snoozeSchedule(scheduleId, minutes) {
+            try {
+                const response = await fetch(`${API_BASE}/schedule/${scheduleId}/snooze?minutes=${minutes}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage(`😴 Snoozed for ${minutes} minutes`, 'success');
+                    refreshSchedules();
+                } else {
+                    showError(result.message || 'Failed to snooze schedule');
+                }
+            } catch (error) {
+                showError('Network error snoozing schedule');
+            }
+        }
+        
+        function showMessage(message, type) {
+            const container = document.getElementById('messageContainer');
+            const className = type === 'success' ? 'success-message' : type === 'error' ? 'error-message' : 'info-message';
+            
+            container.innerHTML = `<div class="${className}">${message}</div>`;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3000);
+        }
+        
+        function showError(message) {
+            showMessage(message, 'error');
+        }
+    </script>
+</body>
+</html>

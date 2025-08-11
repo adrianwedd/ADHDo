@@ -175,14 +175,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"Trace memory initialization failed: {e}")
     
-    # Initialize nudge engine
+    # Initialize nudge engine and smart scheduler
     try:
         from mcp_server.nest_nudges import initialize_nest_nudges
+        from mcp_server.smart_scheduler import initialize_smart_scheduler
+        
         nudge_success = await initialize_nest_nudges()
+        scheduler_success = await initialize_smart_scheduler()
+        
         if nudge_success:
             logger.info("✅ Nest nudge system initialized")
         else:
             logger.info("✅ Nudge engine initialized (Nest devices not found)")
+        
+        if scheduler_success:
+            logger.info("✅ Smart scheduler initialized with LLM nudging")
+        else:
+            logger.warning("⚠️ Smart scheduler failed to initialize")
+            
     except Exception as e:
         logger.warning(f"Nudge engine initialization failed: {e}")
     
@@ -1209,6 +1219,153 @@ async def get_nudge_devices():
         logger.error(f"Failed to get nudge devices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Smart Scheduler Endpoints
+@app.post("/schedule/add")
+async def add_schedule(request: dict):
+    """Add a new intelligent nudge schedule."""
+    try:
+        from mcp_server.smart_scheduler import smart_scheduler, NudgeSchedule, ScheduleType
+        from datetime import datetime
+        
+        if not smart_scheduler:
+            return {"success": False, "message": "Smart scheduler not available"}
+        
+        # Create schedule from request
+        schedule = NudgeSchedule(
+            schedule_id=request.get("schedule_id", f"schedule_{int(datetime.now().timestamp())}"),
+            user_id=request.get("user_id", "default"),
+            schedule_type=ScheduleType(request.get("schedule_type", "custom")),
+            target_time=request["target_time"],  # Required: "HH:MM" format
+            title=request.get("title", "Reminder"),
+            context=request.get("context", ""),
+            enabled=request.get("enabled", True),
+            pre_nudge_minutes=request.get("pre_nudge_minutes", 15),
+            escalation_intervals=request.get("escalation_intervals", [5, 10, 15, 20, 30]),
+            max_attempts=request.get("max_attempts", 5),
+            tone=request.get("tone", "encouraging"),
+            use_llm=request.get("use_llm", True)
+        )
+        
+        success = await smart_scheduler.add_schedule(schedule)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"✅ Added schedule: {schedule.title} at {schedule.target_time}",
+                "schedule_id": schedule.schedule_id
+            }
+        else:
+            return {"success": False, "message": "Failed to add schedule"}
+            
+    except Exception as e:
+        logger.error(f"Add schedule failed: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/schedule/list")
+async def list_schedules():
+    """Get all active schedules."""
+    try:
+        from mcp_server.smart_scheduler import smart_scheduler
+        
+        if not smart_scheduler:
+            return {"schedules": [], "message": "Smart scheduler not available"}
+        
+        schedules = smart_scheduler.get_schedules()
+        return {
+            "schedules": schedules,
+            "total": len(schedules)
+        }
+        
+    except Exception as e:
+        logger.error(f"List schedules failed: {e}")
+        return {"error": str(e)}
+
+@app.post("/schedule/{schedule_id}/acknowledge")
+async def acknowledge_schedule(schedule_id: str):
+    """Acknowledge a nudge to stop the sequence."""
+    try:
+        from mcp_server.smart_scheduler import smart_scheduler
+        
+        if not smart_scheduler:
+            return {"success": False, "message": "Smart scheduler not available"}
+        
+        success = await smart_scheduler.acknowledge_nudge(schedule_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"✅ Acknowledged schedule: {schedule_id}"
+            }
+        else:
+            return {"success": False, "message": "Schedule not found"}
+            
+    except Exception as e:
+        logger.error(f"Acknowledge schedule failed: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/schedule/{schedule_id}/snooze")
+async def snooze_schedule(schedule_id: str, minutes: int = 10):
+    """Snooze a nudge for specified minutes."""
+    try:
+        from mcp_server.smart_scheduler import smart_scheduler
+        
+        if not smart_scheduler:
+            return {"success": False, "message": "Smart scheduler not available"}
+        
+        success = await smart_scheduler.snooze_nudge(schedule_id, minutes)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"😴 Snoozed schedule {schedule_id} for {minutes} minutes"
+            }
+        else:
+            return {"success": False, "message": "Schedule not found"}
+            
+    except Exception as e:
+        logger.error(f"Snooze schedule failed: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/schedule/bedtime")
+async def quick_bedtime_schedule(target_time: str = "22:00", tone: str = "encouraging"):
+    """Quick endpoint to set up bedtime nudging."""
+    try:
+        from mcp_server.smart_scheduler import smart_scheduler, NudgeSchedule, ScheduleType
+        from datetime import datetime
+        
+        if not smart_scheduler:
+            return {"success": False, "message": "Smart scheduler not available"}
+        
+        # Create bedtime schedule
+        bedtime_schedule = NudgeSchedule(
+            schedule_id="bedtime_user",
+            schedule_type=ScheduleType.BEDTIME,
+            target_time=target_time,
+            title="Bedtime",
+            context="Good sleep is crucial for ADHD brain regulation and executive function",
+            tone=tone,
+            pre_nudge_minutes=15,
+            escalation_intervals=[10, 15, 20, 30, 45],
+            max_attempts=6,
+            use_llm=True
+        )
+        
+        success = await smart_scheduler.add_schedule(bedtime_schedule)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"🛏️ Bedtime nudging set for {target_time} with {tone} tone",
+                "schedule_id": "bedtime_user",
+                "details": "Will start gentle reminders 15 min before, then escalate every 10-45 min"
+            }
+        else:
+            return {"success": False, "message": "Failed to set bedtime schedule"}
+            
+    except Exception as e:
+        logger.error(f"Bedtime schedule failed: {e}")
+        return {"success": False, "error": str(e)}
+
 @app.get("/nudge-audio/{filename}")
 async def serve_nudge_audio(filename: str):
     """Serve temporary nudge audio files to Chromecast."""
@@ -1346,7 +1503,7 @@ async def get_watch_stats():
 # 🎵 JELLYFIN MUSIC INTEGRATION ENDPOINTS
 # ============================================================================
 
-# Music integration imports with fallbacks
+# Jellyfin music integration with fallbacks
 music_available = False
 jellyfin_music = None
 
@@ -1820,6 +1977,9 @@ async def serve_test_audio():
         return FileResponse(test_file, media_type="audio/mp3")
     else:
         raise HTTPException(status_code=404, detail="Test file not found")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     import uvicorn
