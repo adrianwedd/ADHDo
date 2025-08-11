@@ -264,24 +264,6 @@ class ADHDSupport:
             task_breakdown=["Open document", "Write bad first line", "Keep going for 2 min"]
         )
     
-    def strip_thinking_tags(self, text: str) -> tuple[str, str]:
-        """Strip <think> tags from response, return (clean_text, thinking)."""
-        import re
-        
-        # Find all thinking blocks
-        think_pattern = r'<think>.*?</think>'
-        thinking_blocks = re.findall(think_pattern, text, re.DOTALL)
-        thinking = ' '.join(thinking_blocks) if thinking_blocks else ''
-        
-        # Remove thinking blocks from text
-        clean_text = re.sub(think_pattern, '', text, flags=re.DOTALL).strip()
-        
-        # If entire response was in thinking tags, use a fallback
-        if not clean_text and thinking:
-            clean_text = "Let me help you with that. What specific part is most challenging right now?"
-        
-        return clean_text, thinking
-    
     async def llm_response(self, message: str, context: Dict) -> ChatResponse:
         """Get response from LLM if available."""
         
@@ -290,8 +272,7 @@ class ADHDSupport:
         Context: {json.dumps(context) if context else 'None'}
         
         Provide a helpful response focused on ADHD challenges.
-        Keep it under 100 words and actionable.
-        Do NOT use thinking tags or meta-commentary. Just give the direct response."""
+        Keep it under 100 words and actionable."""
         
         try:
             if config.use_local_llm and llm_client:
@@ -300,24 +281,7 @@ class ADHDSupport:
                     model=config.ollama_model,
                     messages=[{'role': 'user', 'content': prompt}]
                 )
-                raw_text = response['message']['content']
-                
-                # Strip thinking tags if present
-                clean_text, thinking = self.strip_thinking_tags(raw_text)
-                
-                # Store thinking in memory/database for learning (if we had persistent storage)
-                if thinking and redis_client:
-                    # Store for analysis but don't show to user
-                    asyncio.create_task(
-                        redis_client.hset(
-                            f"llm_thinking:{message[:50]}", 
-                            "thinking", thinking,
-                            "response", clean_text
-                        )
-                    )
-                
-                text = clean_text
-                
+                text = response['message']['content']
             elif llm_client:
                 # OpenAI
                 response = llm_client.ChatCompletion.create(
@@ -329,21 +293,7 @@ class ADHDSupport:
             else:
                 text = "I want to help. Can you tell me more about what you're struggling with?"
                 
-            # Parse for actionable suggestions
-            suggestions = []
-            if "try" in text.lower() or "consider" in text.lower():
-                # Extract action items (simple heuristic)
-                lines = text.split('\n')
-                for line in lines:
-                    if any(marker in line.lower() for marker in ['•', '-', '*', 'try', '1.', '2.', '3.']):
-                        suggestion = line.strip(' •-*123.')[:30]  # First 30 chars
-                        if len(suggestion) > 5:
-                            suggestions.append(suggestion + "...")
-            
-            # Limit to 3 suggestions
-            suggestions = suggestions[:3] if suggestions else ["Break it down", "Take a pause", "Try for 2 minutes"]
-                
-            return ChatResponse(response=text, suggestions=suggestions)
+            return ChatResponse(response=text)
             
         except Exception as e:
             logger.error(f"LLM error: {e}")
@@ -459,8 +409,7 @@ async def root():
                     const data = await response.json();
                     
                     // Add response to chat
-                    const responseText = data.response.replace(/\\n/g, '<br>');
-                    chat.innerHTML += `<div class="message assistant">${responseText}</div>`;
+                    chat.innerHTML += `<div class="message assistant">${data.response.replace(/\n/g, '<br>')}</div>`;
                     
                     // Show suggestions
                     const sugg = document.getElementById('suggestions');
@@ -586,23 +535,7 @@ async def send_nudge(user_id: str = "default_user", message: Optional[str] = Non
     ]
     
     import random
-    
-    # If we have Ollama and no specific message, try to get a personalized nudge
-    if not message and config.use_local_llm and llm_client:
-        try:
-            prompt = "Generate a brief, encouraging ADHD-friendly nudge or reminder. Max 15 words. Be warm and supportive."
-            response = llm_client.chat(
-                model=config.ollama_model,
-                messages=[{'role': 'user', 'content': prompt}]
-            )
-            raw_text = response['message']['content']
-            # Strip any thinking tags
-            clean_text, _ = adhd_support.strip_thinking_tags(raw_text)
-            nudge = clean_text if clean_text else random.choice(default_nudges)
-        except:
-            nudge = random.choice(default_nudges)
-    else:
-        nudge = message or random.choice(default_nudges)
+    nudge = message or random.choice(default_nudges)
     
     return {"nudge": nudge, "timestamp": datetime.now().isoformat()}
 

@@ -42,49 +42,49 @@ from fastapi.staticfiles import StaticFiles
 _record_import_time('fastapi', _import_start)
 
 # Import performance config and lazy loading utilities
-from mcp_server.performance_config import (
+from .performance_config import (
     perf_config, lazy_importer, should_enable_service
 )
-from mcp_server import __version__
-from mcp_server.config import settings
+from . import __version__
+from .config import settings
 
 # Core system imports (required for basic functionality)
-from mcp_server.database import init_database, close_database
-from mcp_server.middleware import (
+from .database import init_database, close_database
+from .middleware import (
     MetricsMiddleware, PerformanceMiddleware, 
     HealthCheckMiddleware, ADHDOptimizationMiddleware, SecurityMiddleware
 )
 # Enhanced security middleware (OWASP Level 2 compliant)
-from mcp_server.enhanced_security_middleware import (
+from .enhanced_security_middleware import (
     EnhancedSecurityMiddleware, EnhancedCSRFMiddleware
 )
-from mcp_server.security_middleware import SessionCleanupMiddleware
-from mcp_server.health_monitor import health_monitor
-from mcp_server.metrics import metrics_collector
-from mcp_server.alerting import alert_manager
-from mcp_server.websocket_manager import websocket_manager, start_periodic_health_check
-from mcp_server.exception_handlers import register_exception_handlers
+from .security_middleware import SessionCleanupMiddleware
+from .health_monitor import health_monitor
+from .metrics import metrics_collector
+from .alerting import alert_manager
+from .websocket_manager import websocket_manager, start_periodic_health_check
+from .exception_handlers import register_exception_handlers
 
 # Import core routers only - defer optional ones
-from mcp_server.routers import (
+from .routers import (
     auth_router, health_router, chat_router, user_router,
     webhook_router, beta_router, docs_router, calendar_router, onboarding_router, adhd_router
 )
-from mcp_server.routers.claude_auth_router import router as claude_auth_router
+from .routers.claude_auth_router import router as claude_auth_router
 
 # Import background processing routes  
-from mcp_server.routers.background_routes import background_router
+from .routers.background_routes import background_router
 
 # Import background processing and caching systems (lazy loaded)
 _background_systems_loaded = False
 
 # Import comprehensive monitoring system
-from mcp_server.monitoring import monitoring_system
-from mcp_server.monitoring_middleware import (
+from .monitoring import monitoring_system
+from .monitoring_middleware import (
     ComprehensiveMonitoringMiddleware, ADHDUserExperienceMiddleware
 )
-from mcp_server.database_monitoring import db_monitor
-from mcp_server.database_optimization import database_optimizer
+from .database_monitoring import db_monitor
+from .database_optimization import database_optimizer
 
 # Import enhanced ADHD features (lazy loaded)
 _enhanced_features = None
@@ -155,15 +155,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Initialize background processing and caching systems if enabled
         if settings.background_processing_enabled:
             logger.info("Loading background processing systems...")
-            from mcp_server.background_processing import background_task_manager
-            from mcp_server.task_monitoring import task_monitoring_system
+            from .background_processing import background_task_manager
+            from .task_monitoring import task_monitoring_system
             core_tasks.append(background_task_manager.initialize())
             core_tasks.append(task_monitoring_system.initialize())
             
         if settings.cache_enabled:
             logger.info("Loading caching systems...")
-            from mcp_server.caching_system import cache_manager
-            from mcp_server.cache_strategies import cache_warming_engine, cache_invalidation_engine
+            from .caching_system import cache_manager
+            from .cache_strategies import cache_warming_engine, cache_invalidation_engine
             core_tasks.append(cache_manager.initialize())
             core_tasks.append(cache_warming_engine.initialize())
             core_tasks.append(cache_invalidation_engine.initialize())
@@ -182,7 +182,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         # Initialize database monitoring and optimization with the initialized database engine
         try:
-            from mcp_server.database import get_engine
+            from .database import get_engine
             db_engine = get_engine()
             if db_engine:
                 # Initialize monitoring
@@ -219,7 +219,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Start background workers if enabled
         if settings.background_processing_enabled and _background_systems_loaded:
             logger.info("Starting background workers...")
-            from mcp_server.background_processing import background_task_manager
+            from .background_processing import background_task_manager
             worker_counts = {
                 # ADHD-optimized worker allocation
                 'crisis': 2,      # Always available for crisis
@@ -316,8 +316,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Shutdown background processing and caching systems
             if settings.background_processing_enabled and _background_systems_loaded:
                 logger.info("Shutting down background processing systems...")
-                from mcp_server.background_processing import background_task_manager
-                from mcp_server.task_monitoring import task_monitoring_system
+                from .background_processing import background_task_manager
+                from .task_monitoring import task_monitoring_system
                 shutdown_tasks.extend([
                     background_task_manager.shutdown(),
                     task_monitoring_system.shutdown()
@@ -325,8 +325,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 
             if settings.cache_enabled and _background_systems_loaded:
                 logger.info("Shutting down caching systems...")
-                from mcp_server.caching_system import cache_manager
-                from mcp_server.cache_strategies import cache_warming_engine, cache_invalidation_engine
+                from .caching_system import cache_manager
+                from .cache_strategies import cache_warming_engine, cache_invalidation_engine
                 shutdown_tasks.extend([
                     cache_manager.shutdown(),
                     cache_warming_engine.shutdown(),

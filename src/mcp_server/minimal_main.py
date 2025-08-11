@@ -674,8 +674,16 @@ async def chat_endpoint(request: ChatRequest):
         processing_time = (asyncio.get_event_loop().time() - start_time) * 1000
         
         # Convert cognitive loop result to API response
+        # Clean up any thinking tags that leaked through
+        response_text = result.response.text if result.response else "I'm here to help. What's challenging you right now?"
+        import re
+        # Remove any <think> tags that might have leaked through
+        response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL).strip()
+        if not response_text:
+            response_text = "I'm here to help! What would you like to work on?"
+            
         response = ChatResponse(
-            response=result.response.text if result.response else "I'm here to help. What's challenging you right now?",
+            response=response_text,
             thinking=result.response.thinking if result.response else None,  # Include thinking for UI
             success=result.success,
             actions_taken=result.actions_taken,
