@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from mcp_server.config import settings
 from mcp_server.models import MCPFrame, UserState, NudgeTier
 from mcp_server.claude_client import claude_client, ClaudeResponse
+from mcp_server.context_aware_prompting import context_aware_prompting
+from mcp_server.adhd_logger import adhd_logger
 
 logger = structlog.get_logger()
 
@@ -30,6 +32,7 @@ class TaskComplexity(Enum):
 class LLMResponse(BaseModel):
     """Response from LLM with metadata."""
     text: str
+    thinking: Optional[str] = None  # Extracted thinking for UI display
     source: str  # "local", "cloud", "hard_coded"
     confidence: float = 1.0
     latency_ms: float = 0.0
@@ -63,7 +66,7 @@ class OllamaClient:
         self, 
         prompt: str, 
         system_prompt: Optional[str] = None,
-        max_tokens: int = 40,  # Further reduced for ADHD quick responses
+        max_tokens: int = 200,  # Increased to prevent truncation while showing thinking
         temperature: float = 0.6  # Lower temp for faster, more focused responses
     ) -> LLMResponse:
         """Generate response using local Ollama model."""
@@ -128,50 +131,65 @@ class OllamaClient:
             # Handle DeepSeek R1 responses with <think> tags
             import re
             
-            # First try to get content outside of <think> tags
-            clean_content = re.sub(r'<think>.*?</think>', '', raw_content, flags=re.DOTALL)
-            clean_content = clean_content.strip()
+            # Extract thinking and response content separately
+            think_match = re.search(r'<think>(.*?)</think>', raw_content, flags=re.DOTALL)
+            response_content = re.sub(r'<think>.*?</think>', '', raw_content, flags=re.DOTALL).strip()
             
-            # If no content outside think tags, extract from inside (DeepSeek R1 behavior)
-            if not clean_content or clean_content == '<think>':
-                # DeepSeek R1 may put everything in thinking - extract meaningful parts
-                think_match = re.search(r'<think>(.*?)</think>', raw_content, flags=re.DOTALL)
-                if think_match:
-                    thinking_content = think_match.group(1).strip()
-                    
-                    # Extract actionable advice from the thinking
-                    sentences = [s.strip() for s in thinking_content.split('.') if s.strip()]
-                    
-                    # Find sentences with actionable words
-                    actionable_words = ['start', 'try', 'do', 'create', 'make', 'set', 'organize', 'focus', 'break']
-                    actionable_sentences = []
-                    
-                    for sentence in sentences[:5]:  # Check first 5 sentences
-                        if any(word in sentence.lower() for word in actionable_words):
-                            actionable_sentences.append(sentence)
-                            if len(actionable_sentences) >= 2:  # Max 2 sentences
+            # Extract thinking for UI display (not for speech)
+            thinking_text = None
+            if think_match:
+                thinking_raw = think_match.group(1).strip()
+                if thinking_raw:
+                    # Clean up thinking text for UI display
+                    thinking_lines = [line.strip() for line in thinking_raw.split('\n') if line.strip()]
+                    # Keep all thinking but format nicely
+                    thinking_text = '\n'.join(thinking_lines)
+            
+            # Use response content if available, otherwise extract from thinking
+            if response_content:
+                clean_content = response_content
+            elif think_match:
+                thinking_content = think_match.group(1).strip()
+                
+                # Extract actionable advice from the thinking  
+                sentences = [s.strip() for s in thinking_content.split('.') if s.strip()]
+                
+                # Find sentences with actionable words
+                actionable_words = ['start', 'try', 'do', 'create', 'make', 'set', 'organize', 'focus', 'break', 'should', 'could', 'might', 'consider']
+                actionable_sentences = []
+                
+                for sentence in sentences[:8]:  # Check more sentences for better responses
+                    if any(word in sentence.lower() for word in actionable_words) and len(sentence) > 20:
+                        actionable_sentences.append(sentence)
+                        if len(actionable_sentences) >= 3:  # Allow up to 3 sentences for full responses
+                            break
+                
+                if actionable_sentences:
+                    clean_content = '. '.join(actionable_sentences)
+                    if not clean_content.endswith('.'):
+                        clean_content += '.'
+                else:
+                    # Take meaningful sentences if no actionable found
+                    meaningful_sentences = []
+                    for sentence in sentences[:5]:
+                        if len(sentence) > 30 and not sentence.startswith(('Okay', 'Well', 'Hmm', 'Wait')):
+                            meaningful_sentences.append(sentence)
+                            if len(meaningful_sentences) >= 2:
                                 break
                     
-                    if actionable_sentences:
-                        clean_content = '. '.join(actionable_sentences)
+                    if meaningful_sentences:
+                        clean_content = '. '.join(meaningful_sentences)
                         if not clean_content.endswith('.'):
                             clean_content += '.'
                     else:
-                        # Take first meaningful sentence if no actionable found
-                        for sentence in sentences[:3]:
-                            if len(sentence) > 20 and not sentence.startswith('Okay') and not sentence.startswith('Well'):
-                                clean_content = sentence + '.' if not sentence.endswith('.') else sentence
-                                break
-                
-                elif raw_content.strip() == '<think>':  # Incomplete response
-                    clean_content = "Let me break that down for you. What specific part of your morning feels most chaotic?"
-            
-            # Final fallback if still empty
-            if not clean_content:
+                        clean_content = "Let me break that down for you. What specific aspect would you like to focus on?"
+            else:
                 clean_content = "I'm here to help! What would you like to work on?"
             
+            # Return clean content for speech, thinking separate for UI
             llm_response = LLMResponse(
-                text=clean_content,
+                text=clean_content,  # Clean text for speech synthesis
+                thinking=thinking_text,  # Separate thinking for UI display
                 source="local",
                 latency_ms=latency_ms,
                 model_used=self.model
@@ -417,23 +435,24 @@ class LLMRouter:
         # Step 2: Complexity assessment
         complexity = self.complexity_classifier.assess_complexity(user_input, context)
         
-        # Step 3: Route based on complexity
-        if complexity == TaskComplexity.SIMPLE:
-            return await self._handle_local(user_input, context, nudge_tier)
-        elif complexity == TaskComplexity.MODERATE:
-            # Try local first, fallback to Claude if available
-            local_response = await self._handle_local(user_input, context, nudge_tier)
-            
-            # If local response is low confidence and Claude is available, use Claude
-            if local_response.confidence < 0.7 and self.claude_client.is_available():
+        # Step 3: Route ALL requests to Claude to reduce Pi load
+        # Use Claude for everything when available to preserve Pi resources
+        if self.claude_client.is_available():
+            logger.info("Routing to Claude to preserve Pi resources")
+            if complexity == TaskComplexity.SIMPLE:
                 return await self._handle_claude(user_input, context, nudge_tier, 'gentle_nudge')
-            
-            return local_response
-        elif complexity == TaskComplexity.COMPLEX:
-            # Use Claude if available, otherwise local with disclaimer
-            if self.claude_client.is_available():
+            elif complexity == TaskComplexity.MODERATE:
+                return await self._handle_claude(user_input, context, nudge_tier, 'gentle_nudge')
+            elif complexity == TaskComplexity.COMPLEX:
                 return await self._handle_claude(user_input, context, nudge_tier, 'complex_breakdown')
-            else:
+        else:
+            # Fallback to local only if Claude unavailable
+            logger.info("Claude not available, using local processing")
+            if complexity == TaskComplexity.SIMPLE:
+                return await self._handle_local(user_input, context, nudge_tier)
+            elif complexity == TaskComplexity.MODERATE:
+                return await self._handle_local(user_input, context, nudge_tier)
+            elif complexity == TaskComplexity.COMPLEX:
                 return await self._handle_local_complex(user_input, context, nudge_tier)
     
     async def _handle_local(
@@ -442,35 +461,18 @@ class LLMRouter:
         context: Optional[MCPFrame],
         nudge_tier: NudgeTier
     ) -> LLMResponse:
-        """Handle request with local LLM."""
-        
-        # Select system prompt based on nudge tier
-        if nudge_tier == NudgeTier.GENTLE:
-            system_prompt = self.adhd_system_prompts["gentle_nudge"]
-        elif nudge_tier in [NudgeTier.SARCASTIC, NudgeTier.SERGEANT]:
-            system_prompt = self.adhd_system_prompts["accountability"]
-        else:
-            system_prompt = self.adhd_system_prompts["gentle_nudge"]
-        
-        # Add context if available
-        if context and context.task_focus:
-            context_info = f"\nCurrent focus: {context.task_focus}"
-            
-            # Extract user state from context
-            user_state = None
-            for ctx_item in context.context:
-                if ctx_item.type.value == "user_state":
-                    user_state = ctx_item.data.get("current_state")
-                    break
-            
-            if user_state:
-                context_info += f"\nUser state: {user_state}"
-            
-            system_prompt += context_info
+        """Handle request with local LLM using sophisticated context-aware prompting."""
         
         # Check for ultra-quick pattern matches first
         quick_response = self._get_quick_response(user_input)
         if quick_response:
+            adhd_logger.pattern_match(
+                pattern=self._identify_pattern(user_input),
+                confidence=0.9,
+                response_time_ms=1.0,
+                user_input=user_input[:50]
+            )
+            
             return LLMResponse(
                 text=quick_response,
                 source="pattern_match",
@@ -479,12 +481,51 @@ class LLMRouter:
                 model_used="quick_match"
             )
         
-        return await self.local_client.generate(
-            user_input,
-            system_prompt=system_prompt,
-            max_tokens=50,  # Shorter responses for speed
-            temperature=0.8  # Slightly higher for faster generation
+        # Generate sophisticated contextual prompts
+        adhd_logger.cognitive_process(
+            "prompt_engineering",
+            "Building context-aware prompts from MCP frame data",
+            cognitive_load=0.5  # Default cognitive load for prompt engineering
         )
+        
+        system_prompt, enhanced_user_prompt, prompt_context = context_aware_prompting.generate_contextual_prompt(
+            user_input=user_input,
+            mcp_frame=context,
+            nudge_tier=nudge_tier,
+            use_case="local_llm_support"
+        )
+        
+        # Log the sophisticated prompting
+        adhd_logger.context_building(
+            "Generated context-aware prompts with Claude best practices",
+            contexts_count=len(context.context) if context else 0,
+            cognitive_load=prompt_context.cognitive_load
+        )
+        
+        # Adjust token limits based on cognitive load
+        max_tokens = 150 if prompt_context.cognitive_load < 0.6 else 75
+        
+        return await self.local_client.generate(
+            enhanced_user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=0.8
+        )
+    
+    def _identify_pattern(self, user_input: str) -> str:
+        """Identify which pattern was matched for logging."""
+        text_lower = user_input.lower()
+        
+        if any(phrase in text_lower for phrase in ["ready", "let's go", "time to", "let's do this", "i'm ready"]):
+            return "readiness_signal"
+        elif any(phrase in text_lower for phrase in ["stuck", "can't start", "don't know how", "procrastinating", "avoiding"]):
+            return "task_initiation_difficulty"
+        elif any(phrase in text_lower for phrase in ["overwhelmed", "too much", "stressed", "can't cope", "everything at once"]):
+            return "cognitive_overload"
+        elif any(phrase in text_lower for phrase in ["focus", "concentrate", "distracted", "attention"]):
+            return "attention_regulation"
+        else:
+            return "general_adhd_support"
     
     def _get_quick_response(self, user_input: str) -> Optional[str]:
         """Check for patterns that can be answered instantly."""
@@ -521,7 +562,12 @@ class LLMRouter:
             logger.info("Initializing LLM router for ADHD response times")
             
             # Check Ollama availability
-            ollama_available = await self.local_client.is_available()
+            try:
+                # Test Ollama with a quick health check
+                response = await self.local_client.client.get(f"{self.local_client.base_url}/api/tags", timeout=2.0)
+                ollama_available = response.status_code == 200
+            except:
+                ollama_available = False
             
             if ollama_available:
                 logger.info("✅ Ollama available - local reasoning model ready")

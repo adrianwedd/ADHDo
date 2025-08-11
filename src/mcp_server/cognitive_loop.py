@@ -69,6 +69,7 @@ from calendar_integration.client import CalendarClient
 from calendar_integration.processor import ADHDCalendarProcessor
 from nudge.engine import nudge_engine
 from traces.memory import trace_memory
+from mcp_server.google_calendar_simple import calendar_client, initialize_calendar
 
 logger = structlog.get_logger()
 
@@ -277,7 +278,7 @@ class CognitiveLoop:
             # Step 5-7: Parallel execution for better integration efficiency
             # Execute actions, update memory, and circuit breaker concurrently
             actions_task = self._execute_actions(
-                user_id, contextual_frame, llm_response
+                user_id, contextual_frame, llm_response, user_input
             )
             memory_task = self._update_trace_memory(
                 user_id, user_input, llm_response, contextual_frame, []  # Actions added after
@@ -405,19 +406,28 @@ class CognitiveLoop:
         self,
         user_id: str,
         contextual_frame: ContextualFrame,
-        llm_response: LLMResponse
+        llm_response: LLMResponse,
+        user_input: str
     ) -> List[str]:
-        """Execute any actions recommended by the frame analysis."""
+        """Execute any actions recommended by the frame analysis and user intents."""
         
         actions_taken = []
         
         try:
-            # Handle high cognitive load
+            
+            # Step 1: Intent Recognition and Action Execution
+            intents = self._recognize_user_intents(user_input)
+            for intent in intents:
+                action_result = await self._execute_user_intent(intent, user_id)
+                if action_result:
+                    actions_taken.append(action_result)
+            
+            # Step 2: Handle high cognitive load
             if contextual_frame.cognitive_load > 0.8:
                 actions_taken.append("cognitive_load_warning")
                 # Could trigger simplification suggestions
             
-            # Handle low accessibility score
+            # Step 3: Handle low accessibility score
             if contextual_frame.accessibility_score < 0.5:
                 actions_taken.append("accessibility_adjustment")
                 # Could trigger interface modifications
@@ -552,6 +562,146 @@ class CognitiveLoop:
         else:
             return f"Friendly reminder about {task_id}"
     
+    def _recognize_user_intents(self, user_input: str) -> List[Dict[str, Any]]:
+        """Recognize actionable intents from user input."""
+        intents = []
+        user_lower = user_input.lower()
+        
+        # Music intents
+        if any(phrase in user_lower for phrase in [
+            "play music", "start music", "play me music", "turn on music",
+            "music on", "play some music", "i want music", "put on music"
+        ]):
+            # Determine music type
+            if any(word in user_lower for word in ["focus", "concentrate", "work", "study"]):
+                intents.append({"type": "music", "action": "play_focus"})
+            elif any(word in user_lower for word in ["energy", "pump up", "upbeat", "motivate"]):
+                intents.append({"type": "music", "action": "play_energy"})
+            else:
+                intents.append({"type": "music", "action": "play_focus"})  # Default to focus
+        
+        elif any(phrase in user_lower for phrase in [
+            "stop music", "turn off music", "pause music", "music off"
+        ]):
+            intents.append({"type": "music", "action": "stop"})
+        
+        # Calendar intents
+        if any(phrase in user_lower for phrase in [
+            "what's next", "next meeting", "next event", "what do i have",
+            "my schedule", "my calendar", "upcoming events"
+        ]):
+            intents.append({"type": "calendar", "action": "get_events"})
+        
+        elif any(phrase in user_lower for phrase in [
+            "remind me", "set reminder", "create reminder", "add reminder"
+        ]):
+            intents.append({"type": "calendar", "action": "create_reminder", "text": user_input})
+        
+        elif any(phrase in user_lower for phrase in [
+            "schedule", "add to calendar", "create event", "book time"
+        ]):
+            intents.append({"type": "calendar", "action": "create_event", "text": user_input})
+            
+        return intents
+    
+    async def _execute_user_intent(self, intent: Dict[str, Any], user_id: str) -> Optional[str]:
+        """Execute a recognized user intent."""
+        try:
+            if intent["type"] == "music":
+                return await self._execute_music_action(intent["action"])
+            elif intent["type"] == "calendar":
+                return await self._execute_calendar_action(intent)
+        except Exception as e:
+            logger.error(f"Failed to execute intent: {e}", intent=intent)
+            return None
+    
+    async def _execute_music_action(self, action: str) -> Optional[str]:
+        """Execute music-related actions."""
+        try:
+            from mcp_server.jellyfin_music_fixed import (
+                jellyfin_music, 
+                initialize_music_controller,
+                MusicMood
+            )
+            
+            # Initialize music system if needed
+            if not jellyfin_music:
+                logger.info("Initializing music system for action execution")
+                import os
+                success = await initialize_music_controller(
+                    jellyfin_url=os.getenv("JELLYFIN_URL", "http://localhost:8096"),
+                    jellyfin_token=os.getenv("JELLYFIN_TOKEN", "abf44b9de48c46dab56d4ace26b24f9a"), 
+                    chromecast_name=os.getenv("CHROMECAST_NAME", "Shack Speakers")
+                )
+                if not success:
+                    logger.warning("Failed to initialize music system")
+                    return "music_init_failed"
+            
+            # Import jellyfin_music again after initialization
+            from mcp_server.jellyfin_music_fixed import jellyfin_music
+            
+            if action == "play_focus":
+                success = await jellyfin_music.play_mood_playlist(MusicMood.FOCUS, volume=0.75)
+                logger.info(f"Focus music play result: {success}")
+                return "music_focus_started" if success else "music_focus_failed"
+            elif action == "play_energy":
+                success = await jellyfin_music.play_mood_playlist(MusicMood.ENERGY, volume=0.75)
+                logger.info(f"Energy music play result: {success}")
+                return "music_energy_started" if success else "music_energy_failed"
+            elif action == "stop":
+                success = await jellyfin_music.stop_music()
+                logger.info(f"Music stop result: {success}")
+                return "music_stopped" if success else "music_stop_failed"
+                
+        except Exception as e:
+            logger.error(f"Music action failed: {e}")
+            return f"music_action_failed: {action}"
+    
+    async def _execute_calendar_action(self, intent: Dict[str, Any]) -> Optional[str]:
+        """Execute calendar-related actions."""
+        try:
+            action = intent.get("action")
+            
+            # Initialize calendar if needed
+            if not calendar_client or not calendar_client.is_authenticated:
+                # Try to initialize with default credentials
+                initialize_calendar()
+                if not calendar_client or not calendar_client.is_authenticated:
+                    return "calendar_not_connected"
+            
+            if action == "get_events":
+                events = calendar_client.get_upcoming_events(max_results=3)
+                if events:
+                    logger.info(f"Found {len(events)} upcoming events")
+                    return f"calendar_events_found:{len(events)}"
+                else:
+                    return "calendar_no_events"
+            
+            elif action == "create_reminder":
+                # Parse reminder from text (simple version)
+                from datetime import datetime, timedelta
+                text = intent.get("text", "")
+                
+                # Default to 1 hour from now
+                when = datetime.now() + timedelta(hours=1)
+                task = text.replace("remind me to", "").replace("remind me", "").strip()
+                
+                event = calendar_client.create_task_reminder(task, when)
+                if event:
+                    return "calendar_reminder_created"
+                else:
+                    return "calendar_reminder_failed"
+            
+            elif action == "create_event":
+                # This would need more sophisticated parsing
+                return "calendar_event_parsing_needed"
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Calendar action failed: {e}")
+            return f"calendar_action_failed: {action}"
+
     def get_stats(self) -> Dict[str, Any]:
         """Get cognitive loop processing statistics."""
         return {

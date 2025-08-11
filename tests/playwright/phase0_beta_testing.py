@@ -162,8 +162,9 @@ class ADHDBetaTestResult:
 class ADHDBetaTester:
     """Automated beta testing for ADHD users."""
     
-    def __init__(self):
-        self.base_url = "http://localhost:8000"
+    def __init__(self, base_url=None, headless=True):
+        self.base_url = base_url or "http://localhost:23443"
+        self.headless = headless
         self.results = ADHDBetaTestResult()
         
     async def run_phase0_beta_tests(self):
@@ -173,11 +174,11 @@ class ADHDBetaTester:
         print("Simulating real ADHD user workflows before human beta testing...\n")
         
         async with async_playwright() as playwright:
-            # Launch browser in headless mode for automated testing
+            # Launch browser - visible for demo or headless for CI
             browser = await playwright.chromium.launch(
-                headless=True,  # Headless mode for server environments
-                slow_mo=100,  # Slow down to simulate human interaction
-                args=['--start-maximized', '--no-sandbox', '--disable-dev-shm-usage']
+                headless=self.headless,  # Can be set to False for visual testing
+                slow_mo=500,  # Slow down so you can watch the tests
+                args=['--start-maximized', '--no-sandbox', '--disable-dev-shm-usage'] if self.headless else ['--start-maximized']
             )
             
             context = await browser.new_context(
@@ -634,7 +635,16 @@ async def main():
     print("=" * 50)
     print("Automated testing to validate system before human beta users\n")
     
-    tester = ADHDBetaTester()
+    # Allow environment variables to configure the test
+    import os
+    base_url = os.environ.get('BASE_URL', 'http://localhost:23443')
+    headless = os.environ.get('HEADLESS', 'true').lower() == 'true'
+    
+    print(f"📡 Testing URL: {base_url}")
+    print(f"👀 Browser mode: {'headless' if headless else 'visible'}")
+    print()
+    
+    tester = ADHDBetaTester(base_url=base_url, headless=headless)
     
     try:
         beta_ready = await tester.run_phase0_beta_tests()

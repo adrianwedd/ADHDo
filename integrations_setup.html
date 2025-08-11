@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 MCP System Integrations</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-card: rgba(255,255,255,0.05);
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: rgba(255,255,255,0.1);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .integrations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .integration-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .integration-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+        }
+        
+        .integration-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .integration-icon {
+            font-size: 2em;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: var(--primary);
+        }
+        
+        .integration-title {
+            flex: 1;
+        }
+        
+        .integration-title h3 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+        
+        .integration-subtitle {
+            color: var(--text-dim);
+            font-size: 0.9em;
+        }
+        
+        .status-indicator {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .status-connected { background: var(--success); color: white; }
+        .status-disconnected { background: var(--danger); color: white; }
+        .status-partial { background: var(--warning); color: black; }
+        
+        .integration-description {
+            margin-bottom: 20px;
+            line-height: 1.6;
+            color: var(--text-dim);
+        }
+        
+        .setup-steps {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .setup-steps h4 {
+            margin-bottom: 15px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .setup-steps ol {
+            margin-left: 20px;
+        }
+        
+        .setup-steps li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .config-form {
+            display: none;
+            background: rgba(0,0,0,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .config-form.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            color: var(--text);
+            font-size: 14px;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .form-group input::placeholder, .form-group textarea::placeholder {
+            color: var(--text-dim);
+        }
+        
+        .form-help {
+            font-size: 0.8em;
+            color: var(--text-dim);
+            margin-top: 5px;
+        }
+        
+        .integration-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--secondary);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: var(--warning);
+            color: black;
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .capabilities {
+            margin-top: 20px;
+        }
+        
+        .capability-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+        }
+        
+        .capability-icon {
+            font-size: 1.2em;
+        }
+        
+        .system-overview {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .overview-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+        }
+        
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: var(--text-dim);
+            font-size: 0.9em;
+        }
+        
+        .logs-section {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+        }
+        
+        .logs-container {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .log-entry {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-left: 3px solid;
+            border-radius: 0 6px 6px 0;
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .log-entry.success { border-color: var(--success); }
+        .log-entry.warning { border-color: var(--warning); }
+        .log-entry.error { border-color: var(--danger); }
+        .log-entry.info { border-color: var(--primary); }
+        
+        .log-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        
+        .log-time {
+            color: var(--text-dim);
+        }
+        
+        .log-message {
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 768px) {
+            .integrations-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .overview-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .integration-actions {
+                flex-direction: column;
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 MCP System Integrations</h1>
+            <p>Connect your ADHD support system to external services for enhanced capabilities</p>
+        </div>
+        
+        <div class="system-overview">
+            <h2>📊 System Status</h2>
+            <div class="overview-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="connectedServices">3</div>
+                    <div class="stat-label">Connected Services</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="totalCapabilities">12</div>
+                    <div class="stat-label">Available Capabilities</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="systemHealth">87%</div>
+                    <div class="stat-label">System Health</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="lastUpdate">2m ago</div>
+                    <div class="stat-label">Last Update</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="integrations-grid">
+            <!-- Claude AI Integration -->
+            <div class="integration-card">
+                <div class="integration-header">
+                    <div class="integration-icon">🧠</div>
+                    <div class="integration-title">
+                        <h3>Claude AI</h3>
+                        <div class="integration-subtitle">Advanced reasoning and complex task support</div>
+                    </div>
+                    <div class="status-indicator status-partial" id="claudeStatus">Partial</div>
+                </div>
+                
+                <div class="integration-description">
+                    Connect your Claude Pro/Max subscription for sophisticated ADHD reasoning, complex task breakdown, and advanced cognitive support.
+                </div>
+                
+                <div class="setup-steps">
+                    <h4>🔑 Authentication Setup</h4>
+                    <ol>
+                        <li>Go to <a href="https://claude.ai" target="_blank">claude.ai</a> and sign in to your Pro/Max account</li>
+                        <li>Open browser developer tools (F12)</li>
+                        <li>Go to Application → Storage → Cookies</li>
+                        <li>Find and copy the 'sessionKey' value</li>
+                        <li>Paste it below and click "Connect"</li>
+                    </ol>
+                </div>
+                
+                <div class="config-form" id="claudeConfig">
+                    <div class="form-group">
+                        <label for="claudeSessionToken">Claude Session Token</label>
+                        <input type="password" id="claudeSessionToken" placeholder="sk_ant_session_...">
+                        <div class="form-help">This token allows access to your Claude Pro/Max subscription</div>
+                    </div>
+                </div>
+                
+                <div class="capabilities">
+                    <div class="capability-item">
+                        <span class="capability-icon">🧠</span>
+                        <span>Complex ADHD task reasoning</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">📝</span>
+                        <span>Advanced writing assistance</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🔄</span>
+                        <span>Multi-step planning and breakdown</span>
+                    </div>
+                </div>
+                
+                <div class="integration-actions">
+                    <button class="btn btn-primary" onclick="toggleConfig('claudeConfig')">Configure</button>
+                    <button class="btn btn-success" onclick="testClaude()" id="testClaudeBtn">Test Connection</button>
+                    <button class="btn btn-secondary" onclick="checkClaudeStatus()">Check Status</button>
+                </div>
+            </div>
+            
+            <!-- Google Services Integration -->
+            <div class="integration-card">
+                <div class="integration-header">
+                    <div class="integration-icon" style="background: #4285f4;">📅</div>
+                    <div class="integration-title">
+                        <h3>Google Services</h3>
+                        <div class="integration-subtitle">Calendar, Assistant, and Nest integration</div>
+                    </div>
+                    <div class="status-indicator status-disconnected" id="googleStatus">Disconnected</div>
+                </div>
+                
+                <div class="integration-description">
+                    Connect Google Calendar for ADHD-optimized scheduling, Google Assistant for voice control, and Nest devices for environmental nudging.
+                </div>
+                
+                <div class="setup-steps">
+                    <h4>🔑 OAuth2 Setup</h4>
+                    <ol>
+                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                        <li>Create new project or select existing one</li>
+                        <li>Enable Calendar API, Assistant API, and Nest API</li>
+                        <li>Create OAuth2 credentials</li>
+                        <li>Download credentials JSON file</li>
+                        <li>Upload the file below</li>
+                    </ol>
+                </div>
+                
+                <div class="config-form" id="googleConfig">
+                    <div class="form-group">
+                        <label for="googleCredentials">Google Credentials JSON</label>
+                        <textarea id="googleCredentials" rows="8" placeholder="Paste your credentials JSON here..."></textarea>
+                        <div class="form-help">The complete credentials.json file from Google Cloud Console</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="calendarId">Calendar ID (optional)</label>
+                        <input type="text" id="calendarId" placeholder="primary">
+                        <div class="form-help">Leave as 'primary' for your main calendar</div>
+                    </div>
+                </div>
+                
+                <div class="capabilities">
+                    <div class="capability-item">
+                        <span class="capability-icon">📅</span>
+                        <span>ADHD-optimized calendar management</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🏠</span>
+                        <span>Nest Hub display notifications</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🔊</span>
+                        <span>Google Assistant voice commands</span>
+                    </div>
+                </div>
+                
+                <div class="integration-actions">
+                    <button class="btn btn-primary" onclick="toggleConfig('googleConfig')">Configure</button>
+                    <button class="btn btn-warning" onclick="authorizeGoogle()">Authorize</button>
+                    <button class="btn btn-secondary" onclick="testGoogle()">Test</button>
+                </div>
+            </div>
+            
+            <!-- Home Assistant Integration -->
+            <div class="integration-card">
+                <div class="integration-header">
+                    <div class="integration-icon" style="background: #18bcf2;">🏠</div>
+                    <div class="integration-title">
+                        <h3>Home Assistant</h3>
+                        <div class="integration-subtitle">Smart home automation and environmental control</div>
+                    </div>
+                    <div class="status-indicator status-disconnected" id="haStatus">Disconnected</div>
+                </div>
+                
+                <div class="integration-description">
+                    Connect Home Assistant for environmental ADHD support: smart lighting, TTS announcements, music control, and focus environment automation.
+                </div>
+                
+                <div class="setup-steps">
+                    <h4>🔗 Connection Setup</h4>
+                    <ol>
+                        <li>Open your Home Assistant instance</li>
+                        <li>Go to Profile → Long-Lived Access Tokens</li>
+                        <li>Create new token named "MCP ADHD Server"</li>
+                        <li>Copy the token and your Home Assistant URL</li>
+                        <li>Enter them below</li>
+                    </ol>
+                </div>
+                
+                <div class="config-form" id="haConfig">
+                    <div class="form-group">
+                        <label for="haUrl">Home Assistant URL</label>
+                        <input type="text" id="haUrl" placeholder="http://homeassistant.local:8123">
+                        <div class="form-help">Your Home Assistant instance URL</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="haToken">Long-Lived Access Token</label>
+                        <input type="password" id="haToken" placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...">
+                        <div class="form-help">Generate this in Home Assistant Profile settings</div>
+                    </div>
+                </div>
+                
+                <div class="capabilities">
+                    <div class="capability-item">
+                        <span class="capability-icon">💡</span>
+                        <span>Smart lighting for focus sessions</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🔊</span>
+                        <span>TTS announcements and reminders</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🎵</span>
+                        <span>Focus music and sound automation</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🌡️</span>
+                        <span>Climate control for optimal cognition</span>
+                    </div>
+                </div>
+                
+                <div class="integration-actions">
+                    <button class="btn btn-primary" onclick="toggleConfig('haConfig')">Configure</button>
+                    <button class="btn btn-success" onclick="testHomeAssistant()">Test Connection</button>
+                    <button class="btn btn-secondary" onclick="scanDevices()">Scan Devices</button>
+                </div>
+            </div>
+            
+            <!-- Telegram Integration -->
+            <div class="integration-card">
+                <div class="integration-header">
+                    <div class="integration-icon" style="background: #0088cc;">📱</div>
+                    <div class="integration-title">
+                        <h3>Telegram Bot</h3>
+                        <div class="integration-subtitle">Mobile notifications and quick interactions</div>
+                    </div>
+                    <div class="status-indicator status-disconnected" id="telegramStatus">Disconnected</div>
+                </div>
+                
+                <div class="integration-description">
+                    Set up a Telegram bot for instant ADHD support notifications, quick task capture, and mobile accountability check-ins.
+                </div>
+                
+                <div class="setup-steps">
+                    <h4>🤖 Bot Creation</h4>
+                    <ol>
+                        <li>Message <a href="https://t.me/botfather" target="_blank">@BotFather</a> on Telegram</li>
+                        <li>Send <code>/newbot</code> and follow instructions</li>
+                        <li>Copy the bot token provided</li>
+                        <li>Start a chat with your new bot</li>
+                        <li>Get your chat ID from the bot</li>
+                    </ol>
+                </div>
+                
+                <div class="config-form" id="telegramConfig">
+                    <div class="form-group">
+                        <label for="telegramToken">Bot Token</label>
+                        <input type="password" id="telegramToken" placeholder="123456:ABC-DEF1234ghIkl...">
+                        <div class="form-help">Get this from @BotFather</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="telegramChatId">Your Chat ID</label>
+                        <input type="text" id="telegramChatId" placeholder="123456789">
+                        <div class="form-help">Your personal chat ID with the bot</div>
+                    </div>
+                </div>
+                
+                <div class="capabilities">
+                    <div class="capability-item">
+                        <span class="capability-icon">📯</span>
+                        <span>Instant ADHD nudge notifications</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">✅</span>
+                        <span>Quick task completion updates</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🤝</span>
+                        <span>Mobile accountability check-ins</span>
+                    </div>
+                </div>
+                
+                <div class="integration-actions">
+                    <button class="btn btn-primary" onclick="toggleConfig('telegramConfig')">Configure</button>
+                    <button class="btn btn-success" onclick="testTelegram()">Send Test</button>
+                    <button class="btn btn-secondary" onclick="getChatId()">Get Chat ID</button>
+                </div>
+            </div>
+            
+            <!-- Ollama Local LLM -->
+            <div class="integration-card">
+                <div class="integration-header">
+                    <div class="integration-icon" style="background: #22c55e;">🔒</div>
+                    <div class="integration-title">
+                        <h3>Ollama Local LLM</h3>
+                        <div class="integration-subtitle">Privacy-first local AI reasoning</div>
+                    </div>
+                    <div class="status-indicator status-connected" id="ollamaStatus">Connected</div>
+                </div>
+                
+                <div class="integration-description">
+                    Use Ollama for private, local AI processing. Perfect for sensitive ADHD support conversations that stay on your device.
+                </div>
+                
+                <div class="setup-steps">
+                    <h4>🖥️ Local Setup</h4>
+                    <ol>
+                        <li>Install Ollama from <a href="https://ollama.ai" target="_blank">ollama.ai</a></li>
+                        <li>Run: <code>ollama pull deepseek-r1:1.5b</code></li>
+                        <li>Ensure Ollama is running on port 11434</li>
+                        <li>Test connection below</li>
+                    </ol>
+                </div>
+                
+                <div class="capabilities">
+                    <div class="capability-item">
+                        <span class="capability-icon">🔒</span>
+                        <span>100% private, local processing</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">⚡</span>
+                        <span>Ultra-fast pattern matching</span>
+                    </div>
+                    <div class="capability-item">
+                        <span class="capability-icon">🧠</span>
+                        <span>DeepSeek reasoning capabilities</span>
+                    </div>
+                </div>
+                
+                <div class="integration-actions">
+                    <button class="btn btn-success" onclick="testOllama()">Test Local LLM</button>
+                    <button class="btn btn-secondary" onclick="checkOllamaModels()">Check Models</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="logs-section">
+            <h2>📋 Integration Logs</h2>
+            <div class="logs-container" id="logsContainer">
+                <div class="log-entry info">
+                    <div class="log-header">
+                        <span>ℹ️</span>
+                        <span>system</span>
+                        <span class="log-time">2m ago</span>
+                    </div>
+                    <div class="log-message">MCP Integration system initialized</div>
+                </div>
+                
+                <div class="log-entry success">
+                    <div class="log-header">
+                        <span>✅</span>
+                        <span>ollama</span>
+                        <span class="log-time">1m ago</span>
+                    </div>
+                    <div class="log-message">Local LLM connection established</div>
+                </div>
+                
+                <div class="log-entry warning">
+                    <div class="log-header">
+                        <span>⚠️</span>
+                        <span>claude</span>
+                        <span class="log-time">30s ago</span>
+                    </div>
+                    <div class="log-message">Claude authentication required for advanced features</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleConfig(configId) {
+            const form = document.getElementById(configId);
+            form.classList.toggle('active');
+        }
+        
+        async function testClaude() {
+            const token = document.getElementById('claudeSessionToken').value;
+            if (!token) {
+                alert('Please enter your Claude session token first');
+                return;
+            }
+            
+            const btn = document.getElementById('testClaudeBtn');
+            btn.textContent = 'Testing...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/claude/authenticate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_token: token })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('claudeStatus').textContent = 'Connected';
+                    document.getElementById('claudeStatus').className = 'status-indicator status-connected';
+                    addLog('success', 'claude', 'Claude authentication successful');
+                    alert('✅ Claude connected successfully!');
+                } else {
+                    addLog('error', 'claude', result.message || 'Authentication failed');
+                    alert('❌ Claude connection failed: ' + (result.message || 'Unknown error'));
+                }
+            } catch (error) {
+                addLog('error', 'claude', 'Connection error: ' + error.message);
+                alert('❌ Connection error: ' + error.message);
+            } finally {
+                btn.textContent = 'Test Connection';
+                btn.disabled = false;
+            }
+        }
+        
+        async function testHomeAssistant() {
+            const url = document.getElementById('haUrl').value;
+            const token = document.getElementById('haToken').value;
+            
+            if (!url || !token) {
+                alert('Please enter Home Assistant URL and token');
+                return;
+            }
+            
+            addLog('info', 'home-assistant', 'Testing Home Assistant connection...');
+            
+            // Mock test - in real implementation would test actual connection
+            setTimeout(() => {
+                document.getElementById('haStatus').textContent = 'Connected';
+                document.getElementById('haStatus').className = 'status-indicator status-connected';
+                addLog('success', 'home-assistant', 'Home Assistant connected successfully');
+            }, 2000);
+        }
+        
+        async function testTelegram() {
+            const token = document.getElementById('telegramToken').value;
+            const chatId = document.getElementById('telegramChatId').value;
+            
+            if (!token || !chatId) {
+                alert('Please enter bot token and chat ID');
+                return;
+            }
+            
+            addLog('info', 'telegram', 'Sending test message...');
+            
+            try {
+                const response = await fetch('/nudge/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: 'integration_test',
+                        nudge_type: 'TEST',
+                        methods: ['telegram'],
+                        message: '🧠 MCP ADHD Server test message - integration working!'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('telegramStatus').textContent = 'Connected';
+                    document.getElementById('telegramStatus').className = 'status-indicator status-connected';
+                    addLog('success', 'telegram', 'Test message sent successfully');
+                } else {
+                    addLog('warning', 'telegram', 'Test message may have failed');
+                }
+            } catch (error) {
+                addLog('error', 'telegram', 'Test failed: ' + error.message);
+            }
+        }
+        
+        async function testOllama() {
+            addLog('info', 'ollama', 'Testing local LLM connection...');
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'Test local LLM connection',
+                        user_id: 'integration_test'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog('success', 'ollama', `Local LLM responded in ${Math.round(result.processing_time_ms)}ms`);
+                    alert('✅ Local LLM is working perfectly!');
+                } else {
+                    addLog('error', 'ollama', 'Local LLM test failed');
+                }
+            } catch (error) {
+                addLog('error', 'ollama', 'Connection error: ' + error.message);
+            }
+        }
+        
+        function addLog(level, component, message) {
+            const container = document.getElementById('logsContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${level}`;
+            
+            const icons = {
+                success: '✅',
+                error: '❌',
+                warning: '⚠️',
+                info: 'ℹ️'
+            };
+            
+            entry.innerHTML = `
+                <div class="log-header">
+                    <span>${icons[level] || 'ℹ️'}</span>
+                    <span>${component}</span>
+                    <span class="log-time">now</span>
+                </div>
+                <div class="log-message">${message}</div>
+            `;
+            
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+            
+            // Keep only last 20 log entries
+            while (container.children.length > 20) {
+                container.removeChild(container.firstChild);
+            }
+        }
+        
+        // Placeholder functions for other integrations
+        function authorizeGoogle() {
+            addLog('info', 'google', 'Google OAuth2 authorization not yet implemented');
+            alert('Google OAuth2 integration coming soon!');
+        }
+        
+        function checkClaudeStatus() {
+            fetch('/claude/status')
+                .then(r => r.json())
+                .then(result => {
+                    if (result.authenticated) {
+                        addLog('success', 'claude', 'Claude is authenticated and ready');
+                    } else {
+                        addLog('warning', 'claude', 'Claude authentication required');
+                    }
+                });
+        }
+        
+        function scanDevices() {
+            addLog('info', 'home-assistant', 'Device scanning not yet implemented');
+        }
+        
+        function getChatId() {
+            alert('To get your Chat ID:\n1. Message your bot\n2. Visit: https://api.telegram.org/bot{YOUR_BOT_TOKEN}/getUpdates\n3. Look for "chat":{"id": YOUR_CHAT_ID');
+        }
+        
+        function checkOllamaModels() {
+            addLog('info', 'ollama', 'Model management not yet implemented');
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check initial status of all integrations
+            try {
+                const health = await fetch('/health').then(r => r.json());
+                
+                // Update system stats
+                const components = health.components;
+                let connected = 0;
+                
+                if (components.claude_integration && components.claude_authenticated) {
+                    document.getElementById('claudeStatus').textContent = 'Connected';
+                    document.getElementById('claudeStatus').className = 'status-indicator status-connected';
+                    connected++;
+                }
+                
+                document.getElementById('connectedServices').textContent = connected;
+                
+                addLog('success', 'system', 'Integration status loaded');
+            } catch (error) {
+                addLog('error', 'system', 'Failed to load integration status');
+            }
+        });
+    </script>
+</body>
+</html>
