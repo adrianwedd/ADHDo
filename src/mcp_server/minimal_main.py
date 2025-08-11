@@ -1234,6 +1234,115 @@ async def serve_nudge_audio(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
+# ⌚ PIXEL WATCH INTEGRATION ENDPOINTS
+# ============================================================================
+
+@app.post("/watch/nudge/{nudge_type}")
+async def send_watch_nudge(nudge_type: str, message: str = None, priority: str = "normal"):
+    """Send ADHD nudge to Pixel Watch via Home Assistant."""
+    try:
+        from .pixel_watch_integration import initialize_pixel_watch, WearableNudgeType
+        
+        # Initialize if needed
+        pixel_watch = await initialize_pixel_watch()
+        
+        if not pixel_watch.is_initialized:
+            return {
+                "success": False,
+                "message": "Pixel Watch integration not available"
+            }
+        
+        # Convert string to enum
+        try:
+            nudge_enum = WearableNudgeType(nudge_type.lower())
+        except ValueError:
+            return {
+                "success": False,
+                "message": f"Invalid nudge type: {nudge_type}"
+            }
+        
+        success = await pixel_watch.send_adhd_nudge(
+            nudge_enum, 
+            custom_message=message, 
+            priority=priority
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"✅ Watch nudge sent: {nudge_type}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to send watch nudge"
+            }
+            
+    except Exception as e:
+        logger.error(f"Watch nudge failed: {e}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }
+
+@app.post("/watch/checkin")
+async def watch_quick_checkin():
+    """Send quick ADHD check-in to watch."""
+    try:
+        from .pixel_watch_integration import initialize_pixel_watch
+        
+        pixel_watch = await initialize_pixel_watch()
+        success = await pixel_watch.send_quick_checkin()
+        
+        return {
+            "success": success,
+            "message": "⚡ Energy check-in sent to watch" if success else "Failed to send check-in"
+        }
+        
+    except Exception as e:
+        logger.error(f"Watch check-in failed: {e}")
+        return {"success": False, "message": str(e)}
+
+@app.post("/watch/hyperfocus-break")
+async def watch_hyperfocus_break(duration_hours: float = 2.0):
+    """Send hyperfocus break reminder to watch."""
+    try:
+        from .pixel_watch_integration import initialize_pixel_watch
+        
+        pixel_watch = await initialize_pixel_watch()
+        success = await pixel_watch.send_hyperfocus_break(duration_hours)
+        
+        return {
+            "success": success,
+            "message": f"🛑 Hyperfocus break reminder sent (after {duration_hours}h)" if success else "Failed to send reminder"
+        }
+        
+    except Exception as e:
+        logger.error(f"Hyperfocus break failed: {e}")
+        return {"success": False, "message": str(e)}
+
+@app.get("/watch/stats")
+async def get_watch_stats():
+    """Get Pixel Watch nudge statistics."""
+    try:
+        from .pixel_watch_integration import initialize_pixel_watch
+        
+        pixel_watch = await initialize_pixel_watch()
+        stats = await pixel_watch.get_nudge_stats()
+        
+        return {
+            "success": True,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"Watch stats failed: {e}")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+# ============================================================================
 # 🎵 JELLYFIN MUSIC INTEGRATION ENDPOINTS
 # ============================================================================
 
@@ -1553,6 +1662,150 @@ async def normal_mode():
         }
     except Exception as e:
         logger.error(f"Normal mode failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Google Assistant Broadcast Integration
+google_assistant_available = False
+google_assistant_module = None
+
+try:
+    from mcp_server.google_assistant_integration import initialize_google_assistant, BroadcastType
+    google_assistant_available = True
+    logger.info("✅ Google Assistant broadcast integration loaded")
+except ImportError as e:
+    logger.warning(f"Google Assistant broadcast not available: {e}")
+
+@app.post("/broadcast/initialize")
+async def initialize_broadcast():
+    """Initialize Google Assistant broadcast system."""
+    if not google_assistant_available:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not available")
+    
+    try:
+        global google_assistant_module
+        google_assistant_module = await initialize_google_assistant()
+        return {
+            "success": True,
+            "message": "Google Assistant broadcast initialized",
+            "devices": google_assistant_module.get_available_devices() if google_assistant_module else []
+        }
+    except Exception as e:
+        logger.error(f"Failed to initialize Google Assistant broadcast: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/broadcast/send/{broadcast_type}")
+async def send_broadcast(
+    broadcast_type: str,
+    message: Optional[str] = None,
+    target_device: Optional[str] = None
+):
+    """Send Google Assistant broadcast nudge.
+    
+    Available broadcast types:
+    - gentle: Gentle reminders and check-ins
+    - focus: Focus session starts and deep work encouragement
+    - break: Break reminders and movement nudges
+    - celebration: Task completion celebrations
+    - transition: Transition warnings and activity switches
+    - urgent: Priority reminders and important tasks
+    """
+    if not google_assistant_available or not google_assistant_module:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not initialized")
+    
+    # Convert string to BroadcastType enum
+    broadcast_type_map = {
+        "gentle": BroadcastType.GENTLE_REMINDER,
+        "focus": BroadcastType.FOCUS_TIME,
+        "break": BroadcastType.BREAK_TIME,
+        "celebration": BroadcastType.CELEBRATION,
+        "transition": BroadcastType.TRANSITION,
+        "urgent": BroadcastType.URGENT
+    }
+    
+    broadcast_enum = broadcast_type_map.get(broadcast_type.lower())
+    if not broadcast_enum:
+        raise HTTPException(status_code=400, detail=f"Unknown broadcast type: {broadcast_type}")
+    
+    try:
+        success = await google_assistant_module.send_broadcast_nudge(
+            broadcast_type=broadcast_enum,
+            custom_message=message,
+            target_device=target_device
+        )
+        
+        return {
+            "success": success,
+            "type": broadcast_type,
+            "message": message or f"Sent {broadcast_type} broadcast nudge",
+            "target_device": target_device or "all_devices"
+        }
+    except Exception as e:
+        logger.error(f"Broadcast failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/broadcast/focus-session")
+async def broadcast_focus_session(duration_minutes: int = 25):
+    """Start a focus session broadcast."""
+    if not google_assistant_available or not google_assistant_module:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not initialized")
+    
+    try:
+        success = await google_assistant_module.broadcast_focus_session(duration_minutes)
+        return {
+            "success": success,
+            "duration": duration_minutes,
+            "message": f"Focus session broadcast sent for {duration_minutes} minutes"
+        }
+    except Exception as e:
+        logger.error(f"Focus session broadcast failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/broadcast/celebration")
+async def broadcast_celebration(achievement: str):
+    """Broadcast celebration for completed task."""
+    if not google_assistant_available or not google_assistant_module:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not initialized")
+    
+    try:
+        success = await google_assistant_module.broadcast_celebration(achievement)
+        return {
+            "success": success,
+            "achievement": achievement,
+            "message": f"Celebration broadcast sent for: {achievement}"
+        }
+    except Exception as e:
+        logger.error(f"Celebration broadcast failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/broadcast/stats")
+async def get_broadcast_stats():
+    """Get Google Assistant broadcast statistics."""
+    if not google_assistant_available or not google_assistant_module:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not initialized")
+    
+    try:
+        stats = google_assistant_module.get_broadcast_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get broadcast stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/broadcast/devices")
+async def get_broadcast_devices():
+    """Get available Google Assistant devices."""
+    if not google_assistant_available or not google_assistant_module:
+        raise HTTPException(status_code=503, detail="Google Assistant broadcast not initialized")
+    
+    try:
+        devices = google_assistant_module.get_available_devices()
+        return {
+            "success": True,
+            "devices": devices,
+            "count": len(devices)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get broadcast devices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
