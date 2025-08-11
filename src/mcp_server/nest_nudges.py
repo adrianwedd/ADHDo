@@ -43,7 +43,7 @@ class NestNudgeSystem:
         self.device_map: Dict[str, pychromecast.Chromecast] = {}
         self.nudge_queue: List[Nudge] = []
         self.last_nudge_time: Dict[str, datetime] = {}
-        self.min_nudge_interval = timedelta(minutes=5)  # Don't overwhelm
+        self.min_nudge_interval = timedelta(minutes=5)  # Don't overwhelm ADHD users
         self.scheduler_task: Optional[asyncio.Task] = None
         
         # ADHD-optimized message templates

@@ -1809,6 +1809,18 @@ async def get_broadcast_devices():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/test_tts.mp3")
+async def serve_test_audio():
+    """Serve test TTS file for debugging."""
+    from fastapi.responses import FileResponse
+    import os
+    
+    test_file = "/home/pi/repos/ADHDo/test_tts.mp3"
+    if os.path.exists(test_file):
+        return FileResponse(test_file, media_type="audio/mp3")
+    else:
+        raise HTTPException(status_code=404, detail="Test file not found")
+
 if __name__ == "__main__":
     import uvicorn
     import socket

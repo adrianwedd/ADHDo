@@ -1,4 +1,4 @@
-#\!/usr/bin/env python3
+#!/usr/bin/env python3
 """Direct Chromecast debug - check what's actually playing"""
 
 import pychromecast
@@ -47,4 +47,3 @@ def debug_chromecast():
 
 if __name__ == "__main__":
     debug_chromecast()
-EOF < /dev/null
