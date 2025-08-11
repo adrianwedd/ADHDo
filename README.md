@@ -40,6 +40,8 @@ cd ADHDo
 # 2. One file to rule them all
 cp .env.example .env
 # Edit .env: Add your OpenAI key, make up a secret key
+# OPTIONAL: Add Jellyfin URL and token for music system
+# OPTIONAL: Add Nest device support (automatically discovered)
 
 # 3. The moment of truth
 docker-compose up -d
@@ -57,6 +59,8 @@ You just deployed:
 - 🤖 **Your personal ADHD AI coach** (never sleeps, never judges)
 - 💬 **Lightning-fast chat interface** (because waiting kills focus)
 - 📱 **Telegram bot** (nudges in your pocket)
+- 🔔 **Ambient nudge system** (Google Nest speakers become ADHD assistants)
+- 🎵 **Focus music system** (5000+ tracks auto-categorized for ADHD brains)
 - 🔐 **Bank-level security** (your thoughts stay private)
 - 📊 **Performance monitoring** (because data is beautiful)
 
@@ -238,6 +242,24 @@ docker-compose up -d
 - **Win celebrations** → Confetti for completed tasks
 - **Progress bars** → Visual dopamine hits
 - **Personal bests** → Beat your own records
+
+### 🔔 The Nudge Engine - Ambient ADHD Support (NEW!)
+- **Contextual Operating System integration** → Part of your mind's OS, not just notifications  
+- **Affective behavioral interventions** → State-aware nudges that match your cognitive load
+- **Multi-device orchestration** → Google Nest speakers become your executive function assistants
+- **7 specialized nudge types** → Gentle, urgent, motivational, transition, break, focus, celebration
+- **Smart environmental awareness** → Respects your attention patterns and energy levels
+- **Celebration orchestration** → Victory sounds and acknowledgments for dopamine hits
+- **Circadian rhythm support** → Morning motivation, afternoon focus, evening wind-down
+- **Crisis intervention ready** → Ambient support that can escalate to direct assistance
+
+### 🎵 ADHD Focus Music System (NEW!)
+- **Massive music library** → 5000+ tracks from your Jellyfin server
+- **Mood-based playlists** → Focus, Energy, Calm, Ambient categorization
+- **Auto-play scheduling** → Background music during work hours (9AM-9PM)
+- **Chromecast integration** → Seamless streaming to your speakers
+- **Context-aware selection** → Music matches your current task type
+- **Volume intelligence** → Automatically adjusts during nudges and calls
 
 ---
 
