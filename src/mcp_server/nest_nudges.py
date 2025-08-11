@@ -154,31 +154,43 @@ class NestNudgeSystem:
                          nudge_type: NudgeType = NudgeType.GENTLE,
                          device_name: Optional[str] = None,
                          volume: float = 0.5) -> bool:
-        """Send a nudge to Nest device(s)."""
+        """Send a nudge to Nest device(s) with thread-safe device handling."""
         try:
             # Check if we're nudging too frequently
             if not self._can_nudge(device_name):
                 logger.info("⏰ Skipping nudge - too soon since last nudge")
                 return False
             
-            # Select device(s) - prefer Nest Hub Max if no specific device requested
-            if device_name and device_name in self.device_map:
-                devices = [self.device_map[device_name]]
-            else:
-                devices = self.devices
-                # If no specific device, prefer Nest Hub Max if available
-                if not device_name and devices:
-                    nest_max = None
-                    for device in devices:
-                        if 'nest hub max' in device.model_name.lower():
-                            nest_max = device
-                            break
-                    if nest_max:
-                        devices = [nest_max]
-                        logger.info(f"🎯 Using Nest Hub Max for nudge")
+            # If no devices discovered yet, try immediate discovery
+            if not self.devices:
+                logger.info("🔍 No devices available, attempting immediate discovery...")
+                success = await self._immediate_device_discovery()
+                if not success:
+                    logger.warning("❌ No devices found for nudge")
+                    return False
             
-            if not devices:
-                logger.warning("No devices available for nudge")
+            # Select target device (simplified approach)
+            target_device = None
+            if device_name:
+                # Find specific device by name
+                for device in self.devices:
+                    if device.name == device_name:
+                        target_device = device
+                        break
+            else:
+                # Prefer Nest Hub Max if available
+                for device in self.devices:
+                    if 'nest hub max' in device.model_name.lower():
+                        target_device = device
+                        logger.info(f"🎯 Using Nest Hub Max for nudge")
+                        break
+                
+                # Fallback to first available device
+                if not target_device and self.devices:
+                    target_device = self.devices[0]
+            
+            if not target_device:
+                logger.warning("No suitable device found for nudge")
                 return False
             
             # Generate TTS audio
@@ -192,39 +204,156 @@ class NestNudgeSystem:
                 self._audio_files[os.path.basename(tmp_file.name)] = tmp_file.name
                 audio_url = f"http://192.168.1.100:23443/nudge-audio/{os.path.basename(tmp_file.name)}"
             
-            # Send to each device
-            for device in devices:
-                try:
-                    device.wait()
-                    mc = device.media_controller
-                    
-                    # Set volume
-                    device.set_volume(volume)
-                    
-                    # Play the nudge
-                    mc.play_media(audio_url, 'audio/mp3')
-                    mc.block_until_active()
-                    
-                    # Update last nudge time
-                    self.last_nudge_time[device.name] = datetime.now()
-                    
-                    logger.info(f"📢 Nudge sent to {device.name}: {message[:50]}...")
-                    
-                    # Wait for playback to complete (estimate)
-                    await asyncio.sleep(len(message) * 0.06)  # Rough TTS duration estimate
-                    
-                except Exception as e:
-                    logger.error(f"Failed to nudge {device.name}: {e}")
+            # Send nudge using fresh discovery approach (like working direct test)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, 
+                self._send_nudge_fresh_discovery,
+                audio_url,
+                volume,
+                message,
+                target_device.name  # Just pass the device name for targeting
+            )
             
-            # Clean up temp file after a delay
-            asyncio.create_task(self._cleanup_audio_file(tmp_file.name, delay=30))
-            
-            return True
+            if result:
+                # Update last nudge time
+                self.last_nudge_time[target_device.name] = datetime.now()
+                logger.info(f"📢 Nudge sent to {target_device.name}: {message[:50]}...")
+                
+                # Clean up temp file after a delay
+                asyncio.create_task(self._cleanup_audio_file(tmp_file.name, delay=30))
+                return True
+            else:
+                logger.error(f"Failed to send nudge to {target_device.name}")
+                return False
             
         except Exception as e:
             logger.error(f"❌ Nudge failed: {e}")
             return False
     
+    async def _immediate_device_discovery(self) -> bool:
+        """Perform immediate device discovery for API requests."""
+        try:
+            loop = asyncio.get_event_loop()
+            chromecasts, browser = await loop.run_in_executor(
+                None, 
+                lambda: pychromecast.get_chromecasts(timeout=10)
+            )
+            
+            # Filter for Nest/Google Home devices (avoid duplicates)
+            for cc in chromecasts:
+                model_lower = cc.model_name.lower()
+                if any(nest in model_lower for nest in ['nest', 'google home', 'home mini', 'home max']):
+                    # Check if already in devices list to avoid duplicates
+                    if not any(existing.name == cc.name for existing in self.devices):
+                        self.devices.append(cc)
+                        self.device_map[cc.name] = cc
+                        logger.info(f"✅ Found Nest device: {cc.name} ({cc.model_name})")
+            
+            # Stop discovery
+            browser.stop_discovery()
+            
+            return len(self.devices) > 0
+            
+        except Exception as e:
+            logger.error(f"Immediate device discovery failed: {e}")
+            return False
+    
+    def _send_nudge_fresh_discovery(self, audio_url: str, volume: float, message: str, target_device_name: str) -> bool:
+        """Send nudge with fresh discovery (mimics working direct test approach)."""
+        try:
+            import time
+            
+            logger.info(f"🔍 Fresh discovery for nudge to {target_device_name}")
+            
+            # Fresh discovery (exactly like direct test that works)
+            chromecasts, browser = pychromecast.get_chromecasts(timeout=15)
+            
+            target_cast = None
+            for cc in chromecasts:
+                if cc.name == target_device_name or ('nest hub max' in cc.model_name.lower() and not target_device_name):
+                    target_cast = cc
+                    logger.info(f"✅ Found target device: {cc.name}")
+                    break
+            
+            if not target_cast:
+                logger.error(f"❌ Target device {target_device_name} not found in fresh discovery")
+                browser.stop_discovery()
+                return False
+            
+            # Connect and send (exactly like working direct test)
+            logger.info(f"🎯 Connecting to {target_cast.name}...")
+            target_cast.wait()
+            mc = target_cast.media_controller
+            
+            # Set volume
+            target_cast.set_volume(volume)
+            logger.info(f"🔊 Volume set to {int(volume * 100)}%")
+            
+            # Play the nudge
+            logger.info(f"🎵 Playing nudge...")
+            mc.play_media(audio_url, 'audio/mpeg')
+            mc.block_until_active()
+            time.sleep(2)  # Give it time to start
+            
+            logger.info(f"✅ Nudge sent successfully to {target_cast.name}")
+            
+            # Clean up
+            browser.stop_discovery()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fresh discovery nudge failed: {e}")
+            return False
+
+    def _send_to_existing_device_sync(self, device, audio_url: str, volume: float, message: str) -> bool:
+        """Synchronously send nudge to existing device (runs in thread executor)."""
+        try:
+            import time
+            
+            # Wait for device to be fully connected
+            logger.info(f"Waiting for device {device.name} to be ready...")
+            max_connect_wait = 15  # Wait up to 15 seconds for connection
+            for i in range(max_connect_wait):
+                if device.socket_client.is_connected:
+                    logger.info(f"Device {device.name} is connected after {i} seconds")
+                    break
+                time.sleep(1)
+            else:
+                # Try explicit wait
+                device.wait(timeout=10)
+            
+            # Double-check connection
+            if not device.socket_client.is_connected:
+                logger.error(f"Device {device.name} failed to connect properly")
+                return False
+            
+            # Use existing device connection
+            mc = device.media_controller
+            
+            # Set volume first
+            device.set_volume(volume)
+            time.sleep(0.5)  # Give volume change time to apply
+            
+            # Play the nudge
+            mc.play_media(audio_url, 'audio/mpeg')
+            time.sleep(1)  # Give media controller time to start
+            
+            # Wait for playback to begin
+            max_wait = 10  # Wait up to 10 seconds for playback to start
+            for i in range(max_wait):
+                if mc.status.player_state != 'IDLE':
+                    break
+                time.sleep(1)
+            
+            logger.info(f"Nudge playback started on {device.name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Sync device send failed: {e}")
+            return False
+
     def _can_nudge(self, device_name: Optional[str]) -> bool:
         """Check if enough time has passed since last nudge."""
         if device_name:
