@@ -202,7 +202,7 @@ class NestNudgeSystem:
                 # Store filename for serving
                 self._audio_files = getattr(self, '_audio_files', {})
                 self._audio_files[os.path.basename(tmp_file.name)] = tmp_file.name
-                audio_url = f"http://192.168.1.100:23443/nudge-audio/{os.path.basename(tmp_file.name)}"
+                audio_url = f"http://10.30.17.41:23443/nudge-audio/{os.path.basename(tmp_file.name)}"
             
             # Send nudge using fresh discovery approach (like working direct test)
             loop = asyncio.get_event_loop()

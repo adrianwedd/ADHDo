@@ -139,7 +139,7 @@ class JellyfinMusicController:
                             name=item.get('Name', 'Unknown'),
                             artist=item.get('AlbumArtist', item.get('Artists', ['Unknown'])[0] if item.get('Artists') else 'Unknown'),
                             duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
-                            stream_url=f"{self.jellyfin_url.replace('localhost', '192.168.1.100')}/Audio/{item['Id']}/stream?api_key={self.api_key}"
+                            stream_url=f"{self.jellyfin_url.replace('localhost', '10.30.17.41')}/Audio/{item['Id']}/stream?api_key={self.api_key}"
                         )
                         
                         # Categorize by genre or use smart categorization
@@ -184,9 +184,12 @@ class JellyfinMusicController:
         try:
             logger.info("🔍 Discovering Chromecast devices...")
             
-            # Use blocking discovery with longer timeout for better results
-            import time
-            chromecasts, browser = pychromecast.get_chromecasts(timeout=10)
+            # Use fresh discovery approach like nudge system (which works)
+            loop = asyncio.get_event_loop()
+            chromecasts, browser = await loop.run_in_executor(
+                None,
+                lambda: pychromecast.get_chromecasts(timeout=15)
+            )
             
             if chromecasts:
                 logger.info(f"Found {len(chromecasts)} Chromecast device(s):")
@@ -208,7 +211,8 @@ class JellyfinMusicController:
                 
                 if target_device:
                     self.chromecast = target_device
-                    self.chromecast.wait()
+                    # Wait for connection using executor (like nudge system)
+                    await loop.run_in_executor(None, target_device.wait)
                     self.media_controller = self.chromecast.media_controller
                     self.state.chromecast_connected = True
                     logger.info(f"✅ Connected to Chromecast: {self.chromecast.name}")
@@ -245,7 +249,7 @@ class JellyfinMusicController:
             # Cast to Chromecast if connected
             if self.state.chromecast_connected and self.media_controller:
                 # Replace localhost with actual IP for Chromecast access
-                stream_url = track.stream_url.replace('localhost', '192.168.1.100')
+                stream_url = track.stream_url.replace('localhost', '10.30.17.41')
                 
                 self.media_controller.play_media(
                     stream_url,
@@ -259,7 +263,7 @@ class JellyfinMusicController:
                 else:
                     self.chromecast.set_volume(self.state.volume)
                 
-                logger.info(f"🎧 Now playing on {self.chromecast.device.friendly_name}")
+                logger.info(f"🎧 Now playing on {self.chromecast.name}")
             else:
                 logger.warning("⚠️ Chromecast not connected, playing locally (simulated)")
             
@@ -285,7 +289,7 @@ class JellyfinMusicController:
             # Stop Chromecast playback if connected
             if self.state.chromecast_connected and self.media_controller:
                 self.media_controller.stop()
-                logger.info(f"🔇 Stopped playback on {self.chromecast.device.friendly_name}")
+                logger.info(f"🔇 Stopped playback on {self.chromecast.name}")
             
             self.state.is_playing = False
             self.state.current_track = None
