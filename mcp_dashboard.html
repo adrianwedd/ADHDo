@@ -141,8 +141,21 @@
                 <div>🎵 Music</div>
                 <div class="stat-value" id="music-status">Off</div>
             </div>
+            <div class="stat">
+                <div>🤖 Claude</div>
+                <div class="stat-value" id="claude-status">Checking...</div>
+            </div>
         </div>
         
+        <!-- Simple Help -->
+        <div class="panel">
+            <h3>💡 How This Helps You</h3>
+            <div style="padding: 1rem; background: rgba(0,150,255,0.1); border-radius: 8px; text-align: center;">
+                <div style="font-size: 1.1em; margin-bottom: 0.5rem;">I give you <strong>instant support</strong> for ADHD challenges</div>
+                <div style="color: #666;">Just type what's bothering you and get immediate, helpful responses</div>
+            </div>
+        </div>
+
         <!-- Available Devices -->
         <div class="panel">
             <h3>📱 Available Nest Devices</h3>
@@ -175,15 +188,49 @@
             </div>
         </div>
         
+        <!-- Music Control Panel -->
+        <div class="panel">
+            <h3>🎵 ADHD Music Control</h3>
+            
+            <!-- Now Playing Display -->
+            <div id="now-playing" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <div id="track-info" style="font-size: 1.1em; font-weight: bold;">Loading...</div>
+                <div id="artist-info" style="color: #a0a0a0; margin: 5px 0;"></div>
+                <div id="queue-info" style="font-size: 0.9em; color: #4fc3f7;"></div>
+            </div>
+            
+            <!-- Volume Control -->
+            <div style="margin-bottom: 15px;">
+                <label for="volume-slider" style="display: block; margin-bottom: 5px;">🔊 Volume: <span id="volume-display">75%</span></label>
+                <input type="range" id="volume-slider" min="0" max="100" value="75" 
+                       onchange="setVolume(this.value)" 
+                       style="width: 100%; height: 8px; background: #4fc3f7; border-radius: 5px;">
+            </div>
+            
+            <!-- Mood Buttons -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 15px;">
+                <button onclick="startMusic('focus')" style="padding: 12px; font-size: 0.9em; background: #e8f5e8; border: none; border-radius: 5px; cursor: pointer;">🎯 Focus</button>
+                <button onclick="startMusic('energy')" style="padding: 12px; font-size: 0.9em; background: #fff8e8; border: none; border-radius: 5px; cursor: pointer;">⚡ Energy</button>
+                <button onclick="startMusic('calm')" style="padding: 12px; font-size: 0.9em; background: #e8f0ff; border: none; border-radius: 5px; cursor: pointer;">😌 Calm</button>
+                <button onclick="startMusic('ambient')" style="padding: 12px; font-size: 0.9em; background: #f0e8ff; border: none; border-radius: 5px; cursor: pointer;">🌊 Ambient</button>
+                <button onclick="startMusic('study')" style="padding: 12px; font-size: 0.9em; background: #ffe8f0; border: none; border-radius: 5px; cursor: pointer;">📚 Study</button>
+                <button onclick="startMusic('nature')" style="padding: 12px; font-size: 0.9em; background: #e8ffe8; border: none; border-radius: 5px; cursor: pointer;">🌿 Nature</button>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button onclick="stopMusic()" style="padding: 10px 20px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;">⏹️ Stop</button>
+                <button onclick="nextTrack()" style="padding: 10px 20px; background: #4fc3f7; color: white; border: none; border-radius: 5px; cursor: pointer;">⏭️ Next</button>
+                <button onclick="refreshMusicStatus()" style="padding: 10px 20px; background: #74b9ff; color: white; border: none; border-radius: 5px; cursor: pointer;">🔄 Refresh</button>
+            </div>
+        </div>
+        
         <!-- Quick Actions -->
         <div class="panel">
-            <h3>⚡ Quick Actions</h3>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button onclick="sendNudge()">📢 Test Nudge</button>
-                <button onclick="refreshDevices()">🔄 Refresh Devices</button>
-                <button onclick="checkHealth()">❤️ Health Check</button>
-                <button onclick="startMusic('focus')">🎵 Focus Music</button>
-                <button onclick="startMusic('energy')">⚡ Energy Music</button>
+            <h3>🎯 Need Help Right Now?</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="sendNudge()" style="padding: 15px; font-size: 1.1em; background: #ffeb3b; color: #333;">📢 Send Nudge</button>
+                <button onclick="refreshDevices()" style="padding: 15px; font-size: 1.1em; background: #e3f2fd;">🔍 Find Devices</button>
             </div>
         </div>
     </div>
@@ -196,13 +243,30 @@
                 document.getElementById('system-status').textContent = health.status || 'Online';
                 document.getElementById('system-status').className = 'stat-value success';
                 
-                // Update memory status
-                if (health.redis_connected) {
-                    document.getElementById('memory-status').textContent = 'Redis Active';
+                // Update memory status (simplified for users)
+                if (health.components && health.components.redis) {
+                    document.getElementById('memory-status').textContent = 'Connected';
                     document.getElementById('memory-status').className = 'stat-value success';
                 } else {
-                    document.getElementById('memory-status').textContent = 'Memory Only';
+                    document.getElementById('memory-status').textContent = 'Local';
                     document.getElementById('memory-status').className = 'stat-value';
+                }
+                
+                // Update music status
+                await updateMusicDisplay();
+                
+                // Update Claude status
+                if (health.components && health.components.claude_integration) {
+                    if (health.components.claude_authenticated) {
+                        document.getElementById('claude-status').textContent = 'Ready';
+                        document.getElementById('claude-status').className = 'stat-value success';
+                    } else {
+                        document.getElementById('claude-status').textContent = 'Available';
+                        document.getElementById('claude-status').className = 'stat-value';
+                    }
+                } else {
+                    document.getElementById('claude-status').textContent = 'Offline';
+                    document.getElementById('claude-status').className = 'stat-value error';
                 }
             } catch (e) {
                 document.getElementById('system-status').textContent = 'Error';
@@ -268,6 +332,100 @@
             }
         }
         
+        // Update music display with rich information
+        async function updateMusicDisplay() {
+            try {
+                const musicStatus = await fetch('/music/status').then(r => r.json());
+                
+                if (musicStatus.available) {
+                    if (musicStatus.is_playing) {
+                        const track = musicStatus.current_track || {};
+                        const queue = musicStatus.queue || {};
+                        
+                        // Update now playing info
+                        document.getElementById('track-info').textContent = track.name || 'Unknown Track';
+                        document.getElementById('artist-info').textContent = track.artist || 'Unknown Artist';
+                        document.getElementById('queue-info').textContent = 
+                            `${queue.current_index + 1 || 1}/${queue.total || 0} • ${track.mood || 'unknown'} mood • ${musicStatus.chromecast_connected ? 'Shack Speakers' : 'No device'}`;
+                        
+                        // Update volume slider and display
+                        const volume = Math.round((musicStatus.volume || 0) * 100);
+                        document.getElementById('volume-slider').value = volume;
+                        document.getElementById('volume-display').textContent = volume + '%';
+                        
+                        // Update status indicator
+                        document.getElementById('music-status').textContent = (track.mood || 'Playing').charAt(0).toUpperCase() + (track.mood || 'playing').slice(1);
+                        document.getElementById('music-status').className = 'stat-value success';
+                        
+                        // Show playing state
+                        document.getElementById('now-playing').style.border = '2px solid #4fc3f7';
+                    } else {
+                        document.getElementById('track-info').textContent = 'Music Stopped';
+                        document.getElementById('artist-info').textContent = 'Ready to play from 5000+ tracks';
+                        document.getElementById('queue-info').textContent = 'Device: ' + (musicStatus.chromecast_connected ? 'Shack Speakers' : 'Not connected');
+                        document.getElementById('music-status').textContent = 'Off';
+                        document.getElementById('music-status').className = 'stat-value';
+                        document.getElementById('now-playing').style.border = '1px solid rgba(255,255,255,0.2)';
+                    }
+                } else {
+                    document.getElementById('track-info').textContent = 'Music System Offline';
+                    document.getElementById('artist-info').textContent = 'Check server connection';
+                    document.getElementById('queue-info').textContent = '';
+                    document.getElementById('music-status').textContent = 'Error';
+                    document.getElementById('music-status').className = 'stat-value error';
+                    document.getElementById('now-playing').style.border = '1px solid #ff6b6b';
+                }
+            } catch (e) {
+                document.getElementById('track-info').textContent = 'Connection Error';
+                document.getElementById('artist-info').textContent = 'Unable to reach music server';
+                document.getElementById('queue-info').textContent = '';
+                document.getElementById('music-status').textContent = 'Error';
+                document.getElementById('music-status').className = 'stat-value error';
+            }
+        }
+        
+        // Set volume
+        async function setVolume(value) {
+            const volume = value / 100;
+            document.getElementById('volume-display').textContent = value + '%';
+            
+            try {
+                const response = await fetch(`/music/volume/${volume}`, {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    addActivity(`Volume set to ${value}%`, 'success');
+                } else {
+                    addActivity(`Volume failed: ${data.message}`, 'error');
+                }
+            } catch (e) {
+                addActivity('Volume control error', 'error');
+            }
+        }
+        
+        // Next track
+        async function nextTrack() {
+            try {
+                const response = await fetch('/music/next', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    addActivity('Skipped to next track', 'success');
+                    setTimeout(updateMusicDisplay, 1000); // Refresh after skip
+                } else {
+                    addActivity('Next track failed', 'error');
+                }
+            } catch (e) {
+                addActivity('Next track error', 'error');
+            }
+        }
+        
+        // Refresh music status
+        async function refreshMusicStatus() {
+            await updateMusicDisplay();
+            addActivity('Music status refreshed', 'success');
+        }
+
         // Start music
         async function startMusic(mood) {
             try {
@@ -275,14 +433,30 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    document.getElementById('music-status').textContent = mood.charAt(0).toUpperCase() + mood.slice(1);
-                    document.getElementById('music-status').className = 'stat-value success';
                     addActivity(`Started ${mood} music`, 'success');
+                    setTimeout(updateMusicDisplay, 1000); // Refresh display after starting
                 } else {
                     addActivity(`Music failed: ${data.message}`, 'error');
                 }
             } catch (e) {
                 addActivity('Music system not available', 'error');
+            }
+        }
+        
+        // Stop music
+        async function stopMusic() {
+            try {
+                const response = await fetch('/music/stop', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    addActivity('Music stopped', 'success');
+                    setTimeout(updateMusicDisplay, 500); // Refresh display after stopping
+                } else {
+                    addActivity('Failed to stop music', 'error');
+                }
+            } catch (e) {
+                addActivity('Music control error', 'error');
             }
         }
         

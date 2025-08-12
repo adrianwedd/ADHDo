@@ -81,6 +81,14 @@ try:
 except ImportError as e:
     logger.warning(f"Claude integration not available: {e}")
 
+# Import Claude with tools endpoint (the one that actually works)
+try:
+    from mcp_server.claude_with_tools import router as claude_tools_router
+    logger.info("✅ Claude tools endpoint loaded")
+except ImportError as e:
+    logger.warning(f"Claude tools endpoint not available: {e}")
+    claude_tools_router = None
+
 # In-memory fallbacks
 memory_store = {
     'sessions': {},
@@ -98,6 +106,11 @@ class ChatResponse(BaseModel):
     response: str
     thinking: Optional[str] = None  # AI thinking process for UI display only
     success: bool = True
+
+class NudgeRequest(BaseModel):
+    message: str
+    urgency: Optional[str] = "normal"
+    device: Optional[str] = None
     actions_taken: list = []
     cognitive_load: float = 0.0
     processing_time_ms: float = 0.0
@@ -176,6 +189,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning(f"Trace memory initialization failed: {e}")
     
     # Initialize nudge engine and smart scheduler
+    nest_available = False
     try:
         from mcp_server.nest_nudges import initialize_nest_nudges
         from mcp_server.smart_scheduler import initialize_smart_scheduler
@@ -183,6 +197,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         nudge_success = await initialize_nest_nudges()
         scheduler_success = await initialize_smart_scheduler()
         
+        nest_available = nudge_success
         if nudge_success:
             logger.info("✅ Nest nudge system initialized")
         else:
@@ -195,6 +210,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             
     except Exception as e:
         logger.warning(f"Nudge engine initialization failed: {e}")
+    
+    # Initialize reminder system
+    try:
+        from mcp_server.adhd_reminders import initialize_reminders
+        
+        # Pass the nudge function as callback
+        nudge_callback = None
+        if nest_available:
+            async def send_reminder_nudge(message, urgency="normal", nudge_type="reminder"):
+                from mcp_server.nest_nudges import nest_nudge_system, NudgeType
+                if nest_nudge_system:
+                    # Map urgency to nudge type
+                    nudge_type_map = {
+                        "low": NudgeType.GENTLE,
+                        "normal": NudgeType.GENTLE,
+                        "high": NudgeType.URGENT,
+                        "urgent": NudgeType.URGENT
+                    }
+                    return await nest_nudge_system.send_nudge(
+                        message=message,
+                        nudge_type=nudge_type_map.get(urgency, NudgeType.GENTLE)
+                    )
+            nudge_callback = send_reminder_nudge
+        
+        reminder_success = await initialize_reminders(redis_client, nudge_callback)
+        if reminder_success:
+            logger.info("✅ ADHD reminder system initialized")
+        else:
+            logger.warning("⚠️ Reminder system failed to initialize")
+    except Exception as e:
+        logger.warning(f"Reminder system initialization failed: {e}")
     
     # Initialize music system if available
     if music_available:
@@ -249,6 +295,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Claude tools router if available
+if claude_tools_router:
+    app.include_router(claude_tools_router)
+    logger.info("✅ Claude tools endpoints added")
 
 # Root endpoint - MCP Contextual Operating System Dashboard
 @app.get("/", response_class=HTMLResponse)
@@ -1103,7 +1154,7 @@ async def get_circuit_breaker_status(user_id: str):
 # ============================================================================
 
 @app.post("/nudge/send")
-async def send_nudge(message: str, urgency: str = "normal", device: Optional[str] = None):
+async def send_nudge(request: NudgeRequest):
     """Send a nudge to Nest devices."""
     try:
         from mcp_server.nest_nudges import nest_nudge_system
@@ -1113,10 +1164,10 @@ async def send_nudge(message: str, urgency: str = "normal", device: Optional[str
         
         # Map urgency to nudge type
         from mcp_server.nest_nudges import NudgeType
-        if urgency == "high":
+        if request.urgency == "high":
             nudge_type = NudgeType.URGENT
             volume = 0.6
-        elif urgency == "low":
+        elif request.urgency == "low":
             nudge_type = NudgeType.GENTLE
             volume = 0.4
         else:
@@ -1124,14 +1175,14 @@ async def send_nudge(message: str, urgency: str = "normal", device: Optional[str
             volume = 0.5
         
         success = await nest_nudge_system.send_nudge(
-            message=message,
+            message=request.message,
             nudge_type=nudge_type,
-            device_name=device,
+            device_name=request.device,
             volume=volume
         )
         
         if success:
-            return {"success": True, "message": f"📢 Nudge sent: {message}"}
+            return {"success": True, "message": f"📢 Nudge sent: {request.message}"}
         else:
             return {"success": False, "message": "Failed to send nudge"}
             
@@ -1524,6 +1575,31 @@ try:
             return await music_module.jellyfin_music.play_mood_playlist(MusicMood.ENERGY)
         return False
     
+    async def play_calm_music():
+        if music_module.jellyfin_music:
+            return await music_module.jellyfin_music.play_mood_playlist(MusicMood.CALM)
+        return False
+    
+    async def play_ambient_music():
+        if music_module.jellyfin_music:
+            return await music_module.jellyfin_music.play_mood_playlist(MusicMood.AMBIENT)
+        return False
+    
+    async def play_study_music():
+        if music_module.jellyfin_music:
+            return await music_module.jellyfin_music.play_mood_playlist(MusicMood.STUDY)
+        return False
+    
+    async def play_nature_music():
+        if music_module.jellyfin_music:
+            return await music_module.jellyfin_music.play_mood_playlist(MusicMood.NATURE)
+        return False
+    
+    async def next_track():
+        if music_module.jellyfin_music:
+            return await music_module.jellyfin_music.skip_track()
+        return False
+    
     async def stop_all_music():
         if music_module.jellyfin_music:
             return await music_module.jellyfin_music.stop_music()
@@ -1728,6 +1804,91 @@ async def quick_energy_music():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/music/calm")
+async def quick_calm_music():
+    """Quick endpoint to start calm music for relaxation."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await play_calm_music()
+        return {
+            "success": success,
+            "message": "😌 Calm music started! Time to relax and breathe." if success else "Failed to start calm music"
+        }
+    except Exception as e:
+        logger.error(f"Quick calm music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/ambient")
+async def quick_ambient_music():
+    """Quick endpoint to start ambient music for background focus."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await play_ambient_music()
+        return {
+            "success": success,
+            "message": "🌊 Ambient music started! Perfect background for any task." if success else "Failed to start ambient music"
+        }
+    except Exception as e:
+        logger.error(f"Quick ambient music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/study")
+async def quick_study_music():
+    """Quick endpoint to start study music for learning."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await play_study_music()
+        return {
+            "success": success,
+            "message": "📚 Study music started! Optimize your learning environment." if success else "Failed to start study music"
+        }
+    except Exception as e:
+        logger.error(f"Quick study music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/nature")
+async def quick_nature_music():
+    """Quick endpoint to start nature sounds for grounding."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await play_nature_music()
+        return {
+            "success": success,
+            "message": "🌿 Nature sounds started! Connect with natural rhythms." if success else "Failed to start nature sounds"
+        }
+    except Exception as e:
+        logger.error(f"Quick nature music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/next")
+async def skip_to_next_track():
+    """Skip to the next track in the current playlist."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await next_track()
+        return {
+            "success": success,
+            "message": "⏭️ Skipped to next track!" if success else "Failed to skip track"
+        }
+    except Exception as e:
+        logger.error(f"Next track failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/music/devices")
 async def discover_chromecast_devices():
     """Discover all available Chromecast devices."""
@@ -1821,6 +1982,221 @@ async def normal_mode():
         logger.error(f"Normal mode failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ADHD Reminder System Endpoints
+@app.get("/reminders")
+async def get_reminders(type: Optional[str] = None):
+    """Get all configured reminders."""
+    try:
+        from mcp_server.adhd_reminders import adhd_reminders, ReminderType
+        
+        if not adhd_reminders:
+            return {"reminders": [], "message": "Reminder system not initialized"}
+        
+        type_filter = ReminderType(type) if type else None
+        reminders = await adhd_reminders.get_reminders(type_filter)
+        
+        return {
+            "reminders": reminders,
+            "count": len(reminders),
+            "system_active": True
+        }
+    except Exception as e:
+        logger.error(f"Failed to get reminders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reminders/add")
+async def add_reminder(
+    message: str,
+    time: Optional[str] = None,  # Format: "HH:MM"
+    interval_minutes: Optional[int] = None,
+    priority: str = "normal"
+):
+    """Add a custom reminder."""
+    try:
+        from mcp_server.adhd_reminders import adhd_reminders
+        from datetime import time as dt_time
+        
+        if not adhd_reminders:
+            raise HTTPException(status_code=503, detail="Reminder system not initialized")
+        
+        # Parse time if provided
+        trigger_time = None
+        if time:
+            hour, minute = map(int, time.split(':'))
+            trigger_time = dt_time(hour, minute)
+        
+        reminder_id = await adhd_reminders.add_custom_reminder(
+            message=message,
+            trigger_time=trigger_time,
+            interval_minutes=interval_minutes,
+            priority=priority
+        )
+        
+        return {
+            "success": True,
+            "reminder_id": reminder_id,
+            "message": f"Custom reminder added: {reminder_id}"
+        }
+    except Exception as e:
+        logger.error(f"Failed to add reminder: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/reminders/{reminder_id}")
+async def update_reminder(reminder_id: str, enabled: Optional[bool] = None, message: Optional[str] = None):
+    """Update an existing reminder."""
+    try:
+        from mcp_server.adhd_reminders import adhd_reminders
+        
+        if not adhd_reminders:
+            raise HTTPException(status_code=503, detail="Reminder system not initialized")
+        
+        updates = {}
+        if enabled is not None:
+            updates['enabled'] = enabled
+        if message is not None:
+            updates['message'] = message
+        
+        success = await adhd_reminders.update_reminder(reminder_id, **updates)
+        
+        if success:
+            return {"success": True, "message": f"Reminder {reminder_id} updated"}
+        else:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+            
+    except Exception as e:
+        logger.error(f"Failed to update reminder: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reminders/{reminder_id}/acknowledge")
+async def acknowledge_reminder(reminder_id: str):
+    """Acknowledge a reminder that requires confirmation."""
+    try:
+        from mcp_server.adhd_reminders import adhd_reminders
+        
+        if not adhd_reminders:
+            raise HTTPException(status_code=503, detail="Reminder system not initialized")
+        
+        success = await adhd_reminders.acknowledge_reminder(reminder_id)
+        
+        if success:
+            return {"success": True, "message": f"Reminder {reminder_id} acknowledged"}
+        else:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+            
+    except Exception as e:
+        logger.error(f"Failed to acknowledge reminder: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Smart Scheduling System Integration
+schedule_available = False
+schedule_module = None
+
+try:
+    from mcp_server.smart_scheduler import smart_scheduler, NudgeSchedule, ScheduleType
+    schedule_available = True
+    logger.info("✅ Smart scheduler API integration loaded")
+except ImportError as e:
+    logger.warning(f"Smart scheduler API not available: {e}")
+
+@app.post("/schedule/add")
+async def add_schedule(request: dict):
+    """Add a new nudge schedule."""
+    if not schedule_available or not smart_scheduler:
+        raise HTTPException(status_code=503, detail="Smart scheduler not available")
+    
+    try:
+        from datetime import datetime
+        import uuid
+        
+        # Parse request
+        schedule_type_str = request.get("schedule_type", "custom")
+        schedule_type = ScheduleType(schedule_type_str)
+        
+        # Create schedule
+        schedule = NudgeSchedule(
+            schedule_id=f"schedule_{int(datetime.now().timestamp())}",
+            user_id=request.get("user_id", "default"),
+            schedule_type=schedule_type,
+            target_time=request.get("target_time", "22:00"),
+            title=request.get("title", "Reminder"),
+            context=request.get("context", ""),
+            enabled=request.get("enabled", True),
+            pre_nudge_minutes=request.get("pre_nudge_minutes", 15),
+            escalation_intervals=request.get("escalation_intervals", [10, 15, 20, 25, 30]),
+            max_attempts=request.get("max_attempts", 5),
+            tone=request.get("tone", "encouraging"),
+            include_context=request.get("include_context", True),
+            use_llm=request.get("use_llm", True)
+        )
+        
+        success = await smart_scheduler.add_schedule(schedule)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"✅ Added schedule: {schedule.title} at {schedule.target_time}",
+                "schedule_id": schedule.schedule_id
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to add schedule")
+            
+    except Exception as e:
+        logger.error(f"Schedule add failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/schedule/list")
+async def list_schedules():
+    """Get all active schedules."""
+    if not schedule_available or not smart_scheduler:
+        raise HTTPException(status_code=503, detail="Smart scheduler not available")
+    
+    try:
+        schedules = smart_scheduler.get_schedules()
+        return {
+            "success": True,
+            "schedules": schedules,
+            "count": len(schedules)
+        }
+    except Exception as e:
+        logger.error(f"Schedule list failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/schedule/{schedule_id}/acknowledge")
+async def acknowledge_schedule(schedule_id: str):
+    """Acknowledge a nudge to stop the sequence."""
+    if not schedule_available or not smart_scheduler:
+        raise HTTPException(status_code=503, detail="Smart scheduler not available")
+    
+    try:
+        success = await smart_scheduler.acknowledge_nudge(schedule_id)
+        return {
+            "success": success,
+            "message": f"✅ Acknowledged schedule: {schedule_id}" if success else "Schedule not found"
+        }
+    except Exception as e:
+        logger.error(f"Schedule acknowledge failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/schedule/{schedule_id}/snooze")
+async def snooze_schedule(schedule_id: str, minutes: int = 10):
+    """Snooze a nudge for specified minutes."""
+    if not schedule_available or not smart_scheduler:
+        raise HTTPException(status_code=503, detail="Smart scheduler not available")
+    
+    try:
+        success = await smart_scheduler.snooze_nudge(schedule_id, minutes)
+        return {
+            "success": success,
+            "message": f"😴 Snoozed schedule {schedule_id} for {minutes} minutes" if success else "Schedule not found"
+        }
+    except Exception as e:
+        logger.error(f"Schedule snooze failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Google Assistant Broadcast Integration
 google_assistant_available = False
