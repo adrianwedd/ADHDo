@@ -277,27 +277,54 @@
         // Fetch Nest devices
         async function refreshDevices() {
             const devicesDiv = document.getElementById('devices');
-            devicesDiv.innerHTML = '<div class="loading">Scanning for devices...</div>';
+            // Clear and add loading message safely
+            devicesDiv.textContent = '';
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.textContent = 'Scanning for devices...';
+            devicesDiv.appendChild(loadingDiv);
             
             try {
                 const response = await fetch('/nudge/devices');
                 const data = await response.json();
                 
                 if (data.devices && data.devices.length > 0) {
-                    devicesDiv.innerHTML = data.devices.map(d => `
-                        <div class="device-item">
-                            <strong>${typeof d === 'string' ? d : d.name}</strong><br>
-                            <small>${typeof d === 'string' ? 'Google Nest Device' : (d.model || 'Unknown Model')}</small>
-                        </div>
-                    `).join('');
+                    // Clear the container
+                    devicesDiv.textContent = '';
+                    
+                    // Create device items safely
+                    data.devices.forEach(d => {
+                        const deviceItem = document.createElement('div');
+                        deviceItem.className = 'device-item';
+                        
+                        const strongEl = document.createElement('strong');
+                        strongEl.textContent = typeof d === 'string' ? d : d.name;
+                        deviceItem.appendChild(strongEl);
+                        
+                        deviceItem.appendChild(document.createElement('br'));
+                        
+                        const smallEl = document.createElement('small');
+                        smallEl.textContent = typeof d === 'string' ? 'Google Nest Device' : (d.model || 'Unknown Model');
+                        deviceItem.appendChild(smallEl);
+                        
+                        devicesDiv.appendChild(deviceItem);
+                    });
                     
                     document.getElementById('nudge-count').textContent = data.devices.length;
                 } else {
-                    devicesDiv.innerHTML = '<div class="error">No Nest devices found</div>';
+                    devicesDiv.textContent = '';
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error';
+                    errorDiv.textContent = 'No Nest devices found';
+                    devicesDiv.appendChild(errorDiv);
                     document.getElementById('nudge-count').textContent = '0';
                 }
             } catch (e) {
-                devicesDiv.innerHTML = '<div class="error">Failed to scan devices</div>';
+                devicesDiv.textContent = '';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error';
+                errorDiv.textContent = 'Failed to scan devices';
+                devicesDiv.appendChild(errorDiv);
             }
         }
         
@@ -466,9 +493,12 @@
             const message = input.value.trim();
             if (!message) return;
             
-            // Add user message
+            // Add user message safely
             const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML += `<div class="message user">${message}</div>`;
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message user';
+            userMessageDiv.textContent = message;
+            messagesDiv.appendChild(userMessageDiv);
             input.value = '';
             
             try {
@@ -479,12 +509,20 @@
                 });
                 
                 const data = await response.json();
-                messagesDiv.innerHTML += `<div class="message assistant">${data.response}</div>`;
+                // Add assistant response safely
+                const assistantMessageDiv = document.createElement('div');
+                assistantMessageDiv.className = 'message assistant';
+                assistantMessageDiv.textContent = data.response;
+                messagesDiv.appendChild(assistantMessageDiv);
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
                 
                 addActivity('Chat interaction', 'success');
             } catch (e) {
-                messagesDiv.innerHTML += `<div class="message assistant error">Sorry, I couldn't process that.</div>`;
+                // Add error message safely
+                const errorMessageDiv = document.createElement('div');
+                errorMessageDiv.className = 'message assistant error';
+                errorMessageDiv.textContent = 'Sorry, I couldn\'t process that.';
+                messagesDiv.appendChild(errorMessageDiv);
             }
         }
         
@@ -492,11 +530,20 @@
         function addActivity(text, type = '') {
             const activityDiv = document.getElementById('activity');
             const timestamp = new Date().toLocaleTimeString();
-            activityDiv.innerHTML = `
-                <div class="memory-item ${type}">
-                    <strong>${timestamp}:</strong> ${text}
-                </div>
-            ` + activityDiv.innerHTML;
+            
+            // Create activity item safely
+            const memoryItem = document.createElement('div');
+            memoryItem.className = 'memory-item ' + type;
+            
+            const strongEl = document.createElement('strong');
+            strongEl.textContent = timestamp + ':';
+            memoryItem.appendChild(strongEl);
+            
+            const textNode = document.createTextNode(' ' + text);
+            memoryItem.appendChild(textNode);
+            
+            // Insert at the beginning
+            activityDiv.insertBefore(memoryItem, activityDiv.firstChild);
             
             // Keep only last 5 activities
             const items = activityDiv.querySelectorAll('.memory-item');
