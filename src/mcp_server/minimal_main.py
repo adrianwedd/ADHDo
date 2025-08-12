@@ -211,6 +211,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"Nudge engine initialization failed: {e}")
     
+    # Initialize voice and calendar systems
+    try:
+        from mcp_server.voice_calendar_integration import initialize_voice_calendar
+        from mcp_server.voice_assistant import initialize_voice_assistant
+        
+        # Initialize voice calendar integration
+        voice_cal_success = await initialize_voice_calendar(nest_system=nest_nudge_system if nest_available else None)
+        if voice_cal_success:
+            logger.info("✅ Voice calendar integration initialized")
+        else:
+            logger.warning("⚠️ Voice calendar integration failed")
+        
+        # Initialize voice assistant (optional - requires microphone)
+        voice_assist_success = await initialize_voice_assistant(wake_word="hey claude")
+        if voice_assist_success:
+            logger.info("✅ Voice assistant initialized")
+        else:
+            logger.warning("⚠️ Voice assistant not available (microphone required)")
+            
+    except Exception as e:
+        logger.warning(f"Voice system initialization failed: {e}")
+    
     # Initialize reminder system
     try:
         from mcp_server.adhd_reminders import initialize_reminders
@@ -2089,6 +2111,95 @@ async def acknowledge_reminder(reminder_id: str):
             
     except Exception as e:
         logger.error(f"Failed to acknowledge reminder: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Voice and Calendar Integration Endpoints
+@app.post("/voice/command")
+async def process_voice_command(command: str, params: Optional[Dict] = None):
+    """Process a voice command through the calendar system."""
+    try:
+        from mcp_server.voice_calendar_integration import voice_calendar
+        
+        if not voice_calendar:
+            raise HTTPException(status_code=503, detail="Voice calendar system not initialized")
+        
+        response = await voice_calendar.process_voice_command(command, params or {})
+        
+        return {
+            "success": True,
+            "command": command,
+            "response": response
+        }
+    except Exception as e:
+        logger.error(f"Voice command failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/calendar/next")
+async def get_next_event():
+    """Get the next calendar event."""
+    try:
+        from mcp_server.voice_calendar_integration import voice_calendar
+        
+        if not voice_calendar:
+            return {"next_event": None, "message": "Calendar system not initialized"}
+        
+        await voice_calendar._update_context()
+        
+        if voice_calendar.context.next_event:
+            return {
+                "next_event": voice_calendar.context.next_event,
+                "time_until_minutes": voice_calendar.context.time_until_next,
+                "is_in_meeting": voice_calendar.context.is_in_meeting
+            }
+        else:
+            return {"next_event": None, "message": "No upcoming events"}
+            
+    except Exception as e:
+        logger.error(f"Failed to get next event: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/calendar/focus-time")
+async def start_focus_time(duration: int = 25):
+    """Start a focus time session with calendar awareness."""
+    try:
+        from mcp_server.voice_calendar_integration import voice_calendar
+        
+        if not voice_calendar:
+            raise HTTPException(status_code=503, detail="Voice calendar system not initialized")
+        
+        response = await voice_calendar.handle_focus_time({'duration': duration})
+        
+        return {
+            "success": True,
+            "duration": duration,
+            "message": response
+        }
+    except Exception as e:
+        logger.error(f"Focus time failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/voice/listen")
+async def start_voice_listening():
+    """Start listening for voice commands."""
+    try:
+        from mcp_server.voice_assistant import voice_assistant
+        
+        if not voice_assistant:
+            raise HTTPException(status_code=503, detail="Voice assistant not available")
+        
+        # Start a listening session
+        asyncio.create_task(voice_assistant.start_session())
+        
+        return {
+            "success": True,
+            "message": "Listening for voice command..."
+        }
+    except Exception as e:
+        logger.error(f"Voice listen failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
