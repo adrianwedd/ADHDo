@@ -122,10 +122,10 @@ class NestNudgeSystem:
                     lambda: pychromecast.get_chromecasts(timeout=20)
                 )
                 
-                # Filter for Nest/Google Home devices
+                # Filter for Nest/Google Home devices (prioritize Nest Mini for nudges)
                 for cc in chromecasts:
                     model_lower = cc.model_name.lower()
-                    if any(nest in model_lower for nest in ['nest', 'google home', 'home mini', 'home max']):
+                    if any(nest in model_lower for nest in ['nest mini', 'google home mini', 'nest hub', 'google home']):
                         self.devices.append(cc)
                         self.device_map[cc.name] = cc
                         logger.info(f"✅ Found Nest device: {cc.name} ({cc.model_name})")
@@ -261,12 +261,40 @@ class NestNudgeSystem:
             # Fresh discovery (exactly like direct test that works)
             chromecasts, browser = pychromecast.get_chromecasts(timeout=15)
             
-            target_cast = None
+            # Filter out non-Nest devices first (CRITICAL: Exclude Chromecast Audio!)
+            nest_only = []
             for cc in chromecasts:
-                if cc.name == target_device_name or ('nest hub max' in cc.model_name.lower() and not target_device_name):
-                    target_cast = cc
-                    logger.info(f"✅ Found target device: {cc.name}")
-                    break
+                model_lower = cc.model_name.lower()
+                # Skip Chromecast Audio and media devices
+                if 'chromecast audio' in model_lower or 'shield' in model_lower or cc.name == 'Shack Speakers':
+                    logger.debug(f"⏭️ Skipping media device: {cc.name} ({cc.model_name})")
+                    continue
+                # Only include Nest and Google Home devices
+                if 'nest' in model_lower or 'google home' in model_lower or 'home mini' in model_lower:
+                    nest_only.append(cc)
+                    logger.debug(f"✅ Found Nest device: {cc.name} ({cc.model_name})")
+            
+            target_cast = None
+            # If specific device requested, find it in Nest-only list
+            if target_device_name:
+                for cc in nest_only:
+                    if cc.name == target_device_name:
+                        target_cast = cc
+                        logger.info(f"✅ Found target device: {cc.name}")
+                        break
+            
+            # Otherwise prefer Nest Mini for nudges
+            if not target_cast:
+                for cc in nest_only:
+                    if 'nest mini' in cc.model_name.lower() or 'google home mini' in cc.model_name.lower():
+                        target_cast = cc
+                        logger.info(f"✅ Using Nest Mini for nudge: {cc.name}")
+                        break
+            
+            # Fallback to any Nest device
+            if not target_cast and nest_only:
+                target_cast = nest_only[0]
+                logger.info(f"✅ Using Nest device for nudge: {target_cast.name}")
             
             if not target_cast:
                 logger.error(f"❌ Target device {target_device_name} not found in fresh discovery")
@@ -281,6 +309,18 @@ class NestNudgeSystem:
             # Set volume
             target_cast.set_volume(volume)
             logger.info(f"🔊 Volume set to {int(volume * 100)}%")
+            
+            # Check if this is a Nest Hub (has screen)
+            has_screen = 'nest hub' in target_cast.model_name.lower()
+            
+            if has_screen:
+                # Send visual message to Nest Hub display
+                logger.info(f"📺 Sending visual message to {target_cast.name}")
+                success = self._send_visual_message(target_cast, message)
+                if success:
+                    logger.info(f"✅ Visual message sent to {target_cast.name}")
+                    # Wait for visual to display before audio
+                    time.sleep(1)
             
             # Play the nudge
             logger.info(f"🎵 Playing nudge...")
@@ -298,6 +338,153 @@ class NestNudgeSystem:
         except Exception as e:
             logger.error(f"Fresh discovery nudge failed: {e}")
             return False
+    
+    def _send_visual_message(self, cast_device, message: str) -> bool:
+        """Send a visual message to Nest Hub display."""
+        try:
+            from datetime import datetime
+            import html
+            
+            # Create HTML content for the message
+            timestamp = datetime.now().strftime("%I:%M %p")
+            escaped_message = html.escape(message)
+            
+            html_content = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body {{
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        margin: 0;
+                        padding: 40px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        min-height: 100vh;
+                        text-align: center;
+                        box-sizing: border-box;
+                    }}
+                    .container {{
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 20px;
+                        padding: 30px;
+                        max-width: 80%;
+                        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+                        border: 1px solid rgba(255, 255, 255, 0.18);
+                    }}
+                    .title {{
+                        font-size: 32px;
+                        font-weight: bold;
+                        margin-bottom: 20px;
+                        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                    }}
+                    .message {{
+                        font-size: 28px;
+                        line-height: 1.4;
+                        margin-bottom: 20px;
+                        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                    }}
+                    .timestamp {{
+                        font-size: 20px;
+                        opacity: 0.8;
+                        margin-top: 20px;
+                    }}
+                    .icon {{
+                        font-size: 48px;
+                        margin-bottom: 20px;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="icon">🧠</div>
+                    <div class="title">ADHD Support</div>
+                    <div class="message">{escaped_message}</div>
+                    <div class="timestamp">{timestamp}</div>
+                </div>
+                <script>
+                    // Auto-refresh to show message for ~30 seconds
+                    setTimeout(function() {{
+                        document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial;color:#666;font-size:24px;">Message displayed</div>';
+                    }}, 30000);
+                </script>
+            </body>
+            </html>
+            """
+            
+            # Create a data URL for the HTML content
+            import base64
+            import urllib.parse
+            
+            encoded_html = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
+            data_url = f"data:text/html;charset=utf-8;base64,{encoded_html}"
+            
+            # Try Default Media Receiver first (more reliable)
+            try:
+                # Use Default Media Receiver app
+                media_controller = cast_device.media_controller
+                
+                # Create a simple image with text (this works better than HTML)
+                image_url = self._create_text_image_url(message)
+                
+                # Display as an image
+                media_controller.play_media(
+                    image_url,
+                    'image/png',
+                    title="ADHD Support",
+                    subtitle=message
+                )
+                media_controller.block_until_active()
+                logger.info(f"📺 Visual message displayed on {cast_device.name}")
+                return True
+                
+            except Exception as e:
+                logger.warning(f"Media receiver approach failed: {e}")
+                
+                # Fallback to web app approach
+                try:
+                    web_controller = cast_device.start_app('CC1AD845')  # Default Media Receiver
+                    if web_controller:
+                        web_controller.load_url(data_url)
+                        logger.info(f"📺 Visual content loaded via web app on {cast_device.name}")
+                        return True
+                    else:
+                        logger.warning(f"Failed to start media receiver on {cast_device.name}")
+                        return False
+                except Exception as e2:
+                    logger.warning(f"Web app fallback also failed: {e2}")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"Visual message failed: {e}")
+            return False
+    
+    def _create_text_image_url(self, message: str) -> str:
+        """Create a URL for an image with text (using a simple text-to-image service)."""
+        try:
+            import urllib.parse
+            from datetime import datetime
+            
+            # Use a simple approach - create a URL that generates an image with text
+            # This uses a public API that creates images from text
+            encoded_message = urllib.parse.quote(message)
+            timestamp = datetime.now().strftime("%I:%M %p")
+            
+            # Create a simple image URL (this is a fallback)
+            # In production, you'd want to host your own image generation service
+            image_url = f"https://via.placeholder.com/800x600/4A90E2/FFFFFF?text=🧠%20ADHD%20Support%0A%0A{encoded_message}%0A%0A{timestamp}"
+            
+            return image_url
+            
+        except Exception as e:
+            logger.error(f"Failed to create text image URL: {e}")
+            # Fallback to a simple placeholder
+            return "https://via.placeholder.com/800x600/4A90E2/FFFFFF?text=ADHD%20Support%20Message"
 
     def _send_to_existing_device_sync(self, device, audio_url: str, volume: float, message: str) -> bool:
         """Synchronously send nudge to existing device (runs in thread executor)."""
