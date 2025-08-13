@@ -784,29 +784,58 @@ User feedback: {state.user_feedback or 'none'}"""
         }
     
     async def _execute_decision(self, decision: Dict[str, Any], user_id: str) -> List[Dict]:
-        """Execute the actions from decision."""
+        """Execute the actions from decision with confidence gating."""
         results = []
         
+        # Check confidence level for gating
+        confidence = decision.get("confidence", 0.5)
+        
+        # Confidence gating - prevents low-confidence actions
+        if confidence < 0.3:
+            # Too uncertain - ask user for clarification
+            return [{
+                "type": "user_confirmation_needed",
+                "confidence": confidence,
+                "proposed_actions": decision.get("immediate_actions", []),
+                "status": "gated_low_confidence"
+            }]
+        
         # Import actual tool executors
-        from .music_controller import MusicController
-        from .nest_nudges import NestNudgeSystem
-        from .timer_system import TimerSystem
-        from .task_manager import TaskManager
-        
-        # Initialize executors
-        music = MusicController()
-        nudges = NestNudgeSystem()
-        timers = TimerSystem()
-        tasks = TaskManager()
-        
-        # Execute immediate actions
-        for action in decision.get("immediate_actions", []):
-            result = await self._execute_action(action, user_id, {
+        try:
+            from .music_controller import MusicController
+            from .nest_nudges import NestNudgeSystem
+            from .timer_system import TimerSystem
+            from .task_manager import TaskManager
+            
+            # Initialize executors
+            music = MusicController()
+            nudges = NestNudgeSystem()
+            timers = TimerSystem()
+            tasks = TaskManager()
+            
+            executors = {
                 "music": music,
                 "nudges": nudges,
                 "timers": timers,
                 "tasks": tasks
-            })
+            }
+            
+        except ImportError:
+            # Fallback to mock executors
+            executors = {
+                "music": None,
+                "nudges": None, 
+                "timers": None,
+                "tasks": None
+            }
+        
+        # Medium confidence - notify user of actions being taken
+        if confidence < 0.7:
+            await self._notify_user_of_actions(decision, user_id)
+        
+        # Execute immediate actions
+        for action in decision.get("immediate_actions", []):
+            result = await self._execute_action(action, user_id, executors)
             results.append(result)
         
         # Schedule future actions
@@ -817,7 +846,48 @@ User feedback: {state.user_feedback or 'none'}"""
         if decision.get("state_updates"):
             await self._update_state(user_id, decision["state_updates"])
         
+        # Add confidence metadata to results
+        results.append({
+            "type": "execution_metadata",
+            "confidence": confidence,
+            "confidence_level": self._get_confidence_label(confidence),
+            "status": "executed"
+        })
+        
         return results
+    
+    def _get_confidence_label(self, confidence: float) -> str:
+        """Get human-readable confidence level."""
+        if confidence >= 0.8:
+            return "very_high"
+        elif confidence >= 0.7:
+            return "high"
+        elif confidence >= 0.5:
+            return "medium"
+        elif confidence >= 0.3:
+            return "low"
+        else:
+            return "very_low"
+    
+    async def _notify_user_of_actions(self, decision: Dict, user_id: str):
+        """Notify user when medium confidence actions are being taken."""
+        actions = decision.get("immediate_actions", [])
+        if actions:
+            action_summary = ", ".join([a.get("type", "unknown") for a in actions])
+            logger.info(f"Medium confidence ({decision.get('confidence', 0):.1%}) - executing: {action_summary}")
+            
+            # Could send actual notification here
+            if self.redis_client:
+                notification = {
+                    "type": "action_notification",
+                    "confidence": decision.get("confidence"),
+                    "actions": action_summary,
+                    "timestamp": datetime.now().isoformat()
+                }
+                await self.redis_client.lpush(
+                    f"notifications:{user_id}",
+                    json.dumps(notification)
+                )
     
     async def _execute_action(self, action: Dict, user_id: str, executors: Dict) -> Dict:
         """Execute a single action using real tool executors."""
