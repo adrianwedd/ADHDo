@@ -51,10 +51,11 @@ class PlaybackState:
 class JellyfinMusicController:
     """Controls music playback from Jellyfin to Chromecast Audio."""
     
-    def __init__(self, jellyfin_url: str, api_key: str, chromecast_name: str = None):
+    def __init__(self, jellyfin_url: str, api_key: str, chromecast_name: str = None, user_id: str = None):
         self.jellyfin_url = jellyfin_url.rstrip('/')
         self.api_key = api_key
         self.chromecast_name = chromecast_name
+        self.user_id = user_id  # Add user_id for playlist management
         
         # Session for API calls
         self.session: Optional[aiohttp.ClientSession] = None
@@ -88,8 +89,8 @@ class JellyfinMusicController:
             if not await self._test_jellyfin_connection():
                 return False
             
-            # Load playlists
-            await self._load_adhd_playlists()
+            # Load existing playlists and create ADHD ones if needed
+            await self._load_and_create_adhd_playlists()
             
             # Initialize Chromecast (don't fail if not available)
             await self._initialize_chromecast()
@@ -119,11 +120,32 @@ class JellyfinMusicController:
             logger.error(f"❌ Jellyfin unreachable: {e}")
             return False
     
+    async def _get_default_user_id(self):
+        """Get default user ID from Jellyfin for playlist operations."""
+        try:
+            async with self.session.get(f"{self.jellyfin_url}/Users") as response:
+                if response.status == 200:
+                    users = await response.json()
+                    if users:
+                        # Use first user (usually admin or primary user)
+                        self.user_id = users[0]['Id']
+                        logger.info(f"Using user: {users[0].get('Name', 'Unknown')} ({self.user_id})")
+                    else:
+                        logger.warning("No users found in Jellyfin")
+                else:
+                    logger.error(f"Failed to get users: {response.status}")
+        except Exception as e:
+            logger.error(f"Error getting user ID: {e}")
+    
     async def _load_adhd_playlists(self):
         """Load ADHD-optimized music collections."""
         try:
             # Load real music from Jellyfin
             logger.info("🎵 Loading music from Jellyfin library")
+            
+            # Set default user_id if not provided (get from system info)
+            if not self.user_id:
+                await self._get_default_user_id()
             
             # Get all audio items from Jellyfin
             async with self.session.get(
@@ -519,6 +541,255 @@ class JellyfinMusicController:
                 return mood.value
         return "unknown"
     
+    # Playlist Management Methods
+    async def _load_and_create_adhd_playlists(self):
+        """Load existing playlists and create ADHD-specific ones if needed."""
+        try:
+            # Get existing playlists
+            playlists = await self._get_jellyfin_playlists()
+            existing_names = [p['Name'] for p in playlists]
+            
+            # ADHD playlist templates
+            adhd_playlists = {
+                "ADHD Deep Focus": {
+                    "description": "Long ambient tracks for sustained attention",
+                    "moods": [MusicMood.FOCUS, MusicMood.AMBIENT],
+                    "max_tracks": 50
+                },
+                "ADHD Energy Boost": {
+                    "description": "Upbeat music for task transitions",
+                    "moods": [MusicMood.ENERGY],
+                    "max_tracks": 30
+                },
+                "ADHD Anxiety Relief": {
+                    "description": "Calming tracks for overwhelm moments", 
+                    "moods": [MusicMood.CALM, MusicMood.NATURE],
+                    "max_tracks": 40
+                },
+                "ADHD Pomodoro Focus": {
+                    "description": "25-minute focus work sessions",
+                    "moods": [MusicMood.FOCUS, MusicMood.STUDY],
+                    "target_duration": 25 * 60  # 25 minutes
+                }
+            }
+            
+            # Create missing ADHD playlists
+            for name, config in adhd_playlists.items():
+                if name not in existing_names:
+                    logger.info(f"🎵 Creating ADHD playlist: {name}")
+                    await self._create_adhd_playlist(name, config)
+            
+            logger.info("✅ ADHD playlists loaded/created")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to load ADHD playlists: {e}")
+    
+    async def _get_jellyfin_playlists(self):
+        """Get all playlists from Jellyfin."""
+        try:
+            url = f"{self.jellyfin_url}/Users/{self.user_id}/Items"
+            params = {
+                'IncludeItemTypes': 'Playlist',
+                'Recursive': 'true',
+                'Fields': 'DateCreated,MediaStreams'
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get('Items', [])
+                else:
+                    logger.error(f"Failed to get playlists: {response.status}")
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"Error getting playlists: {e}")
+            return []
+    
+    async def _create_adhd_playlist(self, name: str, config: dict):
+        """Create an ADHD-specific playlist with curated tracks."""
+        try:
+            # Create empty playlist
+            playlist_id = await self._create_empty_playlist(name, config.get('description', ''))
+            if not playlist_id:
+                return False
+            
+            # Get tracks for the playlist based on moods
+            tracks = []
+            for mood in config.get('moods', []):
+                mood_tracks = self.playlists.get(mood, [])
+                tracks.extend(mood_tracks[:config.get('max_tracks', 30)])
+            
+            # Add tracks to playlist
+            if tracks:
+                await self._add_tracks_to_playlist(playlist_id, tracks[:config.get('max_tracks', 50)])
+                logger.info(f"✅ Created '{name}' with {len(tracks)} tracks")
+                return True
+            else:
+                logger.warning(f"⚠️ No tracks found for playlist '{name}'")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to create playlist '{name}': {e}")
+            return False
+    
+    async def _create_empty_playlist(self, name: str, description: str = "") -> Optional[str]:
+        """Create an empty playlist and return its ID."""
+        try:
+            url = f"{self.jellyfin_url}/Playlists"
+            data = {
+                'Name': name,
+                'MediaType': 'Audio',
+                'UserId': self.user_id
+            }
+            
+            if description:
+                data['Overview'] = description
+            
+            async with self.session.post(url, json=data) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get('Id')
+                else:
+                    logger.error(f"Failed to create playlist: {response.status}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Error creating playlist: {e}")
+            return None
+    
+    async def _add_tracks_to_playlist(self, playlist_id: str, tracks: List[JellyfinTrack]):
+        """Add tracks to an existing playlist."""
+        try:
+            # Convert tracks to item IDs
+            item_ids = []
+            for track in tracks:
+                # Extract ID from stream URL if needed
+                if '/Items/' in track.stream_url:
+                    item_id = track.stream_url.split('/Items/')[1].split('/')[0]
+                    item_ids.append(item_id)
+            
+            if not item_ids:
+                return False
+            
+            url = f"{self.jellyfin_url}/Playlists/{playlist_id}/Items"
+            params = {'Ids': ','.join(item_ids)}
+            
+            async with self.session.post(url, params=params) as response:
+                if response.status == 204:  # Jellyfin returns 204 for successful playlist additions
+                    logger.info(f"✅ Added {len(item_ids)} tracks to playlist")
+                    return True
+                else:
+                    logger.error(f"Failed to add tracks to playlist: {response.status}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error adding tracks to playlist: {e}")
+            return False
+    
+    async def play_playlist(self, playlist_name: str, shuffle: bool = True):
+        """Play a specific playlist by name."""
+        try:
+            playlists = await self._get_jellyfin_playlists()
+            target_playlist = None
+            
+            for playlist in playlists:
+                if playlist['Name'].lower() == playlist_name.lower():
+                    target_playlist = playlist
+                    break
+            
+            if not target_playlist:
+                logger.error(f"Playlist '{playlist_name}' not found")
+                return False
+            
+            # Get playlist items
+            tracks = await self._get_playlist_tracks(target_playlist['Id'])
+            if not tracks:
+                logger.error(f"Playlist '{playlist_name}' is empty")
+                return False
+            
+            # Update state and play
+            self.state.queue = tracks
+            self.state.queue_index = 0
+            self.state.is_playing = True
+            
+            if shuffle:
+                import random
+                random.shuffle(self.state.queue)
+            
+            first_track = self.state.queue[0]
+            success = await self._play_track_internal(first_track)
+            
+            if success:
+                logger.info(f"🎵 Playing playlist '{playlist_name}' with {len(tracks)} tracks")
+                self.state.playback_monitor_task = asyncio.create_task(
+                    self._monitor_and_play_next(first_track.duration_seconds)
+                )
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to play playlist '{playlist_name}': {e}")
+            return False
+    
+    async def _get_playlist_tracks(self, playlist_id: str) -> List[JellyfinTrack]:
+        """Get tracks from a specific playlist."""
+        try:
+            url = f"{self.jellyfin_url}/Playlists/{playlist_id}/Items"
+            params = {
+                'Fields': 'MediaStreams,Path,RunTimeTicks',
+                'MediaTypes': 'Audio'
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    tracks = []
+                    
+                    for item in data.get('Items', []):
+                        track = JellyfinTrack(
+                            id=item['Id'],
+                            name=item.get('Name', 'Unknown'),
+                            artist=item.get('AlbumArtist', item.get('Artists', ['Unknown'])[0] if item.get('Artists') else 'Unknown'),
+                            duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
+                            stream_url=f"{self.jellyfin_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
+                        )
+                        tracks.append(track)
+                    
+                    return tracks
+                else:
+                    logger.error(f"Failed to get playlist tracks: {response.status}")
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"Error getting playlist tracks: {e}")
+            return []
+    
+    async def list_playlists(self):
+        """List all available playlists."""
+        try:
+            playlists = await self._get_jellyfin_playlists()
+            result = []
+            
+            for playlist in playlists:
+                # Get track count
+                tracks = await self._get_playlist_tracks(playlist['Id'])
+                result.append({
+                    'id': playlist['Id'],
+                    'name': playlist['Name'],
+                    'description': playlist.get('Overview', ''),
+                    'track_count': len(tracks),
+                    'created': playlist.get('DateCreated', ''),
+                    'is_adhd': playlist['Name'].startswith('ADHD')
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error listing playlists: {e}")
+            return []
+    
     async def cleanup(self):
         """Clean up resources."""
         try:
@@ -536,7 +807,7 @@ class JellyfinMusicController:
 # Global instance
 jellyfin_music: Optional[JellyfinMusicController] = None
 
-async def initialize_music_controller(jellyfin_url: str, jellyfin_token: str, chromecast_name: str = None) -> bool:
+async def initialize_music_controller(jellyfin_url: str, jellyfin_token: str, chromecast_name: str = None, user_id: str = None) -> bool:
     """Initialize the global music controller."""
     global jellyfin_music
     
@@ -544,7 +815,8 @@ async def initialize_music_controller(jellyfin_url: str, jellyfin_token: str, ch
         jellyfin_music = JellyfinMusicController(
             jellyfin_url=jellyfin_url,
             api_key=jellyfin_token,
-            chromecast_name=chromecast_name
+            chromecast_name=chromecast_name,
+            user_id=user_id
         )
         
         success = await jellyfin_music.initialize()

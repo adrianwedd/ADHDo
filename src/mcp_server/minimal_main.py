@@ -2192,6 +2192,59 @@ async def normal_mode():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Playlist Management Endpoints
+@app.get("/playlists")
+async def list_playlists():
+    """List all available playlists."""
+    if not music_available or not music_module.jellyfin_music:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        playlists = await music_module.jellyfin_music.list_playlists()
+        return {
+            "playlists": playlists,
+            "count": len(playlists),
+            "message": f"Found {len(playlists)} playlists"
+        }
+    except Exception as e:
+        logger.error(f"List playlists failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/playlists/play/{playlist_name}")
+async def play_playlist(playlist_name: str, shuffle: bool = True):
+    """Play a specific playlist."""
+    if not music_available or not music_module.jellyfin_music:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        success = await music_module.jellyfin_music.play_playlist(playlist_name, shuffle)
+        return {
+            "success": success,
+            "message": f"🎵 Playing playlist '{playlist_name}'" if success else f"Failed to play playlist '{playlist_name}'"
+        }
+    except Exception as e:
+        logger.error(f"Play playlist failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/playlists/create-adhd")
+async def create_adhd_playlists():
+    """Create or update ADHD-specific playlists."""
+    if not music_available or not music_module.jellyfin_music:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        await music_module.jellyfin_music._load_and_create_adhd_playlists()
+        return {
+            "success": True,
+            "message": "✅ ADHD playlists created/updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Create ADHD playlists failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ADHD Reminder System Endpoints
 @app.get("/reminders")
 async def get_reminders(type: Optional[str] = None):
