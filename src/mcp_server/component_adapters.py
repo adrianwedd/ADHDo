@@ -35,10 +35,23 @@ class MusicAdapter:
     
     def __init__(self, music_controller):
         self.music = music_controller
+        self.last_music_command = 0
     
     async def play_focus_music(self, intensity: str = "medium", **kwargs):
         """Play focus music based on intensity."""
+        import time
         from mcp_server.jellyfin_music import MusicMood
+        
+        # Prevent rapid restarts - only allow music commands every 2 minutes
+        current_time = time.time()
+        if current_time - self.last_music_command < 120:
+            logger.info(f"🔄 Music command cooldown: {120 - (current_time - self.last_music_command):.0f}s remaining")
+            return True  # Return success to avoid retry loops
+        
+        # Check if music is already playing
+        if hasattr(self.music, 'state') and self.music.state.is_playing:
+            logger.info("🎵 Music already playing, skipping restart")
+            return True
         
         intensity_map = {
             "low": MusicMood.CALM,
@@ -49,6 +62,7 @@ class MusicAdapter:
         mood = intensity_map.get(intensity, MusicMood.FOCUS)
         
         try:
+            self.last_music_command = current_time
             return await self.music.play_mood_playlist(mood)
         except Exception as e:
             logger.error(f"Failed to play focus music: {e}")

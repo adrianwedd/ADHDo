@@ -450,18 +450,29 @@ class JellyfinMusicController:
     async def _music_scheduler(self):
         """Background task to manage automatic music based on time and activity."""
         logger.info("⏰ Starting ADHD music scheduler")
+        last_music_start = 0
         
         while True:
             try:
                 now = datetime.now()
                 current_time = now.time()
+                current_timestamp = now.timestamp()
                 
                 # Only play between 9 AM and midnight
                 if time(9, 0) <= current_time or current_time <= time(0, 0):
                     # Check if we should start ambient music
-                    if not self.state.is_playing and not self._is_system_audio_active():
+                    # Add cooldown: don't restart if music was started in last 5 minutes
+                    time_since_last_start = current_timestamp - last_music_start
+                    
+                    if (not self.state.is_playing and 
+                        not self._is_system_audio_active() and 
+                        time_since_last_start > 300):  # 5 minute cooldown
+                        
                         logger.info("🎵 Starting ambient focus music (silence detected)")
                         await self.play_mood_playlist(MusicMood.FOCUS, volume=0.75)
+                        last_music_start = current_timestamp
+                    elif time_since_last_start <= 300 and not self.state.is_playing:
+                        logger.debug(f"🔄 Music restart cooldown: {300 - time_since_last_start:.0f}s remaining")
                 
                 # Check every 30 seconds
                 await asyncio.sleep(30)
