@@ -452,17 +452,17 @@ class LLMRouter:
         # Step 3: CLAUDE-FIRST OPTIMIZATION for ADHD Performance
         logger.info("Claude-first routing for optimal ADHD performance")
         
-        # Try pattern matching first - instant and ADHD-optimized (no LLM needed)
-        quick_response = self._get_quick_response(user_input)
-        if quick_response:
-            logger.info("Pattern match found - instant response")
-            return LLMResponse(
-                text=quick_response,
-                source="pattern_match",
-                confidence=0.95,
-                latency_ms=10,
-                model_used="adhd_patterns"
-            )
+        # DISABLED - Let Claude handle everything for now
+        # quick_response = self._get_quick_response(user_input)
+        # if quick_response:
+        #     logger.info("Pattern match found - instant response")
+        #     return LLMResponse(
+        #         text=quick_response,
+        #         source="pattern_match",
+        #         confidence=0.95,
+        #         latency_ms=10,
+        #         model_used="adhd_patterns"
+        #     )
         
         # For all other queries, prefer Claude for fast, high-quality responses
         if self._claude_available:
@@ -612,16 +612,14 @@ class LLMRouter:
             
             # Check if Claude browser is available
             try:
-                if _use_browser_claude:
-                    self.claude_browser_client = await get_claude_browser()
-                    self._claude_available = True
-                    logger.info("✅ Claude browser available - using for complex tasks")
-                else:
-                    self._claude_available = False
-                    logger.info("ℹ️ Claude browser not available - local + pattern matching mode")
+                # Try to initialize the browser client
+                claude_client = await get_claude_browser()
+                self._claude_available = True
+                logger.info("✅ Claude browser available - using for complex tasks")
             except Exception as e:
                 logger.warning(f"Claude browser initialization failed: {e}")
                 self._claude_available = False
+                logger.info("ℹ️ Claude browser not available - using pattern matching")
             
             self._initialized = True
             logger.info("🎯 LLM router initialized - ready for <3s ADHD responses")
@@ -660,56 +658,69 @@ class LLMRouter:
         nudge_tier: NudgeTier,
         use_case: str = 'gentle_nudge'
     ) -> LLMResponse:
-        """Handle request with Claude using browser auth."""
+        """Handle request with Claude using browser automation with rich context."""
         
+        import time
         start_time = time.time()
         
         try:
-            # Build system prompt based on nudge tier and context
-            system_prompt = None
-            if nudge_tier == NudgeTier.GENTLE:
-                system_prompt = self.adhd_system_prompts["gentle_nudge"]
-            elif nudge_tier in [NudgeTier.SARCASTIC, NudgeTier.SERGEANT]:
-                system_prompt = self.adhd_system_prompts["accountability"]
+            # Get the browser client
+            claude_client = await get_claude_browser()
             
-            # Add context if available
-            if context and context.task_focus:
-                context_info = f"\nCurrent focus: {context.task_focus}"
-                
-                # Extract user state from context
-                user_state = None
+            # Build rich context using the context builder
+            from mcp_server.claude_context_builder import claude_context_builder
+            
+            # Extract relevant data from MCPFrame if available
+            calendar_events = []
+            music_status = None
+            energy_level = "moderate"
+            
+            if context:
                 for ctx_item in context.context:
-                    if ctx_item.type.value == "user_state":
-                        user_state = ctx_item.data.get("current_state")
-                        break
-                
-                if user_state:
-                    context_info += f"\nUser state: {user_state}"
-                
-                if system_prompt:
-                    system_prompt += context_info
+                    if ctx_item.type.value == "calendar_events":
+                        calendar_events = ctx_item.data.get("events", [])
+                    elif ctx_item.type.value == "music_status":
+                        music_status = ctx_item.data
+                    elif ctx_item.type.value == "user_state":
+                        energy_level = ctx_item.data.get("energy", "moderate")
             
-            # Generate response with Claude browser
-            if self.claude_browser_client:
-                full_prompt = f"{system_prompt}\n\nUser: {user_input}\n\nAssistant:"
-                claude_text = await self.claude_browser_client.send_message(full_prompt)
-                
-                return LLMResponse(
-                    text=claude_text,
-                    source="claude_browser",
-                    confidence=0.95,
-                    latency_ms=(time.time() - start_time) * 1000,
-                    cost_usd=0.0,  # Browser mode doesn't track cost
-                    model_used="claude-3-sonnet"
-                )
-            else:
-                raise Exception("Claude browser not initialized")
+            # Build structured context
+            rich_context = claude_context_builder.build_context(
+                user_id="user",
+                current_task=context.task_focus if context else None,
+                energy_level=energy_level,
+                calendar_events=calendar_events,
+                music_status=music_status
+            )
+            
+            # Create context-aware prompt
+            full_prompt = claude_context_builder.format_prompt_with_context(
+                user_message=user_input,
+                context=rich_context
+            )
+            
+            # Send via browser automation
+            response_text = await claude_client.send_message(full_prompt)
+            
+            # Parse response for actionable items
+            parsed = claude_context_builder.parse_claude_response(response_text)
+            
+            # Log suggested actions
+            if parsed.get("suggested_timer"):
+                logger.info(f"Claude suggests {parsed['suggested_timer']} minute timer")
+            
+            return LLMResponse(
+                text=response_text,
+                source="claude_browser",
+                confidence=0.95,
+                latency_ms=(time.time() - start_time) * 1000,
+                cost_usd=0.0,
+                model_used="claude-3-sonnet"
+            )
             
         except Exception as e:
-            logger.error("Claude request failed, falling back to local", error=str(e))
+            logger.error("Claude browser request failed, falling back to local", error=str(e))
             # Fallback to local LLM
             return await self._handle_local(user_input, context, nudge_tier)
-
-
 # Global router instance
 llm_router = LLMRouter()

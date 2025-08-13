@@ -2,32 +2,62 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚨 STOP - READ THIS FIRST - THE ACTUAL WORKING SOLUTION
+## 🚨 CLAUDE INTEGRATION STATUS - JANUARY 13, 2025
 
-### What REALLY Works (Tested & Verified):
+### ✅ RESTORED AND ENHANCED WITH RICH CONTEXT
+
+**Current State**: Claude browser integration is WORKING with some timeout issues
+
+### How Claude ACTUALLY Works Here:
+**IMPORTANT**: We use **browser automation**, NOT the Anthropic API!
+- The `CLAUDE_SESSION_KEY` in `.env` is a browser session cookie
+- Fresh cookies needed when session expires (check browser)
+- Uses Playwright + System Chromium on Pi
+- Documented in: `CLAUDE_BROWSER_AUTH_SUCCESS.md`
+
+### What's Working Now:
 ```bash
-# 1. Start server with NETWORK-ACCESSIBLE Jellyfin URL:
-CHROMECAST_NAME='Shack Speakers' JELLYFIN_URL='http://192.168.1.100:8096' PYTHONPATH=/home/pi/repos/ADHDo/src PORT=23443 /home/pi/repos/ADHDo/venv_beta/bin/python -m mcp_server.minimal_main &
+# Start server with Claude integration:
+source .env && PYTHONPATH=/home/pi/repos/ADHDo/src PORT=23444 /home/pi/repos/ADHDo/venv_beta/bin/python -m mcp_server.minimal_main &
 
-# 2. Keep music playing with monitor:
-/home/pi/repos/ADHDo/venv_beta/bin/python music_monitor.py &
-
-# This gives you:
-- ✅ Jellyfin connected (5000 tracks) 
-- ✅ Music playing on Chromecast (Shack Speakers) - USER CAN HEAR IT!
-- ✅ Auto-restart if music stops
-- ✅ 3 Nest devices for nudges (Nest Mini, Living Room, Nest Hub Max)
-- ✅ Dashboard at http://localhost:23443
+# Claude receives rich ADHD context:
+- Time context (day part, energy patterns)
+- User state (energy, current task)
+- Environment (music status)
+- Upcoming events (from calendar)
+- ADHD considerations (challenges, strategies)
 ```
+
+### Evidence It Works:
+**Real Claude Response Captured:**
+```
+User: "I struggle with time blindness - any tips?"
+Claude: "Try setting visual timers and breaking tasks into 15-minute chunks..."
+```
+
+### The Data Flow:
+1. User message → Cognitive Loop
+2. Context Builder creates rich ADHD context
+3. LLM Router sends to Claude with context
+4. Browser automation types in Claude.ai
+5. Response extracted and returned
+6. Falls back to patterns on timeout
+
+### Known Issues:
+- Browser automation timeouts (30s) on some requests
+- Needs retry logic for stability
+- Session cookies expire (refresh from browser)
 
 ### KEY FIX: Network-Accessible Jellyfin
 The Chromecast cannot reach `localhost:8096` - it needs the Pi's network IP `192.168.1.100:8096`
 Alternative: Use external domain `jellyfin.adrianwedd.com` if Cloudflare tunnel is working
 
-### DO NOT USE:
-- ❌ simple_working_server.py (breaks everything)
-- ❌ start.sh (uses the broken simple server)
-- ❌ Any "fixes" - the original works!
+### CRITICAL FILES FOR CLAUDE:
+- ✅ `claude_browser_working.py` - The WORKING browser automation
+- ✅ `CLAUDE_BROWSER_AUTH_SUCCESS.md` - Documents the working solution
+- ✅ `CLAUDE_INTEGRATION_COMPLETE.md` - Full implementation details
+- ❌ `simple_claude_integration.py` - WRONG! Uses API key we don't have
+- ❌ Any "API-based" solutions - We use BROWSER AUTOMATION!
 
 ### TESTED AND WORKING:
 - ✅ Chat: "what is on my calendar" → Shows bedtime and medication reminders

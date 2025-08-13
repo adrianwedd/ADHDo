@@ -128,3 +128,4 @@ audio_files/
 credentials.json
 token.pickle
 google_api_config.json
+claude_interactions.log

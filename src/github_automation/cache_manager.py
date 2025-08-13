@@ -114,7 +114,7 @@ class CacheManager:
     async def disconnect(self):
         """Disconnect from Redis server."""
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.aclose()
             logger.info("Redis connection closed")
     
     async def get(

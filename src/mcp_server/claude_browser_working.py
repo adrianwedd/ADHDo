@@ -237,6 +237,15 @@ class ClaudeBrowserClient:
         if not self.page:
             raise Exception("Browser not initialized. Call initialize() first.")
         
+        # Log full interaction to untracked file
+        import datetime
+        log_file = "/home/pi/repos/ADHDo/claude_interactions.log"
+        with open(log_file, "a") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"TIMESTAMP: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"REQUEST:\n{message}\n")
+            f.write(f"{'-'*40}\n")
+        
         try:
             logger.info(f"💬 Sending message: {message[:50]}...")
             
@@ -402,6 +411,14 @@ class ClaudeBrowserClient:
             """)
             
             logger.info(f"📥 Received response: {response[:100]}...")
+            
+            # Log response to untracked file
+            import datetime
+            log_file = "/home/pi/repos/ADHDo/claude_interactions.log"
+            with open(log_file, "a") as f:
+                f.write(f"RESPONSE:\n{response}\n")
+                f.write(f"TIMESTAMP: {datetime.datetime.now().isoformat()}\n")
+                f.write(f"{'='*80}\n")
             
             # Get conversation ID
             url = self.page.url
