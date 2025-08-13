@@ -319,14 +319,17 @@ class JellyfinMusicController:
     async def _monitor_and_play_next(self, duration_seconds: int):
         """Monitor playback and automatically play next track."""
         try:
-            # Wait for current track to finish (with some buffer)
-            await asyncio.sleep(duration_seconds - 5)  # Start checking 5 seconds early
+            # Don't rely on duration - just monitor Chromecast status
+            # Wait at least 30 seconds before checking (prevent premature advance)
+            await asyncio.sleep(30)
             
-            # Check if still playing
+            # Check if still playing every 10 seconds
             if self.media_controller:
-                # Wait for actual end
-                while self.media_controller.status.player_state == "PLAYING":
-                    await asyncio.sleep(1)
+                while True:
+                    await asyncio.sleep(10)
+                    if self.media_controller.status.player_state != "PLAYING":
+                        logger.info(f"⏹️ Playback stopped, advancing to next track")
+                        break
             
             logger.info(f"✅ Track finished: {self.state.current_track.name if self.state.current_track else 'Unknown'}")
             
