@@ -277,10 +277,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if jellyfin_token:
                 logger.info(f"🎵 Initializing music with Jellyfin at {jellyfin_url}")
                 logger.info(f"🎵 Using Chromecast: {chromecast_name}")
+                jellyfin_user_id = os.getenv('JELLYFIN_USER_ID')
                 success = await initialize_music_controller(
                     jellyfin_url, 
                     jellyfin_token,
-                    chromecast_name
+                    chromecast_name,
+                    jellyfin_user_id
                 )
                 if success:
                     logger.info("✅ Music system initialized - Will auto-play 9AM-9PM")
@@ -1842,6 +1844,7 @@ async def initialize_music_system():
         jellyfin_url = os.environ.get('JELLYFIN_URL', 'http://localhost:8096')
         jellyfin_token = os.environ.get('JELLYFIN_TOKEN')
         chromecast_name = os.environ.get('CHROMECAST_NAME', 'Chromecast Audio')
+        jellyfin_user_id = os.environ.get('JELLYFIN_USER_ID')
         
         if not jellyfin_token:
             raise HTTPException(
@@ -1852,7 +1855,8 @@ async def initialize_music_system():
         success = await initialize_music_controller(
             jellyfin_url, 
             jellyfin_token, 
-            chromecast_name
+            chromecast_name,
+            jellyfin_user_id
         )
         
         if success:
