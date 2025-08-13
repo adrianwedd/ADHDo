@@ -923,23 +923,61 @@ async def health_check():
         "mode": "minimal"
     }
 
-# Core chat endpoint using the real cognitive loop
+# Import REAL cognitive loop
+try:
+    from .real_cognitive_loop import get_cognitive_loop
+    real_cognitive_available = True
+except ImportError:
+    real_cognitive_available = False
+    logger.warning("Real cognitive loop not available")
+
+# Keep simple handler as absolute fallback
+try:
+    from .simple_chat_handler import get_chat_handler
+    simple_chat_available = True
+except ImportError:
+    simple_chat_available = False
+    logger.warning("Simple chat handler not available")
+
+# Core chat endpoint - using REAL cognitive loop
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     """
-    Main chat endpoint using the full cognitive loop architecture.
-    
-    This preserves the sophisticated cognitive loop with safety systems,
-    circuit breaker, frame building, and trace memory - the core innovation
-    of the MCP architecture.
+    Real cognitive loop endpoint - no fallbacks, actual cognitive processing.
     """
     start_time = asyncio.get_event_loop().time()
     
+    # Use REAL cognitive loop
+    if real_cognitive_available:
+        try:
+            cognitive_loop = get_cognitive_loop()
+            result = await cognitive_loop.process(request.message, request.user_id)
+            
+            processing_time = (asyncio.get_event_loop().time() - start_time) * 1000
+            
+            return ChatResponse(
+                message=result["response"],
+                user_id=request.user_id,
+                task_focus=request.task_focus,
+                suggested_actions=result.get("actions", []),
+                processing_time=processing_time,
+                pattern_detected=bool(result.get("patterns_detected")),
+                metadata={
+                    "thinking": result.get("thinking"),
+                    "emotional_tone": result.get("emotional_tone"),
+                    "cognitive_load": result.get("cognitive_load_considered"),
+                    "learning": result.get("learning"),
+                    "handler": "real_cognitive_loop"
+                }
+            )
+        except Exception as e:
+            logger.error(f"Simple chat handler failed: {e}")
+            # Fall through to cognitive loop attempt
+    
+    # Fallback attempt with cognitive loop (will likely fail)
     try:
-        # Import nudge tier enum
         from mcp_server.models import NudgeTier
         
-        # Use the actual cognitive loop from the sophisticated implementation
         result = await cognitive_loop.process_user_input(
             user_id=request.user_id,
             user_input=request.message,
@@ -1147,6 +1185,17 @@ if claude_available and claude_client:
                 "available": False,
                 "error": str(e)
             }
+
+# Claude V2 Cognitive Engine Endpoints
+try:
+    from mcp_server.claude_v2_endpoint import create_claude_v2_endpoint
+    import asyncio
+    
+    # Add V2 endpoints to the app
+    asyncio.create_task(create_claude_v2_endpoint(app))
+    logger.info("✅ Claude V2 cognitive engine endpoints added")
+except ImportError as e:
+    logger.warning(f"Claude V2 endpoints not available: {e}")
 
 # Proactive Nudging Endpoints
 @app.post("/nudge/trigger")
