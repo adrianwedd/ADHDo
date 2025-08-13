@@ -373,17 +373,34 @@ try:
 except ImportError as e:
     logger.warning(f"Could not import integration endpoints: {e}")
 
-# Root endpoint - MCP Contextual Operating System Dashboard
+# Root endpoint - Claude V2 Cognitive Interface
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """MCP Contextual Operating System Dashboard."""
-    # Read the COMPLETE dashboard HTML file
+    """Claude V2 Cognitive Interface - ADHD-friendly UI."""
     try:
-        with open("mcp_complete_dashboard.html", "r") as f:
+        with open("static/claude_v2_ui.html", "r") as f:
             return f.read()
     except FileNotFoundError:
         # Fallback to simple interface
         return await simple_chat_interface()
+
+# Claude V2 UI endpoint
+@app.get("/v2", response_class=HTMLResponse)
+async def claude_v2_ui():
+    """Dedicated Claude V2 UI endpoint."""
+    try:
+        with open("static/claude_v2_ui.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse("""
+            <html>
+                <body style="font-family: sans-serif; padding: 2rem; background: #0B0F1A; color: #E2E8F0;">
+                    <h1>🧠 Claude V2 UI Not Found</h1>
+                    <p>The Claude V2 UI file is missing. Please ensure static/claude_v2_ui.html exists.</p>
+                    <a href="/dashboard" style="color: #4F86F7;">Go to Dashboard</a>
+                </body>
+            </html>
+        """, status_code=404)
 
 async def simple_chat_interface():
     """Simple web interface for ADHD support system."""
@@ -1186,13 +1203,62 @@ if claude_available and claude_client:
                 "error": str(e)
             }
 
-# Claude V2 Cognitive Engine Endpoints
+# Claude V2 Cognitive Engine Endpoints  
 try:
-    from mcp_server.claude_v2_endpoint import create_claude_v2_endpoint
-    import asyncio
+    from mcp_server.claude_cognitive_engine_v2 import get_cognitive_engine_v2
+    from pydantic import BaseModel
     
-    # Add V2 endpoints to the app
-    asyncio.create_task(create_claude_v2_endpoint(app))
+    # Define request model here to avoid import issues
+    class ClaudeV2ChatRequest(BaseModel):
+        message: str
+        user_id: Optional[str] = "default_user"
+    
+    @app.post("/claude/v2/chat")
+    async def claude_v2_chat(request: ClaudeV2ChatRequest):
+        """Claude V2 Cognitive Engine - Real thinking with tool awareness."""
+        try:
+            logger.info(f"Claude V2 processing: {request.message[:100]}...")
+            
+            # Get the cognitive engine
+            engine = get_cognitive_engine_v2()
+            
+            # Process the message
+            result = await engine.process(request.message, request.user_id)
+            
+            # Log the result
+            logger.info(f"Claude V2 response: {result.get('response', 'No response')[:100]}...")
+            logger.info(f"Actions taken: {len(result.get('actions_taken', []))}")
+            
+            return JSONResponse(content=result)
+            
+        except Exception as e:
+            logger.error(f"Claude V2 error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/claude/v2/status")
+    async def claude_v2_status():
+        """Check Claude V2 engine status."""
+        try:
+            engine = get_cognitive_engine_v2()
+            
+            # Check components
+            status = {
+                "engine": "initialized",
+                "browser_auth": "configured" if engine.claude else "not_initialized", 
+                "redis": "connected" if engine.redis_client else "not_connected",
+                "state_gatherer": "ready",
+                "google_integration": "available" if engine.state_gatherer.google else "not_configured"
+            }
+            
+            return JSONResponse(content=status)
+            
+        except Exception as e:
+            logger.error(f"Status check error: {e}")
+            return JSONResponse(
+                content={"error": str(e), "engine": "error"},
+                status_code=500
+            )
+    
     logger.info("✅ Claude V2 cognitive engine endpoints added")
 except ImportError as e:
     logger.warning(f"Claude V2 endpoints not available: {e}")

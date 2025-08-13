@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Claude V2 Cognitive Engine - ADHD Support</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        // ADHD-optimized dark theme
+                        'dark-bg': '#0B0F1A',
+                        'dark-surface': '#1A2332', 
+                        'dark-elevated': '#2A3441',
+                        'claude-primary': '#4F86F7',
+                        'claude-success': '#00E676',
+                        'claude-warning': '#FFB74D',
+                        'claude-error': '#FF6B6B',
+                        'claude-magic': '#B794F6',
+                        'claude-text': '#E2E8F0',
+                        'claude-text-dim': '#94A3B8'
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'monospace']
+                    },
+                    animation: {
+                        'pulse-gentle': 'pulse-gentle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'sparkle': 'sparkle 0.6s ease-in-out',
+                        'slide-up': 'slide-up 0.3s ease-out'
+                    },
+                    keyframes: {
+                        'pulse-gentle': {
+                            '0%, 100%': { opacity: '0.6' },
+                            '50%': { opacity: '1' }
+                        },
+                        'glow': {
+                            '0%': { boxShadow: '0 0 5px rgba(79, 134, 247, 0.5)' },
+                            '100%': { boxShadow: '0 0 15px rgba(79, 134, 247, 0.8)' }
+                        },
+                        'sparkle': {
+                            '0%': { transform: 'scale(0) rotate(0deg)', opacity: '0' },
+                            '50%': { transform: 'scale(1) rotate(180deg)', opacity: '1' },
+                            '100%': { transform: 'scale(0) rotate(360deg)', opacity: '0' }
+                        },
+                        'slide-up': {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom ADHD-friendly styling */
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            line-height: 1.6;
+            letter-spacing: 0.025em;
+        }
+        
+        .glass-morphism {
+            background: rgba(26, 35, 50, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(79, 134, 247, 0.2);
+        }
+        
+        .thinking-pulse {
+            animation: pulse-gentle 2s infinite;
+        }
+        
+        .confidence-bar {
+            background: linear-gradient(90deg, #FF6B6B 0%, #FFB74D 50%, #00E676 100%);
+            height: 4px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            transition: width 0.5s ease;
+        }
+        
+        .pattern-chip {
+            @apply px-3 py-1 rounded-full text-sm font-medium;
+            background: linear-gradient(135deg, rgba(183, 148, 246, 0.2), rgba(79, 134, 247, 0.2));
+            border: 1px solid rgba(183, 148, 246, 0.3);
+        }
+        
+        .action-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .action-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 134, 247, 0.3);
+        }
+        
+        .sparkle-effect {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .sparkle-effect::after {
+            content: '✨';
+            position: absolute;
+            animation: sparkle 2s infinite;
+            animation-delay: var(--delay, 0s);
+        }
+        
+        /* Accessibility improvements */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Focus indicators for keyboard navigation */
+        button:focus, input:focus {
+            outline: 2px solid #4F86F7;
+            outline-offset: 2px;
+        }
+        
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+            .glass-morphism {
+                background: #1A2332;
+                border: 2px solid #4F86F7;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-dark-bg text-claude-text min-h-screen">
+    <!-- Claude Status Bar (Always Visible) -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-dark-surface border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <!-- Claude Thinking State -->
+                <div class="flex items-center space-x-4">
+                    <div id="thinking-indicator" class="flex items-center space-x-2">
+                        <div class="w-8 h-8 rounded-full bg-claude-primary flex items-center justify-center">
+                            <i id="thinking-icon" class="fas fa-brain text-white"></i>
+                        </div>
+                        <div>
+                            <div id="thinking-text" class="font-medium">Ready to help</div>
+                            <div id="thinking-subtext" class="text-xs text-claude-text-dim">Claude V2 Cognitive Engine</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Confidence Indicator -->
+                    <div id="confidence-display" class="hidden">
+                        <div class="text-sm text-claude-text-dim mb-1">Confidence</div>
+                        <div class="confidence-bar w-20">
+                            <div id="confidence-fill" class="confidence-fill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Active Tools & Patterns -->
+                <div class="flex items-center space-x-4">
+                    <div id="active-tools" class="flex space-x-2"></div>
+                    <div id="pattern-detection" class="flex space-x-2"></div>
+                    
+                    <!-- Connection Status -->
+                    <div class="flex items-center space-x-2">
+                        <div id="connection-dot" class="w-2 h-2 bg-claude-success rounded-full animate-pulse"></div>
+                        <span class="text-sm text-claude-text-dim">Connected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="pt-20 pb-24"> <!-- Account for fixed header and footer -->
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-screen">
+                
+                <!-- Cognitive State Panel (Left Sidebar) -->
+                <aside class="lg:col-span-1 space-y-4">
+                    <div class="glass-morphism rounded-lg p-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-chart-line text-claude-primary mr-2"></i>
+                            System State
+                        </h2>
+                        
+                        <!-- Physical State -->
+                        <div class="mb-4">
+                            <h3 class="text-sm font-medium text-claude-text-dim mb-2">Physical</h3>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-walking text-claude-success mr-2"></i>
+                                        Steps
+                                    </span>
+                                    <span id="steps-count" class="font-mono">--</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-chair text-claude-warning mr-2"></i>
+                                        Sitting
+                                    </span>
+                                    <span id="sitting-duration" class="font-mono">--min</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-pills text-claude-magic mr-2"></i>
+                                        Meds
+                                    </span>
+                                    <span id="medication-status" class="font-mono">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Task State -->
+                        <div class="mb-4">
+                            <h3 class="text-sm font-medium text-claude-text-dim mb-2">Focus</h3>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-target text-claude-primary mr-2"></i>
+                                        Current
+                                    </span>
+                                    <span id="current-focus" class="font-mono text-right">None</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-clock text-claude-warning mr-2"></i>
+                                        Duration
+                                    </span>
+                                    <span id="task-duration" class="font-mono">0min</span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fas fa-exclamation-triangle text-claude-error mr-2"></i>
+                                        Urgent
+                                    </span>
+                                    <span id="urgent-count" class="font-mono">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Patterns -->
+                        <div>
+                            <h3 class="text-sm font-medium text-claude-text-dim mb-2">Patterns</h3>
+                            <div id="pattern-chips" class="flex flex-wrap gap-2">
+                                <!-- Pattern chips will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Chat Interface (Center) -->
+                <section class="lg:col-span-2">
+                    <div class="glass-morphism rounded-lg h-full flex flex-col">
+                        <!-- Chat Header -->
+                        <div class="border-b border-gray-700 p-4">
+                            <h2 class="text-xl font-semibold">🧠 Claude V2 Cognitive Engine</h2>
+                            <p class="text-claude-text-dim">Real thinking, tool awareness, zero fallbacks</p>
+                        </div>
+                        
+                        <!-- Messages Area -->
+                        <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                            <!-- Welcome Message -->
+                            <div class="animate-slide-up">
+                                <div class="glass-morphism p-4 rounded-lg">
+                                    <div class="flex items-start space-x-3">
+                                        <div class="w-10 h-10 rounded-full bg-claude-primary flex items-center justify-center">
+                                            <i class="fas fa-brain text-white"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="font-medium mb-2">Welcome to Claude V2 Cognitive Engine! 🧠✨</div>
+                                            <div class="text-claude-text-dim">
+                                                I'm here to provide real cognitive support for your ADHD. I can see your complete state, 
+                                                use multiple tools to help, and adapt to your specific needs. What's on your mind?
+                                            </div>
+                                            <div class="mt-3 flex flex-wrap gap-2">
+                                                <button onclick="quickMessage('I have 5 urgent tasks and feeling overwhelmed')" 
+                                                        class="px-3 py-1 bg-claude-primary bg-opacity-20 text-claude-primary rounded-full text-sm hover:bg-opacity-30 transition">
+                                                    😰 Feeling overwhelmed
+                                                </button>
+                                                <button onclick="quickMessage('Been coding for 3 hours straight, forgot lunch')" 
+                                                        class="px-3 py-1 bg-claude-warning bg-opacity-20 text-claude-warning rounded-full text-sm hover:bg-opacity-30 transition">
+                                                    🔥 In hyperfocus
+                                                </button>
+                                                <button onclick="quickMessage('Keep switching tasks, can\\'t focus')" 
+                                                        class="px-3 py-1 bg-claude-error bg-opacity-20 text-claude-error rounded-full text-sm hover:bg-opacity-30 transition">
+                                                    🔄 Task switching
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Input Area -->
+                        <div class="border-t border-gray-700 p-4">
+                            <div class="flex space-x-4">
+                                <div class="flex-1">
+                                    <textarea 
+                                        id="message-input" 
+                                        placeholder="Tell me what's happening with your ADHD brain today..."
+                                        class="w-full bg-dark-elevated border border-gray-600 rounded-lg px-4 py-3 text-claude-text placeholder-claude-text-dim focus:outline-none focus:ring-2 focus:ring-claude-primary focus:border-transparent resize-none"
+                                        rows="3"></textarea>
+                                </div>
+                                <div class="flex flex-col space-y-2">
+                                    <button 
+                                        id="send-button"
+                                        onclick="sendMessage()" 
+                                        class="bg-claude-primary hover:bg-blue-600 text-white p-3 rounded-lg transition duration-200 flex items-center justify-center min-w-[48px]">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                    <button 
+                                        id="voice-button"
+                                        class="bg-claude-magic hover:bg-purple-600 text-white p-3 rounded-lg transition duration-200 flex items-center justify-center min-w-[48px]">
+                                        <i class="fas fa-microphone"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Actions (Right Sidebar) -->
+                <aside class="lg:col-span-1 space-y-4">
+                    <!-- Emergency Actions -->
+                    <div class="glass-morphism rounded-lg p-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-bolt text-claude-warning mr-2"></i>
+                            Emergency
+                        </h2>
+                        <div class="space-y-2">
+                            <button onclick="emergencyBreathing()" 
+                                    class="w-full bg-claude-error bg-opacity-20 hover:bg-opacity-30 text-claude-error font-medium py-3 rounded-lg transition">
+                                <i class="fas fa-lungs mr-2"></i>
+                                Breathe (4-7-8)
+                            </button>
+                            <button onclick="emergencyGrounding()" 
+                                    class="w-full bg-claude-warning bg-opacity-20 hover:bg-opacity-30 text-claude-warning font-medium py-3 rounded-lg transition">
+                                <i class="fas fa-anchor mr-2"></i>
+                                Ground (5-4-3-2-1)
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Context Actions -->
+                    <div class="glass-morphism rounded-lg p-4">
+                        <h2 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-magic text-claude-magic mr-2"></i>
+                            Quick Actions
+                        </h2>
+                        <div id="quick-actions" class="space-y-2">
+                            <!-- Dynamic actions will be inserted here -->
+                            <button onclick="quickAction('focus')" 
+                                    class="w-full action-card bg-claude-primary bg-opacity-20 hover:bg-opacity-30 text-claude-primary font-medium py-3 rounded-lg transition">
+                                <i class="fas fa-target mr-2"></i>
+                                Start Focus Session
+                            </button>
+                            <button onclick="quickAction('break')" 
+                                    class="w-full action-card bg-claude-success bg-opacity-20 hover:bg-opacity-30 text-claude-success font-medium py-3 rounded-lg transition">
+                                <i class="fas fa-coffee mr-2"></i>
+                                Take a Break
+                            </button>
+                            <button onclick="quickAction('celebrate')" 
+                                    class="w-full action-card bg-claude-magic bg-opacity-20 hover:bg-opacity-30 text-claude-magic font-medium py-3 rounded-lg transition sparkle-effect">
+                                <i class="fas fa-party-horn mr-2"></i>
+                                Celebrate Win! 
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </main>
+
+    <!-- Focus Bar (Bottom) -->
+    <footer id="focus-bar" class="fixed bottom-0 left-0 right-0 bg-dark-surface border-t border-gray-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-target text-claude-primary"></i>
+                    <span class="font-medium">Current Focus:</span>
+                </div>
+                <span id="focus-display" class="text-claude-text-dim">None</span>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <div id="focus-timer" class="hidden flex items-center space-x-2">
+                    <i class="fas fa-clock text-claude-warning"></i>
+                    <span id="timer-display" class="font-mono">25:00</span>
+                </div>
+                <button id="focus-toggle" onclick="toggleFocus()" 
+                        class="bg-claude-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition">
+                    <i class="fas fa-play mr-2"></i>
+                    Start Focus
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Achievement Toast Container -->
+    <div id="achievement-container" class="fixed top-20 right-4 z-50 space-y-2">
+        <!-- Achievement toasts will be inserted here -->
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="glass-morphism rounded-lg p-8 text-center">
+            <div class="w-16 h-16 border-4 border-claude-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div class="font-medium">Claude is thinking...</div>
+            <div class="text-claude-text-dim text-sm">Analyzing your complete state</div>
+        </div>
+    </div>
+
+    <script>
+        // Global state management
+        let appState = {
+            isThinking: false,
+            currentFocus: null,
+            focusTimer: null,
+            focusStartTime: null,
+            lastResponse: null,
+            systemState: {}
+        };
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🧠 Claude V2 UI initialized');
+            loadSystemState();
+            setupEventListeners();
+            checkClaudeV2Status();
+            
+            // Enable Enter to send message
+            document.getElementById('message-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Voice button (future implementation)
+            document.getElementById('voice-button').addEventListener('click', function() {
+                // TODO: Implement voice input
+                showToast('Voice input coming soon! 🎤', 'info');
+            });
+        }
+
+        // Check Claude V2 engine status
+        async function checkClaudeV2Status() {
+            try {
+                const response = await fetch('/claude/v2/status');
+                const status = await response.json();
+                
+                console.log('Claude V2 Status:', status);
+                updateConnectionStatus(status);
+            } catch (error) {
+                console.error('Failed to check Claude V2 status:', error);
+                updateConnectionStatus({ engine: 'error' });
+            }
+        }
+
+        // Update connection status display
+        function updateConnectionStatus(status) {
+            const dot = document.getElementById('connection-dot');
+            const isHealthy = status.engine === 'initialized';
+            
+            dot.className = isHealthy 
+                ? 'w-2 h-2 bg-claude-success rounded-full animate-pulse'
+                : 'w-2 h-2 bg-claude-error rounded-full animate-pulse';
+        }
+
+        // Load and display system state
+        async function loadSystemState() {
+            // This would normally fetch from the state gatherer
+            // For now, we'll use mock data
+            const mockState = {
+                steps_today: 3420,
+                sitting_duration_minutes: 75,
+                medication_effective: true,
+                current_focus: null,
+                task_duration_minutes: 0,
+                urgent_tasks: ['Email responses', 'Meeting prep', 'Code review'],
+                recent_patterns: ['procrastination', 'task_switching']
+            };
+            
+            updateStateDisplay(mockState);
+            appState.systemState = mockState;
+        }
+
+        // Update the state display panel
+        function updateStateDisplay(state) {
+            document.getElementById('steps-count').textContent = state.steps_today?.toLocaleString() || '--';
+            document.getElementById('sitting-duration').textContent = `${state.sitting_duration_minutes || 0}min`;
+            document.getElementById('medication-status').textContent = state.medication_effective ? 'Active' : 'Low';
+            document.getElementById('current-focus').textContent = state.current_focus || 'None';
+            document.getElementById('task-duration').textContent = `${state.task_duration_minutes || 0}min`;
+            document.getElementById('urgent-count').textContent = state.urgent_tasks?.length || 0;
+            
+            // Update pattern chips
+            const patternsContainer = document.getElementById('pattern-chips');
+            patternsContainer.innerHTML = '';
+            
+            if (state.recent_patterns && state.recent_patterns.length > 0) {
+                state.recent_patterns.forEach(pattern => {
+                    const chip = document.createElement('span');
+                    chip.className = 'pattern-chip';
+                    chip.textContent = pattern.replace('_', ' ');
+                    patternsContainer.appendChild(chip);
+                });
+            }
+        }
+
+        // Send message to Claude V2
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Clear input and show thinking state
+            input.value = '';
+            setThinkingState(true);
+            
+            // Add user message to chat
+            addUserMessage(message);
+            
+            try {
+                const response = await fetch('/claude/v2/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: 'demo_user'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('Claude V2 Response:', result);
+                
+                // Display Claude's response
+                displayClaudeResponse(result);
+                
+                // Update system state if provided
+                if (result.state_updates) {
+                    updateStateDisplay(result.state_updates);
+                }
+                
+                // Show achievements if any
+                if (result.celebration_worthy) {
+                    triggerAchievement(result.achievement_type || 'general');
+                }
+                
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addErrorMessage('Sorry, I encountered an error. Please try again.');
+            } finally {
+                setThinkingState(false);
+            }
+        }
+
+        // Set thinking state display
+        function setThinkingState(isThinking) {
+            appState.isThinking = isThinking;
+            const indicator = document.getElementById('thinking-indicator');
+            const icon = document.getElementById('thinking-icon');
+            const text = document.getElementById('thinking-text');
+            
+            if (isThinking) {
+                icon.className = 'fas fa-brain text-white thinking-pulse';
+                text.textContent = 'Thinking...';
+                indicator.classList.add('animate-glow');
+            } else {
+                icon.className = 'fas fa-brain text-white';
+                text.textContent = 'Ready to help';
+                indicator.classList.remove('animate-glow');
+            }
+        }
+
+        // Add user message to chat
+        function addUserMessage(message) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'animate-slide-up';
+            
+            messageDiv.innerHTML = `
+                <div class="flex justify-end">
+                    <div class="bg-claude-primary bg-opacity-20 p-4 rounded-lg max-w-md">
+                        <div class="text-claude-text">${message}</div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Display Claude's response
+        function displayClaudeResponse(result) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'animate-slide-up';
+            
+            let actionsHtml = '';
+            if (result.actions_taken && result.actions_taken.length > 0) {
+                actionsHtml = `
+                    <div class="mt-3">
+                        <div class="text-sm text-claude-text-dim mb-2">Actions taken:</div>
+                        <div class="space-y-2">
+                            ${result.actions_taken.map(action => `
+                                <div class="bg-dark-elevated p-2 rounded text-sm">
+                                    <i class="fas fa-cog text-claude-success mr-2"></i>
+                                    ${action.type}: ${action.status || 'executed'}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            let reasoningHtml = '';
+            if (result.thinking && result.thinking.reasoning) {
+                reasoningHtml = `
+                    <details class="mt-3">
+                        <summary class="text-sm text-claude-text-dim cursor-pointer hover:text-claude-primary">
+                            <i class="fas fa-brain mr-2"></i>
+                            Claude's reasoning (${Math.round(result.thinking.confidence * 100)}% confident)
+                        </summary>
+                        <div class="mt-2 p-3 bg-dark-elevated rounded text-sm font-mono">
+                            ${result.thinking.reasoning}
+                        </div>
+                    </details>
+                `;
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="glass-morphism p-4 rounded-lg">
+                    <div class="flex items-start space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-claude-primary flex items-center justify-center">
+                            <i class="fas fa-brain text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-claude-text">${result.response || 'I processed your request.'}</div>
+                            ${actionsHtml}
+                            ${reasoningHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Update confidence display
+            if (result.thinking && result.thinking.confidence) {
+                updateConfidenceDisplay(result.thinking.confidence);
+            }
+        }
+
+        // Update confidence display
+        function updateConfidenceDisplay(confidence) {
+            const display = document.getElementById('confidence-display');
+            const fill = document.getElementById('confidence-fill');
+            
+            display.classList.remove('hidden');
+            fill.style.width = `${confidence * 100}%`;
+        }
+
+        // Add error message
+        function addErrorMessage(error) {
+            const messagesContainer = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'animate-slide-up';
+            
+            messageDiv.innerHTML = `
+                <div class="bg-claude-error bg-opacity-20 border border-claude-error border-opacity-30 p-4 rounded-lg">
+                    <div class="flex items-center text-claude-error">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        ${error}
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Quick message shortcuts
+        function quickMessage(message) {
+            document.getElementById('message-input').value = message;
+            sendMessage();
+        }
+
+        // Quick actions
+        function quickAction(action) {
+            const actions = {
+                focus: "I want to start a focused work session",
+                break: "I need to take a break right now",
+                celebrate: "I just completed something and want to celebrate!"
+            };
+            
+            quickMessage(actions[action] || action);
+        }
+
+        // Emergency interventions
+        function emergencyBreathing() {
+            // TODO: Implement guided breathing exercise
+            showToast('🫁 Breathing exercise started - breathe in for 4, hold for 7, out for 8', 'info', 8000);
+        }
+
+        function emergencyGrounding() {
+            // TODO: Implement 5-4-3-2-1 grounding technique
+            showToast('🌍 5-4-3-2-1 Grounding: Name 5 things you can see around you', 'info', 8000);
+        }
+
+        // Focus management
+        function toggleFocus() {
+            const button = document.getElementById('focus-toggle');
+            const timer = document.getElementById('focus-timer');
+            const display = document.getElementById('timer-display');
+            
+            if (appState.focusTimer) {
+                // Stop focus session
+                clearInterval(appState.focusTimer);
+                appState.focusTimer = null;
+                button.innerHTML = '<i class="fas fa-play mr-2"></i>Start Focus';
+                timer.classList.add('hidden');
+            } else {
+                // Start focus session (25 minutes)
+                appState.focusStartTime = Date.now();
+                button.innerHTML = '<i class="fas fa-stop mr-2"></i>Stop Focus';
+                timer.classList.remove('hidden');
+                
+                // Update timer every second
+                appState.focusTimer = setInterval(() => {
+                    const elapsed = Date.now() - appState.focusStartTime;
+                    const remaining = Math.max(0, (25 * 60 * 1000) - elapsed);
+                    const minutes = Math.floor(remaining / 60000);
+                    const seconds = Math.floor((remaining % 60000) / 1000);
+                    
+                    display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    if (remaining === 0) {
+                        toggleFocus();
+                        triggerAchievement('focus_complete');
+                    }
+                }, 1000);
+            }
+        }
+
+        // Achievement system
+        function triggerAchievement(type) {
+            const achievements = {
+                focus_complete: { icon: '🎯', message: 'Focus session completed!', color: 'claude-primary' },
+                task_complete: { icon: '✅', message: 'Task completed!', color: 'claude-success' },
+                general: { icon: '⭐', message: 'Great job!', color: 'claude-magic' }
+            };
+            
+            const achievement = achievements[type] || achievements.general;
+            showAchievementToast(achievement);
+        }
+
+        // Show achievement toast with sparkle animation
+        function showAchievementToast(achievement) {
+            const container = document.getElementById('achievement-container');
+            const toast = document.createElement('div');
+            
+            toast.className = 'glass-morphism p-4 rounded-lg animate-slide-up sparkle-effect';
+            toast.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="text-2xl">${achievement.icon}</div>
+                    <div>
+                        <div class="font-medium text-${achievement.color}">${achievement.message}</div>
+                        <div class="text-sm text-claude-text-dim">Keep up the great work!</div>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 5000);
+        }
+
+        // Generic toast notifications
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('achievement-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                info: 'claude-primary',
+                success: 'claude-success',
+                warning: 'claude-warning',
+                error: 'claude-error'
+            };
+            
+            toast.className = 'glass-morphism p-4 rounded-lg animate-slide-up';
+            toast.innerHTML = `
+                <div class="text-${colors[type]}">${message}</div>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => container.removeChild(toast), 300);
+            }, duration);
+        }
+
+        // Accessibility: Announce important state changes to screen readers
+        function announceToScreenReader(message) {
+            const announcement = document.createElement('div');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.setAttribute('aria-atomic', 'true');
+            announcement.className = 'sr-only';
+            announcement.textContent = message;
+            
+            document.body.appendChild(announcement);
+            
+            setTimeout(() => {
+                document.body.removeChild(announcement);
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
