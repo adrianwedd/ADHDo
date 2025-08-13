@@ -6,7 +6,12 @@ import os
 
 async def test():
     url = "http://homeassistant.local:8123"
-    token = os.getenv("HOME_ASSISTANT_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI4ZWVhMTk4MzZlYmI0YzllODc1NjIzMTdjMWE2YzUyOCIsImlhdCI6MTc1NDg3NjQ2NywiZXhwIjoyMDcwMjM2NDY3fQ.f5-az8yuD4woUI7qk4kP85WcBbqrcc7PrrCPypPxAxg")
+    token = os.getenv("HOME_ASSISTANT_TOKEN", "")
+    
+    if not token:
+        print("❌ HOME_ASSISTANT_TOKEN environment variable not set")
+        print("💡 Get your token from Home Assistant > Profile > Long-lived access tokens")
+        return
     
     headers = {
         "Authorization": f"Bearer {token}",
