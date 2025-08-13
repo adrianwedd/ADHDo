@@ -39,15 +39,17 @@ cd ADHDo
 
 # 2. One file to rule them all
 cp .env.example .env
-# Edit .env: Add your OpenAI key, make up a secret key
+# Edit .env: Add your Claude session key from browser (no API key needed!)
 # OPTIONAL: Add Jellyfin URL and token for music system
-# OPTIONAL: Add Nest device support (automatically discovered)
+# OPTIONAL: Add Google API credentials for calendar/fitness integration
 
 # 3. The moment of truth
-docker-compose up -d
+source .env && PYTHONPATH=./src PORT=23444 ./venv_beta/bin/python -m mcp_server.minimal_main
 
-# 4. Victory dance time!
-curl http://localhost:8000/health
+# 4. Test the revolutionary Claude V2 cognitive engine!
+curl -X POST http://localhost:23444/claude/v2/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "I have 5 urgent tasks and feeling overwhelmed", "user_id": "test_user"}'
 # See "healthy"? YOU DID IT! 🎉
 ```
 
@@ -101,27 +103,35 @@ Your AI buddy watches for signs you're struggling:
 
 **TL;DR: Talk to it like your smartest, most patient friend**
 
-### 🎯 Conversation Starters That Actually Work
+### 🎯 What Claude V2 Can Actually Do For Your ADHD Brain
 
 ```
 💭 "I have 10 things to do and my brain is screaming"
-   → Gets smart prioritization and breathing room
+   → Smart task prioritization + calming music + gentle timer
+   → Reduces cognitive load to 1-2 manageable next steps
 
-💭 "I've been avoiding this project for 3 weeks"
-   → Task breakdown magic that makes it doable
+💭 "I've been hyperfocused coding for 4 hours"
+   → Immediate break intervention + movement nudge + transition music
+   → Prevents burnout while respecting your flow state
 
-💭 "I can't focus and everything is distracting"
-   → Environment optimization and focus techniques
+💭 "I can't stop scrolling, help!"
+   → Environment control + focus music + task timer
+   → Creates dopamine alternative to mindless browsing
 
-💭 "I did a thing! It's small but I'm proud"
-   → CELEBRATION MODE ACTIVATED! 🎉
+💭 "Medication wore off and everything feels chaotic"
+   → Structured environment + gentle nudges + energy management
+   → Compensates for medication gaps with external structure
 
-💭 "I'm hyperfocusing and forgot to eat again"
-   → Gentle reality check and self-care nudge
-
-💭 "Everything feels broken and I'm a mess"
-   → Crisis support mode with actual helpful strategies
+💭 "I keep switching tasks and getting nothing done"
+   → Task focus lock + distraction blocking + accountability check
+   → Maintains focus on single priority until completion
 ```
+
+### 🧠 The Claude V2 Difference: It Actually THINKS
+
+**Old ADHD Apps:** Pattern matching → "You said 'overwhelmed' so here's generic advice #3"
+
+**Claude V2:** Real cognitive processing → "User has 5 urgent tasks, medication window closing, sitting 90+ minutes, high stress indicators detected. Multi-intervention: priority focus on highest-impact task, movement break timer, calming background audio, scheduled check-in in 25 minutes."
 
 ### 🏆 The ADHD Success Formula
 
@@ -137,18 +147,37 @@ Your AI buddy watches for signs you're struggling:
 
 **TL;DR: Modern, fast, secure tech stack that actually scales**
 
-### 🚀 What's Under the Hood
+### 🚀 What's Under the Hood - Claude V2 Cognitive Architecture
 
 ```
-🏗️ ARCHITECTURE THAT DOESN'T SUCK
+🧠 REVOLUTIONARY COGNITIVE ENGINE (Not Another Chatbot!)
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  🎨 Frontend    │    │  ⚡ FastAPI     │    │  🗃️ Database   │
-│  React-fast     │────│  Python Beast  │────│  PostgreSQL +   │
-│  TailwindCSS    │    │  <3s responses  │    │  Redis Cache    │
+│  📊 State       │    │  🧠 Claude V2   │    │  🛠️ Tools      │
+│  Gatherer       │────│  Cognitive      │────│  Executor       │
+│  • Physical     │    │  Engine         │    │  • Music        │
+│  • Temporal     │    │  • Real Reason  │    │  • Timers       │
+│  • Tasks        │    │  • Tool Aware   │    │  • Nudges       │
+│  • Environment  │    │  • Confident    │    │  • Focus Lock   │
+│  • History      │    │  • Multi-Tool   │    │  • Environment  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
-         │                       ▼                       │
+         │                   JSON Decision              │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  🗃️ Memory     │    │  ⚡ FastAPI     │    │  📱 Integrations │
+│  Pattern Track  │    │  Server         │    │  Google APIs    │
+│  Outcome Store  │    │  Browser Auth   │    │  Nest Devices   │
+│  Learning Loop  │    │  Confidence UI  │    │  Jellyfin Music │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+🎯 **The V2 Breakthrough:** Claude doesn't just chat - it thinks, decides, and acts
+- **Complete State Awareness**: Physical, temporal, environmental, task context
+- **Real Cognitive Processing**: Not pattern matching - actual reasoning
+- **Multi-Tool Orchestration**: Complex interventions with 50+ actions
+- **Confidence Gating**: Won't act unless it understands the situation
+- **Learning Loop**: Gets better by tracking what actually works
          │              ┌─────────────────┐              │
          │              │  📱 Telegram   │              │
          └──────────────│  Mobile Magic  │──────────────┘
