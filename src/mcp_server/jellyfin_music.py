@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from enum import Enum
 from typing import Dict, List, Optional
+from dataclasses import field
+import random
 import aiohttp
 import pychromecast
 
@@ -39,6 +41,12 @@ class PlaybackState:
     volume: float = 0.75
     chromecast_connected: bool = False
     last_activity: Optional[datetime] = None
+    # Queue management
+    queue: List[JellyfinTrack] = field(default_factory=list)
+    queue_index: int = 0
+    repeat_mode: str = "all"  # off, one, all
+    shuffle: bool = False
+    playback_monitor_task: Optional[asyncio.Task] = None
 
 class JellyfinMusicController:
     """Controls music playback from Jellyfin to Chromecast Audio."""
@@ -231,20 +239,47 @@ class JellyfinMusicController:
             self.state.chromecast_connected = False
     
     async def play_mood_playlist(self, mood: MusicMood, volume: float = None, shuffle: bool = True):
-        """Play a mood-based playlist."""
+        """Play a mood-based playlist with queue management."""
         if mood not in self.playlists or not self.playlists[mood]:
             logger.warning(f"⚠️ No tracks available for mood: {mood.value}")
             return False
         
         try:
+            # Build queue
             tracks = self.playlists[mood].copy()
             if shuffle:
-                import random
                 random.shuffle(tracks)
             
-            # Play the actual track
+            # Set up queue
+            self.state.queue = tracks
+            self.state.queue_index = 0
+            self.state.shuffle = shuffle
+            
+            logger.info(f"📚 Queue loaded with {len(tracks)} {mood.value} tracks")
+            
+            # Play first track
             track = tracks[0]
-            logger.info(f"🎵 Playing: {track.name} by {track.artist} ({mood.value} mood)")
+            success = await self._play_track_internal(track, volume)
+            
+            if success:
+                logger.info(f"✅ Started {mood.value} playlist with {len(tracks)} tracks")
+                # Start monitoring for next track
+                if self.state.playback_monitor_task:
+                    self.state.playback_monitor_task.cancel()
+                self.state.playback_monitor_task = asyncio.create_task(
+                    self._monitor_and_play_next(track.duration_seconds)
+                )
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"❌ Playback failed: {e}")
+            return False
+    
+    async def _play_track_internal(self, track: JellyfinTrack, volume: float = None) -> bool:
+        """Internal method to play a single track."""
+        try:
+            logger.info(f"🎵 Playing: {track.name} by {track.artist}")
             
             # Cast to Chromecast if connected
             if self.state.chromecast_connected and self.media_controller:
@@ -275,17 +310,110 @@ class JellyfinMusicController:
                 self.state.volume = volume
             self.state.last_activity = datetime.now()
             
-            logger.info(f"✅ Started {mood.value} playlist")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Playback failed: {e}")
+            logger.error(f"❌ Track playback failed: {e}")
+            return False
+    
+    async def _monitor_and_play_next(self, duration_seconds: int):
+        """Monitor playback and automatically play next track."""
+        try:
+            # Wait for current track to finish (with some buffer)
+            await asyncio.sleep(duration_seconds - 5)  # Start checking 5 seconds early
+            
+            # Check if still playing
+            if self.media_controller:
+                # Wait for actual end
+                while self.media_controller.status.player_state == "PLAYING":
+                    await asyncio.sleep(1)
+            
+            logger.info(f"✅ Track finished: {self.state.current_track.name if self.state.current_track else 'Unknown'}")
+            
+            # Play next track in queue
+            if self.state.queue and len(self.state.queue) > 0:
+                # Move to next track
+                self.state.queue_index += 1
+                
+                # Handle repeat modes
+                if self.state.queue_index >= len(self.state.queue):
+                    if self.state.repeat_mode == "all":
+                        self.state.queue_index = 0
+                        logger.info("🔁 Restarting playlist from beginning")
+                    elif self.state.repeat_mode == "off":
+                        logger.info("⏹️ Playlist finished")
+                        self.state.is_playing = False
+                        self.state.current_track = None
+                        return
+                elif self.state.repeat_mode == "one":
+                    self.state.queue_index -= 1  # Stay on same track
+                    logger.info("🔂 Repeating current track")
+                
+                # Play next track
+                if self.state.queue_index < len(self.state.queue):
+                    next_track = self.state.queue[self.state.queue_index]
+                    logger.info(f"⏭️ Playing next: {next_track.name} by {next_track.artist}")
+                    
+                    success = await self._play_track_internal(next_track)
+                    if success:
+                        # Continue monitoring
+                        self.state.playback_monitor_task = asyncio.create_task(
+                            self._monitor_and_play_next(next_track.duration_seconds)
+                        )
+            else:
+                logger.info("📭 Queue is empty")
+                self.state.is_playing = False
+                self.state.current_track = None
+                
+        except asyncio.CancelledError:
+            logger.info("Playback monitoring cancelled")
+        except Exception as e:
+            logger.error(f"Playback monitoring error: {e}")
+            self.state.is_playing = False
+    
+    async def skip_track(self) -> bool:
+        """Skip to next track in queue."""
+        try:
+            if not self.state.queue or self.state.queue_index >= len(self.state.queue) - 1:
+                logger.info("No more tracks in queue")
+                return False
+            
+            # Cancel current monitor
+            if self.state.playback_monitor_task:
+                self.state.playback_monitor_task.cancel()
+            
+            # Stop current playback
+            if self.media_controller:
+                self.media_controller.stop()
+            
+            # Move to next track
+            self.state.queue_index += 1
+            next_track = self.state.queue[self.state.queue_index]
+            
+            logger.info(f"⏭️ Skipping to: {next_track.name}")
+            success = await self._play_track_internal(next_track)
+            
+            if success:
+                # Start monitoring new track
+                self.state.playback_monitor_task = asyncio.create_task(
+                    self._monitor_and_play_next(next_track.duration_seconds)
+                )
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Skip failed: {e}")
             return False
     
     async def stop_music(self):
         """Stop music playback."""
         try:
             logger.info("⏹️ Stopping music")
+            
+            # Cancel monitor task
+            if self.state.playback_monitor_task:
+                self.state.playback_monitor_task.cancel()
+                self.state.playback_monitor_task = None
             
             # Stop Chromecast playback if connected
             if self.state.chromecast_connected and self.media_controller:
@@ -294,6 +422,8 @@ class JellyfinMusicController:
             
             self.state.is_playing = False
             self.state.current_track = None
+            self.state.queue = []
+            self.state.queue_index = 0
             return True
         except Exception as e:
             logger.error(f"❌ Stop failed: {e}")
@@ -326,8 +456,8 @@ class JellyfinMusicController:
                 now = datetime.now()
                 current_time = now.time()
                 
-                # Only play between 9 AM and 9 PM
-                if time(9, 0) <= current_time <= time(21, 0):
+                # Only play between 9 AM and midnight
+                if time(9, 0) <= current_time or current_time <= time(0, 0):
                     # Check if we should start ambient music
                     if not self.state.is_playing and not self._is_system_audio_active():
                         logger.info("🎵 Starting ambient focus music (silence detected)")
@@ -356,6 +486,13 @@ class JellyfinMusicController:
                 "artist": self.state.current_track.artist,
                 "mood": self._get_track_mood(self.state.current_track)
             } if self.state.current_track else None,
+            "queue": {
+                "total": len(self.state.queue),
+                "current_index": self.state.queue_index,
+                "next_track": self.state.queue[self.state.queue_index + 1].name if self.state.queue_index + 1 < len(self.state.queue) else None,
+                "repeat_mode": self.state.repeat_mode,
+                "shuffle": self.state.shuffle
+            },
             "volume": self.state.volume,
             "chromecast_connected": self.state.chromecast_connected,
             "available_moods": [mood.value for mood in MusicMood if self.playlists[mood]]

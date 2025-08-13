@@ -14,7 +14,13 @@ from pydantic import BaseModel
 
 from mcp_server.config import settings
 from mcp_server.models import MCPFrame, UserState, NudgeTier
-from mcp_server.claude_client import claude_client, ClaudeResponse
+# Use browser-based Claude that actually works
+try:
+    from mcp_server.claude_browser_working import get_claude_browser, ClaudeBrowserClient
+    _use_browser_claude = True
+except ImportError:
+    from mcp_server.claude_client import claude_client, ClaudeResponse
+    _use_browser_claude = False
 from mcp_server.context_aware_prompting import context_aware_prompting
 from mcp_server.adhd_logger import adhd_logger
 
@@ -334,9 +340,11 @@ class ComplexityClassifier:
         # Complex patterns that benefit from cloud LLM
         self.complex_patterns = [
             r"\b(help me understand|what does it mean|why do I)\b",
-            r"\b(reframe|perspective|look at it differently)\b",
+            r"\b(reframe|perspective|look at it differently)\b", 
             r"\b(break down|plan|strategy|approach)\b",
-            r"\b(feel like|makes me think|reminds me of)\b"
+            r"\b(feel like|makes me think|reminds me of)\b",
+            r"\b(need help|help me|can you help|assistance|support)\b",
+            r"\b(explain|understand|figure out|work through)\b"
         ]
     
     def assess_complexity(self, text: str, context: Optional[MCPFrame] = None) -> TaskComplexity:
@@ -369,11 +377,12 @@ class LLMRouter:
     
     def __init__(self):
         self.local_client = OllamaClient("deepseek-r1:1.5b")
-        self.claude_client = claude_client
+        self.claude_browser_client = None  # Will initialize on demand
         self.safety_monitor = SafetyMonitor()
         self.complexity_classifier = ComplexityClassifier()
         self.cloud_client = None  # TODO: Add OpenRouter client
         self._initialized = False
+        self._claude_available = False
         
         # Response templates for ultra-fast responses
         self._quick_responses = {
@@ -396,6 +405,11 @@ class LLMRouter:
                 "You are a supportive accountability partner for someone with ADHD. "
                 "Be direct but kind. Help them recognize patterns and stay on track. "
                 "Keep responses brief and focused."
+            ),
+            "complex_breakdown": (
+                "You are a knowledgeable AI assistant helping someone with ADHD understand complex topics. "
+                "Provide clear, detailed explanations that break down complex concepts. "
+                "Use examples, analogies, and structured explanations. Keep it informative but accessible."
             ),
             "crisis": (
                 "SYSTEM OVERRIDE: Crisis response protocols engaged. "
@@ -435,25 +449,41 @@ class LLMRouter:
         # Step 2: Complexity assessment
         complexity = self.complexity_classifier.assess_complexity(user_input, context)
         
-        # Step 3: Route ALL requests to Claude to reduce Pi load
-        # Use Claude for everything when available to preserve Pi resources
-        if self.claude_client.is_available():
-            logger.info("Routing to Claude to preserve Pi resources")
-            if complexity == TaskComplexity.SIMPLE:
-                return await self._handle_claude(user_input, context, nudge_tier, 'gentle_nudge')
-            elif complexity == TaskComplexity.MODERATE:
-                return await self._handle_claude(user_input, context, nudge_tier, 'gentle_nudge')
-            elif complexity == TaskComplexity.COMPLEX:
+        # Step 3: BYPASS OLLAMA - Check complexity first, then patterns  
+        logger.info("Bypassing Ollama - using pattern-based ADHD assistant")
+        
+        # For complex queries, try Claude first before pattern matching
+        if self._claude_available and complexity == TaskComplexity.COMPLEX:
+            logger.info("Complex query - routing to Claude")
+            try:
                 return await self._handle_claude(user_input, context, nudge_tier, 'complex_breakdown')
-        else:
-            # Fallback to local only if Claude unavailable
-            logger.info("Claude not available, using local processing")
-            if complexity == TaskComplexity.SIMPLE:
-                return await self._handle_local(user_input, context, nudge_tier)
-            elif complexity == TaskComplexity.MODERATE:
-                return await self._handle_local(user_input, context, nudge_tier)
-            elif complexity == TaskComplexity.COMPLEX:
-                return await self._handle_local_complex(user_input, context, nudge_tier)
+            except Exception as e:
+                logger.warning(f"Claude failed: {e}, using pattern fallback")
+        
+        # Try pattern matching for simple/moderate queries - instant and ADHD-optimized
+        quick_response = self._get_quick_response(user_input)
+        if quick_response:
+            logger.info("Pattern match found - instant response")
+            return LLMResponse(
+                text=quick_response,
+                source="pattern_match",
+                confidence=0.95,
+                latency_ms=10,
+                model_used="adhd_patterns"
+            )
+        
+        # Default: Use comprehensive pattern-based ADHD assistant
+        logger.info("Using comprehensive ADHD assistant")
+        from .adhd_assistant import adhd_assistant
+        result = await adhd_assistant.process_message(user_input, "default")
+        
+        return LLMResponse(
+            text=result.get("response", "I understand this is challenging with ADHD. Let's break it down into smaller steps. What's the most urgent part?"),
+            source="adhd_assistant",
+            confidence=0.85,
+            latency_ms=50,
+            model_used="adhd_patterns"
+        )
     
     async def _handle_local(
         self, 
@@ -505,11 +535,15 @@ class LLMRouter:
         # Adjust token limits based on cognitive load
         max_tokens = 150 if prompt_context.cognitive_load < 0.6 else 75
         
-        return await self.local_client.generate(
-            enhanced_user_prompt,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            temperature=0.8
+        # Skip Ollama (timing out on Pi) and use pattern-based assistant
+        from .adhd_assistant import adhd_assistant
+        result = await adhd_assistant.process_message(enhanced_user_prompt, "default")
+        
+        return LLMResponse(
+            text=result.get("response", "I understand. Let me help you with that. What specific part would you like to tackle first?"),
+            source="pattern_fallback",
+            confidence=0.7,
+            latency_ms=100
         )
     
     def _identify_pattern(self, user_input: str) -> str:
@@ -546,7 +580,7 @@ class LLMRouter:
             return self._quick_responses["start"]
         elif any(phrase in text_lower for phrase in ["hello", "hi", "hey", "good morning", "good afternoon"]):
             return "Hi! I'm here to help you stay focused. What would you like to work on? 🌟"
-        elif any(phrase in text_lower for phrase in ["help me focus", "need focus", "can't concentrate", "distracted", "concentrate on"]):
+        elif any(phrase in text_lower for phrase in ["help me focus", "need focus", "can't concentrate", "distracted", "concentrate on", "focus please"]):
             return "Let's find your focus together. What's one small task you could tackle right now? 🎯"
         elif any(phrase in text_lower for phrase in ["break down", "break it down", "too big", "complex task", "project is", "task is"]):
             return "Perfect instinct! What's the absolute smallest piece of this task? Let's start tiny. 🔍"
@@ -574,11 +608,18 @@ class LLMRouter:
             else:
                 logger.info("⚠️ Ollama not available - using pattern matching only")
             
-            # Check if Claude is available
-            if self.claude_client.is_available():
-                logger.info("✅ Claude browser auth available - using for complex tasks")
-            else:
-                logger.info("ℹ️ Claude not authenticated - local + pattern matching mode")
+            # Check if Claude browser is available
+            try:
+                if _use_browser_claude:
+                    self.claude_browser_client = await get_claude_browser()
+                    self._claude_available = True
+                    logger.info("✅ Claude browser available - using for complex tasks")
+                else:
+                    self._claude_available = False
+                    logger.info("ℹ️ Claude browser not available - local + pattern matching mode")
+            except Exception as e:
+                logger.warning(f"Claude browser initialization failed: {e}")
+                self._claude_available = False
             
             self._initialized = True
             logger.info("🎯 LLM router initialized - ready for <3s ADHD responses")
@@ -599,7 +640,7 @@ class LLMRouter:
         
         # Add disclaimer for complex requests
         if response.confidence > 0.5:  # Only if we got a reasonable response
-            if self.claude_client.is_available():
+            if self._claude_available:
                 response.text += (
                     "\n\n💡 *I can provide more detailed guidance using your Claude Pro subscription if needed.*"
                 )
@@ -618,6 +659,8 @@ class LLMRouter:
         use_case: str = 'gentle_nudge'
     ) -> LLMResponse:
         """Handle request with Claude using browser auth."""
+        
+        start_time = time.time()
         
         try:
             # Build system prompt based on nudge tier and context
@@ -644,23 +687,21 @@ class LLMRouter:
                 if system_prompt:
                     system_prompt += context_info
             
-            # Generate response with Claude
-            claude_response = await self.claude_client.generate_response(
-                user_input=user_input,
-                system_prompt=system_prompt,
-                use_case=use_case,
-                max_tokens=150  # ADHD-optimized length
-            )
-            
-            # Convert Claude response to LLMResponse
-            return LLMResponse(
-                text=claude_response.text,
-                source="claude_browser",
-                confidence=claude_response.confidence,
-                latency_ms=claude_response.latency_ms,
-                cost_usd=claude_response.cost_estimate_usd,
-                model_used=claude_response.model
-            )
+            # Generate response with Claude browser
+            if self.claude_browser_client:
+                full_prompt = f"{system_prompt}\n\nUser: {user_input}\n\nAssistant:"
+                claude_text = await self.claude_browser_client.send_message(full_prompt)
+                
+                return LLMResponse(
+                    text=claude_text,
+                    source="claude_browser",
+                    confidence=0.95,
+                    latency_ms=(time.time() - start_time) * 1000,
+                    cost_usd=0.0,  # Browser mode doesn't track cost
+                    model_used="claude-3-sonnet"
+                )
+            else:
+                raise Exception("Claude browser not initialized")
             
         except Exception as e:
             logger.error("Claude request failed, falling back to local", error=str(e))

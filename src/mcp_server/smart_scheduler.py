@@ -12,7 +12,7 @@ from enum import Enum
 
 import structlog
 from mcp_server.llm_client import OllamaClient, LLMResponse
-from mcp_server.nest_nudges import nest_nudge_system, NudgeType
+from mcp_server.nest_nudges import NudgeType
 
 logger = structlog.get_logger()
 
@@ -220,10 +220,21 @@ class SmartScheduler:
             # Generate intelligent message (use rich template bank for variety)
             message = self._generate_template_nudge(schedule, context, is_pre_nudge)
             
+            # Import nest nudge system
+            from mcp_server import nest_nudges
+            
+            # Initialize if not already done
+            if not nest_nudges.nest_nudge_system:
+                logger.info("🎯 Initializing nest nudge system for scheduler...")
+                success = await nest_nudges.initialize_nest_nudges()
+                if not success:
+                    logger.error("Failed to initialize nest nudge system")
+                    return
+            
             # Send via TTS
-            if nest_nudge_system:
+            if nest_nudges.nest_nudge_system:
                 nudge_type = self._get_nudge_type(schedule, is_pre_nudge)
-                success = await nest_nudge_system.send_nudge(
+                success = await nest_nudges.nest_nudge_system.send_nudge(
                     message=message,
                     nudge_type=nudge_type,
                     volume=0.6 if schedule.current_attempt < 3 else 0.8

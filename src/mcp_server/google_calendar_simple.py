@@ -35,8 +35,19 @@ class SimpleCalendarClient:
         self.creds = None
         self.is_authenticated = False
         
-        if GOOGLE_AVAILABLE:
-            self._authenticate()
+        # Don't authenticate during initialization to prevent blocking
+        # Call authenticate() explicitly when needed
+        if GOOGLE_AVAILABLE and os.path.exists(self.token_file):
+            # Only try to load existing token, don't create new one
+            try:
+                with open(self.token_file, 'rb') as token:
+                    self.creds = pickle.load(token)
+                    if self.creds and self.creds.valid:
+                        self.service = build('calendar', 'v3', credentials=self.creds)
+                        self.is_authenticated = True
+                        logger.info("✅ Google Calendar authenticated from saved token")
+            except Exception as e:
+                logger.debug(f"Could not load saved token: {e}")
     
     def _authenticate(self):
         """Authenticate with Google Calendar."""
