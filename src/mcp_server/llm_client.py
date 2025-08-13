@@ -449,18 +449,10 @@ class LLMRouter:
         # Step 2: Complexity assessment
         complexity = self.complexity_classifier.assess_complexity(user_input, context)
         
-        # Step 3: BYPASS OLLAMA - Check complexity first, then patterns  
-        logger.info("Bypassing Ollama - using pattern-based ADHD assistant")
+        # Step 3: CLAUDE-FIRST OPTIMIZATION for ADHD Performance
+        logger.info("Claude-first routing for optimal ADHD performance")
         
-        # For complex queries, try Claude first before pattern matching
-        if self._claude_available and complexity == TaskComplexity.COMPLEX:
-            logger.info("Complex query - routing to Claude")
-            try:
-                return await self._handle_claude(user_input, context, nudge_tier, 'complex_breakdown')
-            except Exception as e:
-                logger.warning(f"Claude failed: {e}, using pattern fallback")
-        
-        # Try pattern matching for simple/moderate queries - instant and ADHD-optimized
+        # Try pattern matching first - instant and ADHD-optimized (no LLM needed)
         quick_response = self._get_quick_response(user_input)
         if quick_response:
             logger.info("Pattern match found - instant response")
@@ -472,7 +464,17 @@ class LLMRouter:
                 model_used="adhd_patterns"
             )
         
-        # Default: Use comprehensive pattern-based ADHD assistant
+        # For all other queries, prefer Claude for fast, high-quality responses
+        if self._claude_available:
+            logger.info(f"{complexity.value} query - routing to Claude for fast response")
+            try:
+                # Use appropriate Claude strategy based on complexity
+                strategy = 'complex_breakdown' if complexity == TaskComplexity.COMPLEX else 'adhd_support'
+                return await self._handle_claude(user_input, context, nudge_tier, strategy)
+            except Exception as e:
+                logger.warning(f"Claude failed: {e}, using ADHD assistant fallback")
+        
+        # Fallback: Use comprehensive pattern-based ADHD assistant
         logger.info("Using comprehensive ADHD assistant")
         from .adhd_assistant import adhd_assistant
         result = await adhd_assistant.process_message(user_input, "default")
