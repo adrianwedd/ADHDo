@@ -19,7 +19,7 @@ import sys
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict
 from datetime import datetime
 
 # Load environment variables from .env file
@@ -126,6 +126,8 @@ class UserState(BaseModel):
 # Global components
 redis_client: Optional[redis.Redis] = None
 database_engine = None
+hub = None  # Integration hub
+analyzer = None  # Context analyzer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -217,6 +219,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from mcp_server.voice_assistant import initialize_voice_assistant
         
         # Initialize voice calendar integration
+        from mcp_server.nest_nudges import nest_nudge_system
         voice_cal_success = await initialize_voice_calendar(nest_system=nest_nudge_system if nest_available else None)
         if voice_cal_success:
             logger.info("✅ Voice calendar integration initialized")
@@ -288,6 +291,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.error(f"❌ Music system error: {e}")
     
+    # Initialize integration hub - THE BRAIN that connects everything
+    global hub, analyzer
+    try:
+        from mcp_server.integration_hub import initialize_integration
+        from mcp_server.component_adapters import (
+            NestAdapter, MusicAdapter, CalendarAdapter, FitnessAdapter
+        )
+        
+        hub, analyzer = initialize_integration()
+        
+        # Register all components with adapters
+        if oauth_mgr:
+            hub.register_component('calendar', CalendarAdapter(oauth_mgr))
+            hub.register_component('fitness', FitnessAdapter(oauth_mgr))
+        if nest_nudge_system:
+            hub.register_component('nest', NestAdapter(nest_nudge_system))
+        
+        # Get the actual jellyfin_music instance from the module
+        try:
+            from mcp_server.jellyfin_music import jellyfin_music as music_instance
+            if music_instance:
+                hub.register_component('music', MusicAdapter(music_instance))
+        except ImportError:
+            pass
+        
+        # Start the integration processes
+        asyncio.create_task(hub.process_events())
+        asyncio.create_task(analyzer.analyze_loop())
+        
+        logger.info("🧠 Integration hub started - components are now connected!")
+    except Exception as e:
+        logger.error(f"Failed to initialize integration hub: {e}")
+    
     logger.info("🎯 MCP ADHD Server ready - Core cognitive loop operational")
     
     yield
@@ -323,13 +359,21 @@ if claude_tools_router:
     app.include_router(claude_tools_router)
     logger.info("✅ Claude tools endpoints added")
 
+# Add integration endpoints
+try:
+    from mcp_server.integration_endpoints import router as integration_router
+    app.include_router(integration_router)
+    logger.info(f"✅ Integration endpoints added with prefix: {integration_router.prefix}")
+except ImportError as e:
+    logger.warning(f"Could not import integration endpoints: {e}")
+
 # Root endpoint - MCP Contextual Operating System Dashboard
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """MCP Contextual Operating System Dashboard."""
-    # Read the dashboard HTML file
+    # Read the COMPLETE dashboard HTML file
     try:
-        with open("mcp_dashboard.html", "r") as f:
+        with open("mcp_complete_dashboard.html", "r") as f:
             return f.read()
     except FileNotFoundError:
         # Fallback to simple interface
@@ -710,6 +754,149 @@ async def get_log_patterns():
         }
 
 # Health endpoint
+# Initialize Google OAuth (using unified version for all Google services)
+try:
+    from mcp_server.unified_google_auth import initialize_unified_auth, unified_auth
+    from fastapi.responses import RedirectResponse, HTMLResponse
+    
+    # Initialize the unified auth manager
+    oauth_mgr = initialize_unified_auth()
+    
+    @app.get("/auth/google")
+    async def start_auth():
+        """Start Google OAuth flow."""
+        auth_url = oauth_mgr.get_auth_url("http://localhost:8001/auth/callback")
+        return RedirectResponse(url=auth_url)
+    
+    @app.get("/auth/callback")
+    async def auth_callback(code: str):
+        """Handle OAuth callback."""
+        success = await oauth_mgr.exchange_code(code, "http://localhost:8001/auth/callback")
+        
+        if success:
+            return HTMLResponse("""
+                <html>
+                <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                    <h1>✅ Authentication Successful!</h1>
+                    <p>You can now use calendar features.</p>
+                    <p><a href="/">Go to Dashboard</a></p>
+                </body>
+                </html>
+            """)
+        else:
+            return HTMLResponse("""
+                <html>
+                <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                    <h1>❌ Authentication Failed</h1>
+                    <p><a href="/auth/google">Try Again</a></p>
+                </body>
+                </html>
+            """)
+    
+    @app.get("/auth/status")
+    async def auth_status():
+        """Check authentication status."""
+        return {
+            "authenticated": oauth_mgr.is_authenticated(),
+            "scopes": oauth_mgr.SCOPES if oauth_mgr.is_authenticated() else []
+        }
+    
+    @app.get("/calendar/real-events")
+    async def get_real_calendar_events():
+        """Get real Google Calendar events."""
+        if not oauth_mgr.is_authenticated():
+            return {"error": "Not authenticated", "events": []}
+        
+        events = await oauth_mgr.get_calendar_events()
+        return {
+            "success": True,
+            "count": len(events),
+            "events": events
+        }
+    
+    @app.get("/fitness/today")
+    async def get_fitness_today():
+        """Get today's fitness stats."""
+        if not oauth_mgr.is_authenticated():
+            return {"error": "Not authenticated"}
+        
+        stats = await oauth_mgr.get_today_stats()
+        return stats
+    
+    @app.get("/fitness/steps")
+    async def get_steps_data(days: int = 7):
+        """Get step count data."""
+        if not oauth_mgr.is_authenticated():
+            return {"error": "Not authenticated", "data": []}
+        
+        data = await oauth_mgr.get_fitness_data("steps", days)
+        return {
+            "success": True,
+            "type": "steps",
+            "days": days,
+            "count": len(data),
+            "data": data
+        }
+    
+    @app.get("/fitness/activity")
+    async def get_activity_data(days: int = 7):
+        """Get activity data."""
+        if not oauth_mgr.is_authenticated():
+            return {"error": "Not authenticated", "data": []}
+        
+        data = await oauth_mgr.get_fitness_data("activity", days)
+        return {
+            "success": True,
+            "type": "activity",
+            "days": days,
+            "count": len(data),
+            "data": data
+        }
+    
+    @app.get("/fitness/calories")
+    async def get_calories_data(days: int = 7):
+        """Get calories burned data."""
+        if not oauth_mgr.is_authenticated():
+            return {"error": "Not authenticated", "data": []}
+        
+        data = await oauth_mgr.get_fitness_data("calories", days)
+        return {
+            "success": True,
+            "type": "calories",
+            "days": days,
+            "count": len(data),
+            "data": data
+        }
+    
+    logger.info("🔐 Simple Google OAuth routes initialized")
+except Exception as e:
+    logger.warning(f"Google OAuth not available: {e}")
+
+@app.post("/test/integration")
+async def test_integration():
+    """Test the integration hub by triggering events."""
+    if not hub:
+        return {"error": "Integration hub not initialized"}
+    
+    from mcp_server.integration_hub import SystemEvent, EventType
+    from datetime import datetime
+    
+    # Emit a test event
+    await hub.emit(SystemEvent(
+        type=EventType.MANUAL_TRIGGER,
+        data={"test": True, "message": "Testing integration"},
+        timestamp=datetime.now(),
+        source="test_endpoint",
+        priority=7
+    ))
+    
+    return {
+        "success": True,
+        "message": "Test event emitted",
+        "components_registered": list(hub.components.keys()),
+        "context": hub.context
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -2113,6 +2300,15 @@ async def acknowledge_reminder(reminder_id: str):
         logger.error(f"Failed to acknowledge reminder: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Debug test - this should work since it's right after reminders  
+@app.get("/debug/after-reminders")
+async def debug_after_reminders():
+    return {"message": "After reminders endpoint works"}
+
+# Debug endpoint to test registration
+@app.get("/debug/before-voice")
+async def debug_before_voice():
+    return {"message": "Endpoint before voice works"}
 
 # Voice and Calendar Integration Endpoints
 @app.post("/voice/command")
@@ -2202,6 +2398,11 @@ async def start_voice_listening():
         logger.error(f"Voice listen failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# Debug endpoint to test registration after voice
+@app.get("/debug/after-voice")
+async def debug_after_voice():
+    return {"message": "Endpoint after voice works"}
 
 # Smart Scheduling System Integration
 schedule_available = False

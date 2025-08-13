@@ -4,7 +4,6 @@ Enables two-way voice interaction through Google Assistant/Nest devices
 """
 import asyncio
 import logging
-import speech_recognition as sr
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -14,11 +13,13 @@ logger = logging.getLogger(__name__)
 
 # Check for required libraries
 try:
+    import speech_recognition as sr
     import pyaudio
     AUDIO_AVAILABLE = True
 except ImportError:
     AUDIO_AVAILABLE = False
-    logger.warning("PyAudio not installed. Voice input disabled. Install with: pip install pyaudio")
+    sr = None
+    logger.warning("Speech recognition not available. Install with: pip install SpeechRecognition pyaudio")
 
 class ListeningMode(Enum):
     """Listening modes for different contexts."""
@@ -40,8 +41,8 @@ class ADHDVoiceAssistant:
     
     def __init__(self, wake_word: str = "hey claude"):
         self.wake_word = wake_word.lower()
-        self.recognizer = sr.Recognizer() if AUDIO_AVAILABLE else None
-        self.microphone = sr.Microphone() if AUDIO_AVAILABLE else None
+        self.recognizer = sr.Recognizer() if (AUDIO_AVAILABLE and sr) else None
+        self.microphone = sr.Microphone() if (AUDIO_AVAILABLE and sr) else None
         self.listening_mode = ListeningMode.WAKE_WORD
         self.session = VoiceSession()
         self.voice_calendar = None

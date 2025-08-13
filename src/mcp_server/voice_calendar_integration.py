@@ -134,24 +134,26 @@ class VoiceCalendarSystem:
             logger.error(f"Context update failed: {e}")
     
     async def _get_upcoming_events(self, hours_ahead: int = 4) -> List[Dict]:
-        """Get upcoming calendar events."""
-        if not self.calendar_client:
-            return []
-        
+        """Get upcoming calendar events from Google Calendar."""
         try:
-            # Use the calendar client's method
-            now = datetime.utcnow()
-            time_max = now + timedelta(hours=hours_ahead)
+            # Use the OAuth manager to get real calendar events
+            from mcp_server.google_oauth_flow import oauth_manager
             
-            # This would use the actual Google Calendar API
-            # For now, return mock data for testing
-            return [
-                {
-                    'summary': 'Team Standup',
-                    'start': {'dateTime': (now + timedelta(hours=1)).isoformat() + 'Z'},
-                    'end': {'dateTime': (now + timedelta(hours=1, minutes=30)).isoformat() + 'Z'}
-                }
-            ]
+            if oauth_manager and oauth_manager.is_authenticated():
+                events = await oauth_manager.get_upcoming_events(hours_ahead)
+                logger.info(f"📅 Retrieved {len(events)} real calendar events")
+                return events
+            else:
+                logger.warning("Google Calendar not authenticated, using mock data")
+                # Fallback to mock data if not authenticated
+                now = datetime.utcnow()
+                return [
+                    {
+                        'summary': 'Team Standup (Mock)',
+                        'start': {'dateTime': (now + timedelta(hours=1)).isoformat() + 'Z'},
+                        'end': {'dateTime': (now + timedelta(hours=1, minutes=30)).isoformat() + 'Z'}
+                    }
+                ]
             
         except Exception as e:
             logger.error(f"Failed to get calendar events: {e}")

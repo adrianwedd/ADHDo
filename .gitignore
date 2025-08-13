@@ -89,6 +89,7 @@ pip-delete-this-directory.txt
 # Project specific
 adhd_server.db
 .env*
+.env.backup*
 !.env.example
 
 # Redis
@@ -122,3 +123,8 @@ test_*.json
 *.mp3
 *.wav
 audio_files/
+
+# Google OAuth credentials
+credentials.json
+token.pickle
+google_api_config.json
