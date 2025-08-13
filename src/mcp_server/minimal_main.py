@@ -142,7 +142,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             redis_client = redis.from_url(
                 settings.redis_url or "redis://localhost:6379/0",
                 encoding="utf-8", 
-                decode_responses=True
+                decode_responses=True,
+                max_connections=settings.redis_max_connections,
+                retry_on_timeout=settings.redis_retry_on_timeout,
+                socket_timeout=3,
+                socket_connect_timeout=5
             )
             await redis_client.ping()
             logger.info("✅ Redis connected")
@@ -334,7 +338,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🛑 Shutting down MCP ADHD Server")
     
     if redis_client:
-        await redis_client.close()
+        await redis_client.aclose()
     
     if database_engine:
         await database_engine.dispose()

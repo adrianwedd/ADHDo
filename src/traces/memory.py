@@ -61,7 +61,7 @@ class TraceMemoryBackend:
     async def disconnect(self) -> None:
         """Close Redis connection."""
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
         if self._connection_pool:
             await self._connection_pool.disconnect()
         logger.info("Disconnected from Redis")
