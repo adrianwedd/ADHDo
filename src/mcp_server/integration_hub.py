@@ -67,12 +67,13 @@ class IntegrationHub:
     The central nervous system that actually makes everything work together.
     """
     
-    def __init__(self):
+    def __init__(self, redis_client=None):
         self.event_queue: asyncio.Queue = asyncio.Queue()
         self.handlers: Dict[EventType, List[Callable]] = {}
         self.components: Dict[str, Any] = {}
         self.context: Dict[str, Any] = {}
         self.running = False
+        self.redis_client = redis_client
         
         # Register default handlers
         self._register_default_handlers()
@@ -153,6 +154,17 @@ class IntegrationHub:
         for action in actions:
             try:
                 logger.info(f"🎯 Executing: {action.action} → {action.target} ({action.reason})")
+                
+                # Check if this is a music action and if music changes are locked
+                if action.target == "music" and action.action in ["play_focus_music", "play_energizing_music"]:
+                    try:
+                        if self.redis_client:
+                            lock_status = await self.redis_client.get("music:auto_change_locked")
+                            if lock_status == "true":
+                                logger.info(f"🔒 Music action blocked - auto-change is locked: {action.action}")
+                                continue
+                    except Exception:
+                        pass  # If Redis fails, proceed with action
                 
                 component = self.components.get(action.target)
                 if component:
@@ -248,15 +260,16 @@ class IntegrationHub:
                 reason="Support deep focus"
             ))
             
-            actions.append(SystemAction(
-                action="send_nudge",
-                target="nest",
-                params={
-                    "message": "Focus time! 25 minutes of deep work starting now.",
-                    "urgency": "low"
-                },
-                reason="Start focus session"
-            ))
+            # DISABLED: Automatic focus time nudges are annoying
+            # actions.append(SystemAction(
+            #     action="send_nudge",
+            #     target="nest",
+            #     params={
+            #         "message": "Focus time! 25 minutes of deep work starting now.",
+            #         "urgency": "low"
+            #     },
+            #     reason="Start focus session"
+            # ))
             
             return actions
         
@@ -393,11 +406,11 @@ class ContextAnalyzer:
 integration_hub: Optional[IntegrationHub] = None
 context_analyzer: Optional[ContextAnalyzer] = None
 
-def initialize_integration():
+def initialize_integration(redis_client=None):
     """Initialize the integration system."""
     global integration_hub, context_analyzer
     
-    integration_hub = IntegrationHub()
+    integration_hub = IntegrationHub(redis_client)
     context_analyzer = ContextAnalyzer(integration_hub)
     
     logger.info("🚀 Integration hub initialized")

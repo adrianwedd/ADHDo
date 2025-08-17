@@ -92,6 +92,9 @@ class JellyfinMusicController:
             # Load existing playlists and create ADHD ones if needed
             await self._load_and_create_adhd_playlists()
             
+            # Load actual tracks into mood playlists
+            await self._load_adhd_playlists()
+            
             # Initialize Chromecast (don't fail if not available)
             await self._initialize_chromecast()
             
@@ -164,32 +167,41 @@ class JellyfinMusicController:
                     
                     # Organize tracks by genre/mood
                     for item in items:
+                        # Use network-accessible URL for Chromecast
+                        jellyfin_network_url = self.jellyfin_url.replace('localhost', '192.168.1.100')
                         track = JellyfinTrack(
                             id=item['Id'],
                             name=item.get('Name', 'Unknown'),
                             artist=item.get('AlbumArtist', item.get('Artists', ['Unknown'])[0] if item.get('Artists') else 'Unknown'),
                             duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
-                            stream_url=f"{self.jellyfin_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
+                            stream_url=f"{jellyfin_network_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
                         )
                         
                         # Categorize by genre or use smart categorization
                         genres = [g.lower() for g in item.get('Genres', [])]
                         
                         # Smart mood mapping based on genres
-                        if any(g in genres for g in ['classical', 'piano', 'instrumental', 'ambient']):
+                        track_added = False
+                        
+                        if any(g in genres for g in ['classical', 'piano', 'instrumental', 'ambient', 'lo-fi']):
                             self.playlists[MusicMood.FOCUS].append(track)
                             self.playlists[MusicMood.STUDY].append(track)
-                        if any(g in genres for g in ['electronic', 'dance', 'rock', 'pop']):
+                            track_added = True
+                        if any(g in genres for g in ['electronic', 'dance', 'rock', 'pop', 'techno', 'house']):
                             self.playlists[MusicMood.ENERGY].append(track)
-                        if any(g in genres for g in ['meditation', 'relaxation', 'new age', 'spa']):
+                            track_added = True
+                        if any(g in genres for g in ['meditation', 'relaxation', 'new age', 'spa', 'chill']):
                             self.playlists[MusicMood.CALM].append(track)
-                        if any(g in genres for g in ['ambient', 'atmospheric', 'drone']):
+                            track_added = True
+                        if any(g in genres for g in ['ambient', 'atmospheric', 'drone', 'dub techno']):
                             self.playlists[MusicMood.AMBIENT].append(track)
+                            track_added = True
                         if any(g in genres for g in ['nature', 'soundscape', 'field recording']):
                             self.playlists[MusicMood.NATURE].append(track)
+                            track_added = True
                         
                         # If no genre matches, add to focus as default
-                        if not any(self.playlists[mood] for mood in MusicMood):
+                        if not track_added:
                             self.playlists[MusicMood.FOCUS].append(track)
                 else:
                     logger.warning(f"Failed to load Jellyfin library: {response.status}")
@@ -479,6 +491,26 @@ class JellyfinMusicController:
         
         while True:
             try:
+                # Check if auto music changes are locked
+                auto_change_locked = False
+                try:
+                    # Import here to avoid circular imports
+                    from mcp_server.minimal_main import redis_client
+                    if redis_client:
+                        lock_status = await redis_client.get("music:auto_change_locked")
+                        auto_change_locked = lock_status == "true"
+                except:
+                    auto_change_locked = False
+                
+                # Also check instance variable if set
+                if hasattr(self, 'auto_change_enabled'):
+                    auto_change_locked = not self.auto_change_enabled
+                
+                if auto_change_locked:
+                    logger.debug("🔒 Music auto-change is locked, skipping scheduler")
+                    await asyncio.sleep(30)
+                    continue
+                
                 now = datetime.now()
                 current_time = now.time()
                 current_timestamp = now.timestamp()
@@ -733,6 +765,172 @@ class JellyfinMusicController:
             logger.error(f"❌ Failed to play playlist '{playlist_name}': {e}")
             return False
     
+    async def play_playlist_by_name(self, name: str) -> bool:
+        """Play a playlist by exact name match."""
+        try:
+            # Search for playlists
+            url = f"{self.jellyfin_url}/Items"
+            params = {
+                'UserId': self.user_id,
+                'IncludeItemTypes': 'Playlist',
+                'Recursive': 'true',
+                'SearchTerm': name
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    items = data.get('Items', [])
+                    
+                    # Look for exact match
+                    for item in items:
+                        if item.get('Name', '').lower() == name.lower():
+                            return await self.play_playlist(item['Name'])
+                    
+                    # No exact match found
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to search playlists: {e}")
+            return False
+    
+    async def play_playlist_by_partial_name(self, name: str) -> bool:
+        """Play a playlist by partial name match."""
+        try:
+            # Search for playlists
+            url = f"{self.jellyfin_url}/Items"
+            params = {
+                'UserId': self.user_id,
+                'IncludeItemTypes': 'Playlist',
+                'Recursive': 'true',
+                'SearchTerm': name
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    items = data.get('Items', [])
+                    
+                    # Look for partial match
+                    for item in items:
+                        if name.lower() in item.get('Name', '').lower():
+                            logger.info(f"Found playlist: {item['Name']}")
+                            return await self.play_playlist(item['Name'])
+                    
+                    # No match found
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to search playlists: {e}")
+            return False
+    
+    async def play_by_artist(self, artist_name: str) -> bool:
+        """Play all tracks by an artist."""
+        try:
+            url = f"{self.jellyfin_url}/Items"
+            params = {
+                'UserId': self.user_id,
+                'IncludeItemTypes': 'Audio',
+                'Recursive': 'true',
+                'Artists': artist_name,
+                'SortBy': 'Album,IndexNumber',
+                'Limit': '200'
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    items = data.get('Items', [])
+                    
+                    if items:
+                        # Build queue from artist tracks
+                        tracks = []
+                        for item in items:
+                            jellyfin_network_url = self.jellyfin_url.replace('localhost', '192.168.1.100')
+                            track = JellyfinTrack(
+                                id=item['Id'],
+                                name=item.get('Name', 'Unknown'),
+                                artist=artist_name,
+                                duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
+                                stream_url=f"{jellyfin_network_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
+                            )
+                            tracks.append(track)
+                        
+                        self.state.queue = tracks
+                        self.state.queue_index = 0
+                        logger.info(f"📚 Queue loaded with {len(tracks)} tracks by {artist_name}")
+                        
+                        # Play first track
+                        return await self.play_track(tracks[0])
+                    
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to play artist {artist_name}: {e}")
+            return False
+    
+    async def play_by_album(self, album_name: str) -> bool:
+        """Play a specific album."""
+        try:
+            # First find the album
+            url = f"{self.jellyfin_url}/Items"
+            params = {
+                'UserId': self.user_id,
+                'IncludeItemTypes': 'MusicAlbum',
+                'Recursive': 'true',
+                'SearchTerm': album_name,
+                'Limit': '10'
+            }
+            
+            async with self.session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    albums = data.get('Items', [])
+                    
+                    if albums:
+                        # Get tracks from first matching album
+                        album = albums[0]
+                        album_id = album['Id']
+                        
+                        # Get album tracks
+                        params = {
+                            'UserId': self.user_id,
+                            'ParentId': album_id,
+                            'IncludeItemTypes': 'Audio',
+                            'SortBy': 'IndexNumber'
+                        }
+                        
+                        async with self.session.get(url, params=params) as track_response:
+                            if track_response.status == 200:
+                                track_data = await track_response.json()
+                                items = track_data.get('Items', [])
+                                
+                                if items:
+                                    tracks = []
+                                    for item in items:
+                                        jellyfin_network_url = self.jellyfin_url.replace('localhost', '192.168.1.100')
+                                        track = JellyfinTrack(
+                                            id=item['Id'],
+                                            name=item.get('Name', 'Unknown'),
+                                            artist=item.get('AlbumArtist', 'Unknown'),
+                                            duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
+                                            stream_url=f"{jellyfin_network_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
+                                        )
+                                        tracks.append(track)
+                                    
+                                    self.state.queue = tracks
+                                    self.state.queue_index = 0
+                                    logger.info(f"📚 Queue loaded with album '{album['Name']}' ({len(tracks)} tracks)")
+                                    
+                                    # Play first track
+                                    return await self._play_track(tracks[0])
+                    
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Failed to play album {album_name}: {e}")
+            return False
+    
     async def _get_playlist_tracks(self, playlist_id: str) -> List[JellyfinTrack]:
         """Get tracks from a specific playlist."""
         try:
@@ -748,12 +946,14 @@ class JellyfinMusicController:
                     tracks = []
                     
                     for item in data.get('Items', []):
+                        # Use network-accessible URL for Chromecast
+                        jellyfin_network_url = self.jellyfin_url.replace('localhost', '192.168.1.100')
                         track = JellyfinTrack(
                             id=item['Id'],
                             name=item.get('Name', 'Unknown'),
                             artist=item.get('AlbumArtist', item.get('Artists', ['Unknown'])[0] if item.get('Artists') else 'Unknown'),
                             duration_seconds=item.get('RunTimeTicks', 0) // 10000000 if item.get('RunTimeTicks') else 180,
-                            stream_url=f"{self.jellyfin_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
+                            stream_url=f"{jellyfin_network_url}/Items/{item['Id']}/Download?api_key={self.api_key}"
                         )
                         tracks.append(track)
                     

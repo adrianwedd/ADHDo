@@ -1,0 +1,48 @@
+{
+  "direct_call": {
+    "success": true,
+    "result": {
+      "response": "I'm having trouble connecting to Claude. Please check your browser session.",
+      "thinking": {
+        "reasoning": "Parsed from text response",
+        "confidence": 0.5,
+        "patterns": []
+      },
+      "actions_taken": [
+        {
+          "type": "execution_metadata",
+          "confidence": 0.5,
+          "confidence_level": "medium",
+          "status": "executed"
+        }
+      ],
+      "state_updates": {
+        "stress_level": "medium",
+        "focus_state": "shallow",
+        "energy_trend": "stable",
+        "intervention_needed": false
+      },
+      "prediction": {
+        "next_need": "unknown",
+        "timeframe_minutes": 60,
+        "confidence": 0.3
+      },
+      "success": true
+    },
+    "error": null
+  },
+  "http_call": {
+    "success": true,
+    "result": {
+      "response": "I need a moment to recalibrate. What's your biggest challenge right now?",
+      "thinking": {
+        "error": "name 'true' is not defined"
+      },
+      "actions_taken": [],
+      "success": false
+    },
+    "error": null,
+    "status_code": 200
+  },
+  "timestamp": "2025-08-13T22:45:00Z"
+}

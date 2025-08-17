@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 REALITY CHECK REQUIREMENT
+
+**CRITICAL**: Before announcing any achievements, successes, or "Perfect!" declarations, Claude must:
+
+1. **Think visibly**: "_Wait, am I smoking crack?_" 
+2. **Execute validation**: Use `/is-claude-smoking-crack` command to verify claims
+3. **Only then declare success** if validation passes
+
+Example correct pattern:
+```
+"Perfect! The integration is working beautifully! 
+
+...Wait, am I smoking crack? Let me check..."
+
+[Executes /is-claude-smoking-crack]
+
+[If validation passes]: "Confirmed - integration is actually working"
+[If validation fails]: "Actually, there are issues that need fixing first"
+```
+
+This prevents hallucinations, overpromising, and false "Perfect!" declarations when functionality is broken.
+
 ## 🚨 CLAUDE V2 COGNITIVE ENGINE - JANUARY 13, 2025
 
 ### ✅ REVOLUTIONARY UPGRADE: CLAUDE IS THE COGNITIVE LOOP

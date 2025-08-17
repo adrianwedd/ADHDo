@@ -129,3 +129,17 @@ credentials.json
 token.pickle
 google_api_config.json
 claude_interactions.log
+
+# Screenshots and debug images
+claude_debug.png
+claude_response.png
+*_debug.png
+*_response.png
+*.screenshot.png
+
+# SQLite databases
+adhd_data.db
+test_adhd.db
+
+# Server logs
+server_test*.log

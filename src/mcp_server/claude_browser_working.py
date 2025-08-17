@@ -25,12 +25,67 @@ class ClaudeBrowserClient:
         self.playwright = None
         self.conversation_id: Optional[str] = None
         self.headless = headless
-        self.timeout = 30000
+        self.timeout = 120000  # 120 seconds for long prompts
         
         # Load cookies from environment
         self.cookies = self._load_cookies_from_env()
         
         logger.info(f"🤖 Browser mode: {'headless' if headless else 'visible'}")
+    
+    async def _check_auth_expired(self) -> bool:
+        """Check if authentication has expired."""
+        if not self.page:
+            return True
+        
+        try:
+            # Check for common auth failure indicators
+            auth_fail_selectors = [
+                'text="Session expired"',
+                'text="Please sign in"',
+                'text="Authentication required"',
+                '[data-testid="login-button"]'
+            ]
+            
+            for selector in auth_fail_selectors:
+                if await self.page.locator(selector).count() > 0:
+                    return True
+            
+            # Check if we're redirected to login page
+            if 'login' in self.page.url or 'auth' in self.page.url:
+                return True
+                
+            return False
+        except:
+            return False
+    
+    async def _refresh_session(self):
+        """Attempt to refresh the session."""
+        logger.info("Attempting session refresh...")
+        
+        # Reload cookies from environment (user may have updated them)
+        self.cookies = self._load_cookies_from_env()
+        
+        if self.context:
+            # Clear existing cookies and add new ones
+            await self.context.clear_cookies()
+            await self.context.add_cookies(self.cookies)
+            
+            # Reload the page
+            if self.page:
+                await self.page.reload(wait_until='networkidle', timeout=30000)
+                await asyncio.sleep(2)
+                
+                # Check if refresh worked
+                if not await self._check_auth_expired():
+                    logger.info("✅ Session refreshed successfully")
+                    return
+        
+        # If refresh failed, try full re-initialization
+        logger.warning("Simple refresh failed, attempting full re-initialization...")
+        await self.cleanup()
+        success = await self.initialize()
+        if not success:
+            raise Exception("Failed to refresh session. Please update CLAUDE_SESSION_KEY environment variable.")
     
     def _load_cookies_from_env(self) -> List[Dict[str, Any]]:
         """Load cookies from environment variables."""
@@ -72,8 +127,21 @@ class ClaudeBrowserClient:
             'sameSite': 'Lax'
         })
         
-        # Optional cookies if available - UPDATE WITH FRESH COOKIE
-        cf_bm = os.getenv('CLAUDE_CF_BM', 'pHynZkPbpDVU5hAPutusBgfGNblCbTkhHdJuj.Yj9Zo-1754952582-1.0.1.1-JZHyfyI9e_yBSMyX3Pn1xhm3GBnBqVWQoWrdoFH2SN6Ns5g6JUIXT2uPOs8OYUIdQdOiXfaCyhyUexX.0i54gjDsha8Q5KIck56ha_4CvKw')
+        # Cloudflare clearance cookie - critical for bypassing protection
+        cf_clearance = os.getenv('CLAUDE_CF_CLEARANCE')
+        if cf_clearance:
+            cookies.append({
+                'name': 'cf_clearance',
+                'value': cf_clearance,
+                'domain': '.claude.ai',
+                'path': '/',
+                'httpOnly': True,
+                'secure': True,
+                'sameSite': 'None'
+            })
+        
+        # Optional CF_BM cookie
+        cf_bm = os.getenv('CLAUDE_CF_BM')
         if cf_bm:
             cookies.append({
                 'name': '__cf_bm',
@@ -175,9 +243,9 @@ class ClaudeBrowserClient:
                 delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
             """)
             
-            # Navigate to Claude
+            # Navigate to Claude with shorter timeout
             logger.info("🌐 Navigating to Claude.ai...")
-            await self.page.goto('https://claude.ai', wait_until='networkidle', timeout=self.timeout)
+            await self.page.goto('https://claude.ai', wait_until='domcontentloaded', timeout=30000)
             
             # Wait for page to settle
             await asyncio.sleep(3)
@@ -232,8 +300,8 @@ class ClaudeBrowserClient:
             logger.error(f"Failed to initialize browser: {e}")
             return False
     
-    async def send_message(self, message: str, timeout: int = 30) -> str:
-        """Send message to Claude and get response."""
+    async def send_message(self, message: str, timeout: int = 30, retry_on_auth_fail: bool = True) -> str:
+        """Send message to Claude and get response with auto-refresh on auth failure."""
         if not self.page:
             raise Exception("Browser not initialized. Call initialize() first.")
         
@@ -247,6 +315,15 @@ class ClaudeBrowserClient:
             f.write(f"{'-'*40}\n")
         
         try:
+            # Check if session is still valid
+            if await self._check_auth_expired():
+                logger.warning("Session expired, attempting refresh...")
+                if retry_on_auth_fail:
+                    await self._refresh_session()
+                    return await self.send_message(message, timeout, retry_on_auth_fail=False)
+                else:
+                    raise Exception("Session expired and refresh failed")
+            
             logger.info(f"💬 Sending message: {message[:50]}...")
             
             # Check if we're already on a chat page
@@ -289,8 +366,8 @@ class ClaudeBrowserClient:
             await self.page.keyboard.press('Control+A')
             await self.page.keyboard.press('Backspace')
             
-            # Type the message
-            await input_element.type(message, delay=50)
+            # Use JavaScript to fill content quickly instead of typing character by character
+            await input_element.fill(message)
             
             # Wait for the send button to become enabled
             await asyncio.sleep(1)
@@ -345,7 +422,17 @@ class ClaudeBrowserClient:
                 () => {
                     // Try to find Claude's response using multiple strategies
                     
-                    // Strategy 1: Look for the assistant message content
+                    // Strategy 1: Look for code blocks or JSON responses
+                    const codeBlocks = document.querySelectorAll('pre code, code');
+                    for (let block of codeBlocks) {
+                        const text = block.innerText.trim();
+                        // Check if it looks like JSON
+                        if (text.startsWith('{') && text.includes('"reasoning"')) {
+                            return text;
+                        }
+                    }
+                    
+                    // Strategy 2: Look for the assistant message content
                     const assistantMessages = document.querySelectorAll('[data-testid="user-message"]');
                     const allMessages = document.querySelectorAll('.whitespace-normal.break-words, .whitespace-pre-wrap.break-words');
                     
@@ -366,44 +453,73 @@ class ClaudeBrowserClient:
                         }
                     }
                     
-                    // Strategy 2: Look for any substantial text after our message
+                    // Strategy 3: Look for JSON in any text content
                     const allText = document.body.innerText;
-                    const lines = allText.split('\\n');
                     
+                    // Try to find JSON object in the text
+                    const jsonMatch = allText.match(/\{[^{}]*"reasoning"[^{}]*\}/s);
+                    if (jsonMatch) {
+                        // Try to extract complete JSON including nested objects
+                        const startIdx = allText.indexOf(jsonMatch[0]);
+                        let braceCount = 0;
+                        let inString = false;
+                        let escaped = false;
+                        let jsonEnd = startIdx;
+                        
+                        for (let i = startIdx; i < allText.length; i++) {
+                            const char = allText[i];
+                            
+                            if (!escaped && char === '"') {
+                                inString = !inString;
+                            } else if (!inString && char === '{') {
+                                braceCount++;
+                            } else if (!inString && char === '}') {
+                                braceCount--;
+                                if (braceCount === 0) {
+                                    jsonEnd = i + 1;
+                                    break;
+                                }
+                            }
+                            
+                            escaped = (char === '\\\\' && !escaped);
+                        }
+                        
+                        if (jsonEnd > startIdx) {
+                            return allText.substring(startIdx, jsonEnd);
+                        }
+                    }
+                    
+                    // Strategy 4: Collect all response lines
+                    const lines = allText.split('\\n');
                     let foundUserMessage = false;
                     let responseLines = [];
                     
                     for (let i = 0; i < lines.length; i++) {
                         const line = lines[i].trim();
                         
-                        if (!line) continue;
-                        
                         // Look for the end of our message
-                        if (line.includes('this is a test') || line.includes('Assistant:')) {
+                        if (line.includes('Now analyze this state') || line.includes('You are an ADHD')) {
                             foundUserMessage = true;
-                            responseLines = []; // Clear to get only what comes after
+                            responseLines = [];
                             continue;
                         }
                         
                         // After finding user message, collect Claude's response
-                        if (foundUserMessage && line.length > 10) {
+                        if (foundUserMessage) {
                             // Stop at UI elements
                             if (line.includes('Claude can make mistakes') || 
-                                line.includes('Edit') ||
-                                line.includes('Copy') ||
-                                line.includes('Retry')) {
+                                line.includes('Reply to Claude')) {
                                 break;
                             }
                             
-                            // This looks like actual response content
-                            if (!line.includes('User:') && !line.includes('Assistant:')) {
+                            if (line.length > 0) {
                                 responseLines.push(line);
                             }
                         }
                     }
                     
                     if (responseLines.length > 0) {
-                        return responseLines.join(' ');
+                        return responseLines.join('\\n');
                     }
                     
                     return 'Message sent - awaiting response extraction';
@@ -458,7 +574,7 @@ async def get_claude_browser() -> ClaudeBrowserClient:
     global _browser_client
     
     if _browser_client is None:
-        _browser_client = ClaudeBrowserClient(headless=True)
+        _browser_client = ClaudeBrowserClient(headless=False)
         success = await _browser_client.initialize()
         if not success:
             raise Exception("Failed to initialize Claude browser client")

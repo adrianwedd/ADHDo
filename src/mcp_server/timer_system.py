@@ -56,9 +56,9 @@ class TimerSystem:
             self.active_timers[timer_id]["active"] = False
             
             # Could integrate with nudge system here
-            from .nest_nudges import NestNudgeSystem
+            from .nest_nudges import NestNudgeSystem, NudgeType
             nudges = NestNudgeSystem()
-            await nudges.send_nudge(message, urgency="normal")
+            await nudges.send_nudge(message, nudge_type=NudgeType.GENTLE)
     
     async def cancel_timer(self, timer_id: Optional[str] = None) -> Dict[str, Any]:
         """Cancel a timer or all timers."""

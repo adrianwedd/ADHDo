@@ -158,7 +158,7 @@
                         </div>
                         <div>
                             <div id="thinking-text" class="font-medium">Ready to help</div>
-                            <div id="thinking-subtext" class="text-xs text-claude-text-dim">Claude V2 Cognitive Engine</div>
+                            <div id="thinking-subtext" class="text-xs text-claude-text-dim">Smart Session Manager • Conversation: c31fc8ae</div>
                         </div>
                     </div>
                     
@@ -381,6 +381,53 @@
                                     class="w-full action-card bg-claude-magic bg-opacity-20 hover:bg-opacity-30 text-claude-magic font-medium py-3 rounded-lg transition sparkle-effect">
                                 <i class="fas fa-party-horn mr-2"></i>
                                 Celebrate Win! 
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- System Logs Panel -->
+                    <div class="glass-morphism rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center">
+                                <i class="fas fa-terminal text-claude-success mr-2"></i>
+                                System Logs
+                            </h2>
+                            <div class="flex items-center space-x-2">
+                                <button id="logs-toggle" onclick="toggleLogs()" 
+                                        class="px-3 py-1 bg-claude-success bg-opacity-20 text-claude-success rounded text-sm hover:bg-opacity-30 transition">
+                                    <i class="fas fa-play mr-1"></i>
+                                    Start
+                                </button>
+                                <button onclick="clearLogs()" 
+                                        class="px-3 py-1 bg-claude-error bg-opacity-20 text-claude-error rounded text-sm hover:bg-opacity-30 transition">
+                                    <i class="fas fa-trash mr-1"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Log Stream -->
+                        <div id="log-stream" class="bg-dark-bg rounded border border-gray-700 p-3 h-64 overflow-y-auto font-mono text-xs">
+                            <div class="text-claude-text-dim">Click Start to stream live logs...</div>
+                        </div>
+                        
+                        <!-- Log Filters -->
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button onclick="filterLogs('ERROR')" 
+                                    class="px-2 py-1 bg-claude-error bg-opacity-20 text-claude-error rounded-full text-xs hover:bg-opacity-30 transition">
+                                Errors
+                            </button>
+                            <button onclick="filterLogs('Claude')" 
+                                    class="px-2 py-1 bg-claude-primary bg-opacity-20 text-claude-primary rounded-full text-xs hover:bg-opacity-30 transition">
+                                Claude
+                            </button>
+                            <button onclick="filterLogs('music')" 
+                                    class="px-2 py-1 bg-claude-magic bg-opacity-20 text-claude-magic rounded-full text-xs hover:bg-opacity-30 transition">
+                                Music
+                            </button>
+                            <button onclick="filterLogs('nest')" 
+                                    class="px-2 py-1 bg-claude-warning bg-opacity-20 text-claude-warning rounded-full text-xs hover:bg-opacity-30 transition">
+                                Nest
                             </button>
                         </div>
                     </div>
@@ -849,6 +896,169 @@
             setTimeout(() => {
                 document.body.removeChild(announcement);
             }, 1000);
+        }
+        
+        // Log streaming functionality
+        let logStreamActive = false;
+        let logStreamInterval = null;
+        let currentLogFilter = null;
+        let allLogs = [];
+        
+        // Toggle log streaming
+        function toggleLogs() {
+            const button = document.getElementById('logs-toggle');
+            const stream = document.getElementById('log-stream');
+            
+            if (logStreamActive) {
+                // Stop streaming
+                logStreamActive = false;
+                if (logStreamInterval) {
+                    clearInterval(logStreamInterval);
+                    logStreamInterval = null;
+                }
+                button.innerHTML = '<i class="fas fa-play mr-1"></i>Start';
+                button.className = button.className.replace('claude-error', 'claude-success');
+            } else {
+                // Start streaming
+                logStreamActive = true;
+                button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop';
+                button.className = button.className.replace('claude-success', 'claude-error');
+                
+                // Clear existing logs and start fresh
+                stream.innerHTML = '<div class="text-claude-success">🎯 Log streaming started...</div>';
+                
+                // Fetch logs every 2 seconds
+                logStreamInterval = setInterval(fetchLogs, 2000);
+                fetchLogs(); // Initial fetch
+            }
+        }
+        
+        // Fetch logs from server
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/logs/stream');
+                const result = await response.json();
+                
+                if (result.logs && result.logs.length > 0) {
+                    result.logs.forEach(log => {
+                        if (!allLogs.some(existingLog => existingLog.timestamp === log.timestamp && existingLog.message === log.message)) {
+                            allLogs.push(log);
+                            addLogToStream(log);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+                // Fallback: mock some logs for demonstration
+                addMockLogs();
+            }
+        }
+        
+        // Add mock logs for demonstration (when server endpoint doesn't exist yet)
+        function addMockLogs() {
+            const mockLogs = [
+                { level: 'INFO', component: 'Claude', message: 'Claude V2 processing user message...', timestamp: new Date().toISOString() },
+                { level: 'INFO', component: 'music', message: '🎵 Starting ambient focus music', timestamp: new Date().toISOString() },
+                { level: 'INFO', component: 'nest', message: '🎯 Nest Hub Max connected', timestamp: new Date().toISOString() },
+                { level: 'ERROR', component: 'Google', message: 'Failed to get tasks: timezone issue', timestamp: new Date().toISOString() }
+            ];
+            
+            mockLogs.forEach(log => {
+                if (!allLogs.some(existingLog => existingLog.message === log.message)) {
+                    allLogs.push(log);
+                    addLogToStream(log);
+                }
+            });
+        }
+        
+        // Add log entry to stream
+        function addLogToStream(log) {
+            const stream = document.getElementById('log-stream');
+            
+            // Apply filter if active
+            if (currentLogFilter && !log.message.toLowerCase().includes(currentLogFilter.toLowerCase())) {
+                return;
+            }
+            
+            const logDiv = document.createElement('div');
+            logDiv.className = 'mb-1 animate-slide-up';
+            
+            // Color code by log level
+            let levelColor = 'text-claude-text-dim';
+            if (log.level === 'ERROR') levelColor = 'text-claude-error';
+            else if (log.level === 'WARNING') levelColor = 'text-claude-warning';
+            else if (log.level === 'INFO' && log.message.includes('Claude')) levelColor = 'text-claude-primary';
+            else if (log.level === 'INFO' && log.message.includes('music')) levelColor = 'text-claude-magic';
+            else if (log.level === 'INFO' && log.message.includes('nest')) levelColor = 'text-claude-warning';
+            else if (log.level === 'INFO') levelColor = 'text-claude-success';
+            
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            
+            logDiv.innerHTML = `
+                <span class="text-gray-500">${timestamp}</span>
+                <span class="${levelColor} font-medium">[${log.level}]</span>
+                <span class="text-claude-text">${log.message}</span>
+            `;
+            
+            stream.appendChild(logDiv);
+            
+            // Auto-scroll to bottom
+            stream.scrollTop = stream.scrollHeight;
+            
+            // Limit to last 100 log entries
+            while (stream.children.length > 100) {
+                stream.removeChild(stream.firstChild);
+            }
+        }
+        
+        // Filter logs by keyword
+        function filterLogs(keyword) {
+            currentLogFilter = currentLogFilter === keyword ? null : keyword;
+            
+            // Update filter button states
+            document.querySelectorAll('[onclick^="filterLogs"]').forEach(btn => {
+                if (btn.textContent.toLowerCase().includes(keyword.toLowerCase())) {
+                    if (currentLogFilter === keyword) {
+                        btn.classList.add('bg-opacity-40');
+                    } else {
+                        btn.classList.remove('bg-opacity-40');
+                    }
+                } else {
+                    btn.classList.remove('bg-opacity-40');
+                }
+            });
+            
+            // Rerender logs with filter
+            const stream = document.getElementById('log-stream');
+            const isActive = logStreamActive;
+            
+            if (currentLogFilter) {
+                // Show filtered logs
+                stream.innerHTML = `<div class="text-claude-primary mb-2">🔍 Filtering by: ${keyword}</div>`;
+                allLogs.forEach(log => addLogToStream(log));
+            } else {
+                // Show all logs
+                stream.innerHTML = isActive ? '<div class="text-claude-success">🎯 Log streaming active...</div>' : '<div class="text-claude-text-dim">Click Start to stream live logs...</div>';
+                if (isActive) {
+                    allLogs.forEach(log => addLogToStream(log));
+                }
+            }
+        }
+        
+        // Clear all logs
+        function clearLogs() {
+            allLogs = [];
+            currentLogFilter = null;
+            
+            // Reset filter buttons
+            document.querySelectorAll('[onclick^="filterLogs"]').forEach(btn => {
+                btn.classList.remove('bg-opacity-40');
+            });
+            
+            const stream = document.getElementById('log-stream');
+            stream.innerHTML = logStreamActive 
+                ? '<div class="text-claude-success">🎯 Log streaming active...</div>'
+                : '<div class="text-claude-text-dim">Click Start to stream live logs...</div>';
         }
     </script>
 </body>

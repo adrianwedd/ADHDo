@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # Import all our data sources
 from .google_integration import get_google_integration
 from .claude_browser_working import get_claude_browser
+from .sqlite_fallback import get_persistent_storage  # Uses PostgreSQL if available, otherwise SQLite
+# from .claude_remote_browser import SmartSessionManager  # This doesn't work - expects existing Chrome
 
 @dataclass
 class CompleteSystemState:
@@ -28,11 +30,20 @@ class CompleteSystemState:
     recent_messages: List[Dict[str, str]]
     emotional_indicators: str
     
-    # Physical State
+    # Physical State - ENHANCED WITH FULL FIT DATA
     steps_today: int
+    steps_last_hour: int
+    calories_burned: int
+    distance_km: float
+    active_minutes: int
     last_movement_minutes: int
     sitting_duration_minutes: int
     last_hydration_minutes: int
+    
+    # Sleep Data
+    sleep_hours: float
+    sleep_quality: int  # 1-10
+    poor_sleep: bool
     
     # Temporal State
     current_time: str
@@ -188,7 +199,7 @@ class ToolRegistry:
                 "actions": {
                     "log_medication": {
                         "params": {"taken": "true|false", "time": "optional - when taken"},
-                        "example": {"type": "log_medication", "params": {"taken": true}}
+                        "example": {"type": "log_medication", "params": {"taken": "true"}}
                     },
                     "set_medication_reminder": {
                         "params": {"time": "when to remind"},
@@ -279,10 +290,38 @@ class StateGatherer:
         recent_messages = await self._get_recent_messages(user_id)
         last_interaction = await self._get_last_interaction_time(user_id)
         
-        # Physical state from Google Fit
+        # Physical state from Google Fit - USE ALL DATA WE'RE COLLECTING!
         fitness = google_context.get("fitness", {})
         steps = fitness.get("steps_today", 0)
         last_movement = fitness.get("last_activity_minutes", 60)
+        
+        # Additional Fit data we're already collecting but not using
+        calories_burned = 0
+        distance_km = 0
+        active_minutes = 0
+        steps_last_hour = fitness.get("steps_last_hour", 0)
+        
+        # Get the actual fitness data if available
+        sleep_hours = 7.0  # Default assumption
+        sleep_quality = 5
+        poor_sleep = False
+        
+        if self.google and self.google.fitness_service:
+            try:
+                fit_data = self.google.get_fitness_data()
+                if fit_data:
+                    calories_burned = fit_data.calories_burned
+                    distance_km = fit_data.distance_meters / 1000
+                    active_minutes = fit_data.active_minutes
+                    
+                    # Get sleep data if available
+                    if fit_data.sleep_data:
+                        sleep_hours = fit_data.sleep_data.duration_hours
+                        sleep_quality = fit_data.sleep_data.quality_score
+                        poor_sleep = fit_data.sleep_data.is_poor_sleep
+                        logger.info(f"Sleep data: {sleep_hours}h, quality {sleep_quality}/10")
+            except Exception as e:
+                logger.warning(f"Could not get full fitness data: {e}")
         
         # Get sitting duration from Redis
         sitting_duration = await self._get_sitting_duration(user_id)
@@ -347,11 +386,20 @@ class StateGatherer:
             recent_messages=recent_messages,
             emotional_indicators=emotional_indicators,
             
-            # Physical State
+            # Physical State - ENHANCED WITH FULL FIT DATA
             steps_today=steps,
+            steps_last_hour=steps_last_hour,
+            calories_burned=calories_burned,
+            distance_km=distance_km,
+            active_minutes=active_minutes,
             last_movement_minutes=last_movement,
             sitting_duration_minutes=sitting_duration,
             last_hydration_minutes=last_hydration,
+            
+            # Sleep Data
+            sleep_hours=sleep_hours,
+            sleep_quality=sleep_quality,
+            poor_sleep=poor_sleep,
             
             # Temporal State
             current_time=current_time,
@@ -566,7 +614,7 @@ class ClaudeCognitiveEngineV2:
     SYSTEM_PROMPT = """You are an ADHD cognitive support system making real-time decisions based on user state.
 You have access to various tools to help manage the user's environment, tasks, and well-being.
 
-You receive complete state information and must respond with ONLY valid JSON matching this EXACT structure:
+CRITICAL: Respond with ONLY a JSON object, no other text. The JSON must match this EXACT structure:
 
 {
   "reasoning": "Brief explanation of your decision process",
@@ -589,7 +637,7 @@ You receive complete state information and must respond with ONLY valid JSON mat
     "stress_level": "low|medium|high|critical",
     "focus_state": "deep|shallow|scattered|recovering",
     "energy_trend": "rising|stable|falling|crashed",
-    "intervention_needed": true|false,
+    "intervention_needed": "true|false",
     "current_focus": "task name or null"
   },
   "patterns_detected": ["procrastination", "hyperfocus", "time_blindness"],
@@ -642,10 +690,20 @@ USER CONTEXT:
 - Emotional indicators: {state.emotional_indicators}
 
 PHYSICAL STATE:
-- Steps today: {state.steps_today}
+- Steps today: {state.steps_today} (last hour: {state.steps_last_hour})
+- Calories burned: {state.calories_burned} cal
+- Distance walked: {state.distance_km:.1f} km
+- Active minutes: {state.active_minutes} min
 - Last movement: {state.last_movement_minutes} minutes ago
 - Sitting duration: {state.sitting_duration_minutes} minutes
 - Hydration reminder: {state.last_hydration_minutes} minutes ago
+- Energy expenditure rate: {state.calories_burned / max(state.active_minutes, 1):.1f} cal/min
+- Movement quality: {"good" if state.active_minutes > 10 else "needs improvement"}
+
+SLEEP DATA:
+- Last night: {state.sleep_hours} hours
+- Sleep quality: {state.sleep_quality}/10
+- Impact: {"POOR SLEEP - medication less effective, higher crash risk" if state.poor_sleep else "Adequate sleep for ADHD management"}
 
 TEMPORAL STATE:
 - Current time: {state.current_time}
@@ -689,8 +747,8 @@ Previous decision: {json.dumps(state.previous_decision)}
 Outcome: {state.previous_outcome}
 User feedback: {state.user_feedback or 'none'}"""
         
-        # Combine state and tools
-        full_prompt = state_prompt + "\n" + tool_prompt + "\n\nMake a decision based on this complete state and available tools."
+        # Combine state and tools with clear instruction
+        full_prompt = state_prompt + "\n" + tool_prompt + "\n\nNow analyze this state and respond with a JSON decision following the structure shown above."
         
         return full_prompt
     
@@ -725,9 +783,18 @@ User feedback: {state.user_feedback or 'none'}"""
             
         except Exception as e:
             logger.error(f"Cognitive engine error: {e}")
+            # Add detailed traceback for debugging
+            import traceback
+            full_traceback = traceback.format_exc()
+            logger.error(f"Full traceback: {full_traceback}")
+            
             return {
                 "response": "I need a moment to recalibrate. What's your biggest challenge right now?",
-                "thinking": {"error": str(e)},
+                "thinking": {
+                    "error": str(e),
+                    "traceback": full_traceback,
+                    "debug_info": "Added detailed logging to find 'true' error source"
+                },
                 "actions_taken": [],
                 "success": False
             }
@@ -736,30 +803,105 @@ User feedback: {state.user_feedback or 'none'}"""
         """Get decision from Claude using browser-only authentication."""
         prompt = self._build_user_prompt(state)
         
-        # Initialize Claude browser client if needed
+        # Initialize Claude with working browser client
         if not self.claude:
-            self.claude = await get_claude_browser()
-            # Browser client is already initialized in get_claude_browser()
+            try:
+                # Use the working browser client that actually launches its own browser
+                self.claude = await get_claude_browser()
+                logger.info("✅ Using working browser client for Claude")
+            except Exception as e:
+                logger.error(f"Failed to initialize Claude browser client: {e}")
+                # Return fallback response instead of crashing
+                return {
+                    'response': "Claude integration temporarily unavailable. Please refresh session with manual_session_refresh.py",
+                    'thinking': {'reasoning': 'Browser client initialization failed', 'error': str(e)},
+                    'actions_taken': [],
+                    'state_updates': {},
+                    'prediction': {},
+                    'success': False
+                }
         
         # Get response with strict JSON
         full_prompt = f"{self.SYSTEM_PROMPT}\n\n{prompt}"
         
         try:
-            response = await self.claude.send_message(full_prompt)
+            # Use smart session manager if available, otherwise fallback
+            if hasattr(self.claude, 'send_message_with_retry'):
+                response = await self.claude.send_message_with_retry(full_prompt)
+            else:
+                response = await self.claude.send_message(full_prompt)
             
             # Extract JSON from response
             import re
+            
+            # Try to find JSON in the response
+            # First, try to parse the entire response as JSON
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                pass
+            
+            # Try to extract JSON object from the response
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group())
-            else:
-                # Fallback parsing
-                return self._parse_text_response(response)
+                try:
+                    return json.loads(json_match.group())
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse extracted JSON: {json_match.group()[:100]}")
+            
+            # If response looks like it's echoing the prompt, return a default decision
+            if "Make a decision" in response or "analyze this state" in response:
+                logger.warning("Claude echoed the prompt, using default decision")
+                return self._create_default_decision(state)
+            
+            # Fallback parsing
+            return self._parse_text_response(response)
                 
         except Exception as e:
             logger.error(f"Claude decision failed: {e}")
             # No fallback patterns - we want real Claude thinking
             raise
+    
+    def _create_default_decision(self, state: CompleteSystemState) -> Dict[str, Any]:
+        """Create a sensible default decision based on state."""
+        # Analyze state to create appropriate actions
+        actions = []
+        
+        # Check if user needs a break
+        if state.sitting_duration_minutes > 45:
+            actions.append({
+                "type": "send_nudge",
+                "params": {"message": "Time for a movement break!", "urgency": "gentle"},
+                "priority": "medium"
+            })
+        
+        # Check hydration
+        if state.last_hydration_minutes > 60:
+            actions.append({
+                "type": "send_nudge", 
+                "params": {"message": "Stay hydrated! 💧", "urgency": "gentle"},
+                "priority": "low"
+            })
+        
+        return {
+            "reasoning": "Default decision based on state analysis",
+            "confidence": 0.3,
+            "response_to_user": "I'll help you stay focused and healthy.",
+            "immediate_actions": actions,
+            "scheduled_actions": [],
+            "state_updates": {
+                "stress_level": "medium",
+                "focus_state": "shallow",
+                "energy_trend": "stable",
+                "intervention_needed": len(actions) > 0
+            },
+            "patterns_detected": [],
+            "prediction": {
+                "next_need": "break" if state.sitting_duration_minutes > 30 else "focus",
+                "timeframe_minutes": 15,
+                "confidence": 0.3
+            }
+        }
     
     def _parse_text_response(self, response: str) -> Dict[str, Any]:
         """Parse non-JSON response into decision structure."""
@@ -907,10 +1049,22 @@ User feedback: {state.user_feedback or 'none'}"""
         
         elif action_type == "send_nudge":
             try:
+                # Map urgency strings to NudgeType enum values
+                from mcp_server.nest_nudges import NudgeType
+                urgency_map = {
+                    "gentle": NudgeType.GENTLE,
+                    "normal": NudgeType.GENTLE,  # Default to gentle
+                    "firm": NudgeType.URGENT,
+                    "critical": NudgeType.URGENT,
+                    "urgent": NudgeType.URGENT
+                }
+                urgency = params.get("urgency", "normal")
+                nudge_type = urgency_map.get(urgency, NudgeType.GENTLE)
+                
                 await executors["nudges"].send_nudge(
                     params.get("message"),
-                    urgency=params.get("urgency", "normal"),
-                    device=params.get("device")
+                    nudge_type=nudge_type,
+                    device_name=params.get("device")
                 )
                 return {"type": "nudge", "status": "sent", "message": params.get("message")}
             except Exception as e:
@@ -958,7 +1112,44 @@ User feedback: {state.user_feedback or 'none'}"""
             await self.redis_client.set(f"state_assessment:{user_id}", json.dumps(updates))
     
     async def _store_decision(self, user_id: str, decision: Dict, state: CompleteSystemState):
-        """Store decision for learning."""
+        """Store decision for learning - NOW WITH PERMANENT DATABASE STORAGE!"""
+        
+        # Store in database for permanent record (PostgreSQL or SQLite)
+        try:
+            db = await get_persistent_storage()
+            
+            # Store the complete state snapshot
+            snapshot_id = await db.store_state_snapshot(user_id, state)
+            
+            # Store Claude's decision linked to the snapshot
+            if snapshot_id:
+                await db.store_claude_decision(user_id, snapshot_id, decision)
+            
+            # Update daily fitness trends
+            fitness_data = {
+                'steps_today': state.steps_today,
+                'calories_burned': state.calories_burned,
+                'distance_km': state.distance_km,
+                'active_minutes': state.active_minutes
+            }
+            await db.update_daily_fitness(user_id, fitness_data)
+            
+            # Log any ADHD patterns detected
+            for pattern in decision.get("patterns_detected", []):
+                await db.log_adhd_pattern(
+                    user_id=user_id,
+                    pattern_type=pattern,
+                    context=state.current_message,
+                    physical_state=asdict(state),
+                    intervention=decision.get("response_to_user")
+                )
+            
+            logger.info(f"✅ Stored decision in PostgreSQL for {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to store in database: {e}")
+        
+        # Also store in Redis for fast access (temporary cache)
         if self.redis_client:
             # Store decision
             await self.redis_client.set(f"last_decision:{user_id}", json.dumps(decision))

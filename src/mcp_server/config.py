@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, description="Debug mode")
     log_level: str = Field(default="INFO", description="Log level")
     
+    # Service URLs (no more hardcoded localhost!)
+    base_url: str = Field(default="http://localhost:8000", description="Base URL for the service")
+    jellyfin_url: str = Field(default="http://192.168.1.100:8096", description="Jellyfin server URL (use network IP for Chromecast)")
+    redis_host: str = Field(default="localhost", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    
     # OpenAI Configuration
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     openai_model: str = Field(default="gpt-4o", description="OpenAI model")
@@ -30,7 +36,7 @@ class Settings(BaseSettings):
     telegram_chat_id: Optional[str] = Field(default=None, description="Telegram chat ID")
     
     # Redis Configuration
-    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL - can be overridden or built from host/port")
     redis_password: Optional[str] = Field(default=None, description="Redis password")
     redis_db: int = Field(default=0, description="Redis database number")
     redis_max_connections: int = Field(default=20, description="Maximum Redis connections")

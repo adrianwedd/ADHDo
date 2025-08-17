@@ -20,7 +20,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional, AsyncGenerator, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -60,10 +61,37 @@ except ImportError:
 
 # Import core MCP components
 from mcp_server.config import settings
-from mcp_server.cognitive_loop import cognitive_loop
-from frames.builder import frame_builder
-from traces.memory import trace_memory
-from nudge.engine import nudge_engine
+# from mcp_server.cognitive_loop import cognitive_loop  # ARCHIVED - using V2 engine instead
+
+# Try to import optional modules with fallback
+try:
+    from frames.builder import frame_builder
+except ImportError:
+    logger.warning("Frame builder not available, using mock")
+    class MockFrameBuilder:
+        async def build_frame(self, *args, **kwargs):
+            return {"context": "basic", "user_id": kwargs.get("user_id", "unknown")}
+    frame_builder = MockFrameBuilder()
+
+try:
+    from traces.memory import trace_memory
+except ImportError:
+    logger.warning("Trace memory not available, using mock")
+    class MockTraceMemory:
+        async def add_trace(self, *args, **kwargs):
+            pass
+        async def get_patterns(self, *args, **kwargs):
+            return []
+    trace_memory = MockTraceMemory()
+
+try:
+    from nudge.engine import nudge_engine
+except ImportError:
+    logger.warning("Nudge engine not available, using mock")
+    class MockNudgeEngine:
+        async def send_nudge(self, *args, **kwargs):
+            return {"status": "sent", "message": kwargs.get("message", "")}
+    nudge_engine = MockNudgeEngine()
 
 # Import web interface support
 from fastapi.responses import HTMLResponse
@@ -136,11 +164,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     logger.info("🚀 Starting MCP ADHD Server (Minimal Mode)")
     
-    # Initialize Redis if available
+    # Initialize Redis if available with better fallback
     if redis_available:
         try:
+            # Try to build Redis URL from components if needed
+            redis_url = settings.redis_url
+            if not redis_url or "localhost" in redis_url:
+                # Build from components for better flexibility
+                redis_url = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+                if settings.redis_password:
+                    redis_url = f"redis://:{settings.redis_password}@{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+            
             redis_client = redis.from_url(
-                settings.redis_url or "redis://localhost:6379/0",
+                redis_url,
                 encoding="utf-8", 
                 decode_responses=True,
                 max_connections=settings.redis_max_connections,
@@ -149,10 +185,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 socket_connect_timeout=5
             )
             await redis_client.ping()
-            logger.info("✅ Redis connected")
+            logger.info(f"✅ Redis connected to {settings.redis_host}:{settings.redis_port}")
         except Exception as e:
             logger.warning(f"Redis connection failed: {e}, using memory storage")
             redis_client = None
+            # Ensure memory store is initialized
+            if 'sessions' not in memory_store:
+                memory_store['sessions'] = {}
+            if 'users' not in memory_store:
+                memory_store['users'] = {}
+            if 'traces' not in memory_store:
+                memory_store['traces'] = {}
     
     # Initialize database if available
     if db_available:
@@ -305,7 +348,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             NestAdapter, MusicAdapter, CalendarAdapter, FitnessAdapter
         )
         
-        hub, analyzer = initialize_integration()
+        hub, analyzer = initialize_integration(redis_client)
         
         # Register all components with adapters
         if oauth_mgr:
@@ -379,7 +422,16 @@ async def root():
     """Claude V2 Cognitive Interface - ADHD-friendly UI."""
     try:
         with open("static/claude_v2_ui.html", "r") as f:
-            return f.read()
+            content = f.read()
+            # Add cache-busting headers to prevent PWA from caching forever
+            return HTMLResponse(
+                content=content,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
     except FileNotFoundError:
         # Fallback to simple interface
         return await simple_chat_interface()
@@ -390,7 +442,16 @@ async def claude_v2_ui():
     """Dedicated Claude V2 UI endpoint."""
     try:
         with open("static/claude_v2_ui.html", "r") as f:
-            return f.read()
+            content = f.read()
+            # Add cache-busting headers
+            return HTMLResponse(
+                content=content,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
     except FileNotFoundError:
         return HTMLResponse("""
             <html>
@@ -776,6 +837,83 @@ async def get_log_patterns():
             "error": str(e)
         }
 
+@app.get("/logs/stream")
+async def logs_stream():
+    """Stream logs for V2 UI (redirect to /api/logs)."""
+    try:
+        from mcp_server.adhd_logger import adhd_logger
+        
+        logs = adhd_logger.get_log_history(limit=100)
+        
+        return {
+            "success": True,
+            "logs": logs,
+            "total": len(logs)
+        }
+    except Exception as e:
+        # Return empty logs if logger not available
+        return {
+            "success": False,
+            "logs": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+@app.get("/api/dashboard/data")
+async def get_dashboard_real_data():
+    """Get real data for dashboard from Google APIs."""
+    try:
+        from mcp_server.google_integration import get_google_integration
+        google = get_google_integration()
+        
+        # Get calendar events for today
+        events = google.get_upcoming_events(hours=24)
+        
+        # Get fitness data (returns dict)
+        activity = google.get_adhd_context()  # This includes fitness data
+        
+        # Get tasks
+        tasks = google.get_tasks(include_completed=False)
+        
+        return {
+            "success": True,
+            "calendar": {
+                "events": [
+                    {
+                        "title": e.summary,
+                        "start": e.start_time.isoformat() if e.start_time else None,
+                        "end": e.end_time.isoformat() if e.end_time else None,
+                        "is_medication": getattr(e, 'is_medication', False),
+                        "is_focus_time": getattr(e, 'is_focus_time', False)
+                    } for e in events[:10]  # Limit to 10 events
+                ],
+                "total": len(events)
+            },
+            "fitness": {
+                "steps_today": activity.get("physical", {}).get("steps_today", 0),
+                "active_minutes": activity.get("physical", {}).get("active_minutes", 0),
+                "last_activity": activity.get("physical", {}).get("last_activity_time", "Unknown")
+            },
+            "tasks": {
+                "items": [
+                    {
+                        "title": t.title,
+                        "due": t.due.isoformat() if t.due else None,
+                        "priority": t.notes  # Using notes as priority for now
+                    } for t in tasks[:5]  # Limit to 5 tasks
+                ],
+                "total": len(tasks)
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Dashboard data error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Using mock data - Google APIs may need authentication"
+        }
+
 # Health endpoint
 # Initialize Google OAuth (using unified version for all Google services)
 try:
@@ -942,7 +1080,7 @@ async def health_check():
 
 # Import REAL cognitive loop
 try:
-    from .real_cognitive_loop import get_cognitive_loop
+    # from .real_cognitive_loop import get_cognitive_loop  # ARCHIVED - using V2 engine
     real_cognitive_available = True
 except ImportError:
     real_cognitive_available = False
@@ -967,8 +1105,9 @@ async def chat_endpoint(request: ChatRequest):
     # Use REAL cognitive loop
     if real_cognitive_available:
         try:
-            cognitive_loop = get_cognitive_loop()
-            result = await cognitive_loop.process(request.message, request.user_id)
+            # cognitive_loop = get_cognitive_loop()  # ARCHIVED
+            # result = await cognitive_loop.process(request.message, request.user_id)
+            result = {"response": "Please use /claude/v2/chat endpoint instead", "success": False}
             
             processing_time = (asyncio.get_event_loop().time() - start_time) * 1000
             
@@ -995,12 +1134,13 @@ async def chat_endpoint(request: ChatRequest):
     try:
         from mcp_server.models import NudgeTier
         
-        result = await cognitive_loop.process_user_input(
-            user_id=request.user_id,
-            user_input=request.message,
-            task_focus=request.task_focus,
-            nudge_tier=NudgeTier.GENTLE
-        )
+        # result = await cognitive_loop.process_user_input(  # ARCHIVED
+        #     user_id=request.user_id,
+        #     user_input=request.message,
+        #     task_focus=request.task_focus,
+        #     nudge_tier=NudgeTier.GENTLE
+        # )
+        result = None  # Use V2 endpoint instead
         
         processing_time = (asyncio.get_event_loop().time() - start_time) * 1000
         
@@ -1259,6 +1399,36 @@ try:
                 status_code=500
             )
     
+    @app.get("/claude/v2/tools")
+    async def claude_v2_tools():
+        """Get available tools for Claude V2 cognitive engine."""
+        try:
+            from mcp_server.claude_cognitive_engine_v2 import ToolRegistry
+            tools = ToolRegistry.get_available_tools()
+            
+            # Format for display
+            formatted_tools = {
+                "tools": {},
+                "total_categories": len(tools),
+                "total_actions": 0
+            }
+            
+            for category, info in tools.items():
+                formatted_tools["tools"][category] = {
+                    "description": info["description"],
+                    "actions": list(info["actions"].keys())
+                }
+                formatted_tools["total_actions"] += len(info["actions"])
+            
+            return JSONResponse(content=formatted_tools)
+            
+        except Exception as e:
+            logger.error(f"Tools endpoint error: {e}")
+            return JSONResponse(
+                content={"error": str(e), "tools": {}},
+                status_code=500
+            )
+    
     logger.info("✅ Claude V2 cognitive engine endpoints added")
 except ImportError as e:
     logger.warning(f"Claude V2 endpoints not available: {e}")
@@ -1464,8 +1634,10 @@ async def get_circuit_breaker_status(user_id: str):
     """Get circuit breaker status for user."""
     try:
         # Get from cognitive loop
-        stats = cognitive_loop.get_stats()
-        circuit_breaker = cognitive_loop.circuit_breakers.get(user_id)
+        # stats = cognitive_loop.get_stats()  # ARCHIVED
+        # circuit_breaker = cognitive_loop.circuit_breakers.get(user_id)
+        stats = {"total_requests": 0, "errors": 0}
+        circuit_breaker = None
         
         return {
             "user_id": user_id,
@@ -2313,6 +2485,287 @@ async def normal_mode():
     except Exception as e:
         logger.error(f"Normal mode failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/display-on-hub")
+async def display_music_on_hub():
+    """Display current music track on Nest Hub Max with visual and audio."""
+    if not nest_available:
+        raise HTTPException(status_code=503, detail="Nest system not available")
+    
+    try:
+        # Get current track status
+        status = await get_music_status()
+        if not status["is_playing"] or not status.get("current_track"):
+            return {
+                "success": False,
+                "message": "No music currently playing"
+            }
+        
+        track = status["current_track"]
+        track_title = track.get('name', 'Unknown Track')
+        artist = track.get('artist', 'Unknown Artist')
+        album = track.get('album', '')
+        mood = track.get('mood', 'focus')
+        
+        # Create display message
+        message = f"🎵 Now Playing: {track_title} by {artist}"
+        if album:
+            message += f" from {album}"
+        message += f" • {mood.upper()} mode"
+        
+        # Send via nudge system (which handles visual display for Nest Hub Max)
+        from mcp_server.nest_nudges import nest_nudge_system, NudgeType
+        
+        if nest_nudge_system:
+            success = await nest_nudge_system.send_nudge(
+                message,
+                NudgeType.GENTLE,
+                device_name="Nest Hub Max",
+                volume=0.3
+            )
+            
+            return {
+                "success": success,
+                "track": track_title,
+                "artist": artist,
+                "album": album,
+                "mood": mood,
+                "message": f"🎵 Displayed on Nest Hub Max: {track_title}" if success else "Failed to display on Hub"
+            }
+        else:
+            raise HTTPException(status_code=503, detail="Nest nudge system not initialized")
+            
+    except Exception as e:
+        logger.error(f"Display music on hub failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/like")
+async def like_current_track():
+    """Like the currently playing track."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        # Get current track status
+        status = get_music_status()
+        if not status["is_playing"] or not status.get("current_track"):
+            return {
+                "success": False,
+                "message": "No music currently playing to like"
+            }
+        
+        track = status["current_track"]
+        track_title = track.get('name', 'Unknown Track')
+        artist = track.get('artist', 'Unknown Artist')
+        jellyfin_id = track.get('id', '')
+        
+        # Store liked track in Redis (you could also use Jellyfin favorites API)
+        if redis_available and redis_client:
+            liked_key = f"music:liked:{jellyfin_id}"
+            liked_info = {
+                "title": track_title,
+                "artist": artist,
+                "album": track.get('album', ''),
+                "jellyfin_id": jellyfin_id,
+                "liked_at": datetime.now().isoformat(),
+                "stream_url": track.get('stream_url', '')
+            }
+            await redis_client.setex(liked_key, 86400 * 365, json.dumps(liked_info))  # Keep for 1 year
+            
+            # Add to global liked tracks set
+            await redis_client.sadd("music:liked_tracks", jellyfin_id)
+        
+        return {
+            "success": True,
+            "message": f"❤️ Liked '{track_title}' by {artist}",
+            "track": {
+                "title": track_title,
+                "artist": artist,
+                "album": track.get('album', ''),
+                "jellyfin_id": jellyfin_id
+            }
+        }
+    except Exception as e:
+        logger.error(f"Like track failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/lock")
+async def lock_music_changes():
+    """Lock music to prevent automatic changes."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        # Set lock flag in Redis
+        if redis_available and redis_client:
+            await redis_client.setex("music:auto_change_locked", 3600, "true")  # Lock for 1 hour
+        
+        # Also set flag in music module if available
+        if hasattr(music_module.jellyfin_music, 'auto_change_enabled'):
+            music_module.jellyfin_music.auto_change_enabled = False
+        
+        return {
+            "success": True,
+            "message": "🔒 Music auto-changing locked for 1 hour",
+            "locked_until": (datetime.now() + timedelta(hours=1)).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Lock music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/music/unlock")
+async def unlock_music_changes():
+    """Unlock music to allow automatic changes."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    try:
+        # Remove lock flag from Redis
+        if redis_available and redis_client:
+            await redis_client.delete("music:auto_change_locked")
+        
+        # Also set flag in music module if available
+        if hasattr(music_module.jellyfin_music, 'auto_change_enabled'):
+            music_module.jellyfin_music.auto_change_enabled = True
+        
+        return {
+            "success": True,
+            "message": "🔓 Music auto-changing unlocked"
+        }
+    except Exception as e:
+        logger.error(f"Unlock music failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/music/liked")
+async def get_liked_tracks():
+    """Get all liked tracks."""
+    if not redis_available or not redis_client:
+        raise HTTPException(status_code=503, detail="Redis not available for liked tracks")
+    
+    try:
+        # Get all liked track IDs
+        liked_ids = await redis_client.smembers("music:liked_tracks")
+        liked_tracks = []
+        
+        for track_id in liked_ids:
+            track_key = f"music:liked:{track_id}"
+            track_data = await redis_client.get(track_key)
+            if track_data:
+                liked_tracks.append(json.loads(track_data))
+        
+        # Sort by liked date (newest first)
+        liked_tracks.sort(key=lambda x: x.get('liked_at', ''), reverse=True)
+        
+        return {
+            "success": True,
+            "liked_tracks": liked_tracks,
+            "count": len(liked_tracks)
+        }
+    except Exception as e:
+        logger.error(f"Get liked tracks failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# IMPORTANT: This catch-all route MUST be defined AFTER all specific music routes
+@app.post("/music/{name}")
+async def play_music_by_name(name: str):
+    """Play music by mood name OR playlist name. Searches for both."""
+    if not music_available:
+        raise HTTPException(status_code=503, detail="Music system not available")
+    
+    # First check if it's a standard mood
+    standard_moods = {
+        "focus": play_focus_music,
+        "energy": play_energy_music,
+        "calm": play_calm_music,
+        "ambient": play_ambient_music,
+        "nature": play_nature_music,
+        "study": play_study_music
+    }
+    
+    # Try standard moods first
+    if name.lower() in standard_moods:
+        try:
+            success = await standard_moods[name.lower()]()
+            mood_messages = {
+                "focus": "🎯 Focus music started! Perfect for ADHD concentration.",
+                "energy": "⚡ Energy music started! Time to get things done!",
+                "calm": "😌 Calm music started! Time to relax and breathe.",
+                "ambient": "🌊 Ambient music started! Perfect background for any task.",
+                "nature": "🌿 Nature sounds started! Connect with natural rhythms.",
+                "study": "📚 Study music started! Optimize your learning environment."
+            }
+            return {
+                "success": success,
+                "message": mood_messages.get(name.lower(), f"Music started!") if success else f"Failed to start {name} music"
+            }
+        except Exception as e:
+            logger.error(f"Play mood {name} failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # Otherwise, search for playlist, artist, or album
+    try:
+        if music_module.jellyfin_music:
+            # Try playlist by exact name first
+            success = await music_module.jellyfin_music.play_playlist_by_name(name)
+            if success:
+                return {
+                    "success": True,
+                    "message": f"🎵 Playing playlist: {name}"
+                }
+            
+            # Try artist
+            success = await music_module.jellyfin_music.play_by_artist(name)
+            if success:
+                return {
+                    "success": True,
+                    "message": f"🎤 Playing all tracks by: {name}"
+                }
+            
+            # Try album
+            success = await music_module.jellyfin_music.play_by_album(name)
+            if success:
+                return {
+                    "success": True,
+                    "message": f"💿 Playing album: {name}"
+                }
+            
+            # Try partial playlist match
+            partial_success = await music_module.jellyfin_music.play_playlist_by_partial_name(name)
+            if partial_success:
+                return {
+                    "success": True,
+                    "message": f"🎵 Playing playlist matching: {name}"
+                }
+            
+            # Nothing found
+            return {
+                "success": False,
+                "message": f"No music found for '{name}'. Try a mood (focus, energy, calm, ambient, nature, study), artist name, album name, or playlist name."
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Music system not initialized"
+            }
+    except AttributeError as e:
+        # Methods don't exist yet, reload needed
+        logger.error(f"Music methods not available: {e}")
+        return {
+            "success": False,
+            "message": f"Music search features need server restart to activate. For now use: focus, energy, calm, ambient, nature, study"
+        }
+    except Exception as e:
+        logger.error(f"Play music '{name}' failed: {e}")
+        return {
+            "success": False,
+            "message": f"Error playing '{name}': {str(e)}"
+        }
 
 
 # Playlist Management Endpoints

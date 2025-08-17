@@ -91,6 +91,19 @@ class GoogleTask:
             return TaskPriority.LOW     # Due later
 
 @dataclass
+class SleepData:
+    """Sleep data from Google Fit."""
+    duration_hours: float
+    bedtime: Optional[datetime]
+    wake_time: Optional[datetime]
+    quality_score: int  # 1-10 calculated from duration
+    
+    @property
+    def is_poor_sleep(self) -> bool:
+        """Check if sleep was poor (affects ADHD)."""
+        return self.duration_hours < 6 or self.quality_score < 5
+
+@dataclass
 class FitnessData:
     """Fitness data from Google Fit."""
     steps_today: int
@@ -99,6 +112,7 @@ class FitnessData:
     calories_burned: int
     distance_meters: int
     active_minutes: int
+    sleep_data: Optional[SleepData] = None
     
     @property
     def needs_movement(self) -> bool:
@@ -267,12 +281,139 @@ class GoogleIntegration:
                         list_name=list_name
                     ))
             
-            # Sort by priority
-            return sorted(all_tasks, key=lambda t: (t.priority.value, t.due or datetime.max))
+            # Sort by priority (use timezone-aware max datetime for comparison)
+            max_date = datetime.max.replace(tzinfo=timezone.utc)
+            return sorted(all_tasks, key=lambda t: (t.priority.value, t.due or max_date))
             
         except Exception as e:
             logger.error(f"Failed to get tasks: {e}")
             return []
+    
+    def get_sleep_data(self) -> Optional[SleepData]:
+        """Get most recent sleep data from Google Fit (checks last 7 days)."""
+        if not self.fitness_service:
+            return None
+        
+        try:
+            now = datetime.now()
+            week_ago = now - timedelta(days=7)
+            
+            # First try to find sleep sessions (more reliable)
+            sessions = self.fitness_service.users().sessions().list(
+                userId='me',
+                startTime=week_ago.isoformat() + 'Z',
+                endTime=now.isoformat() + 'Z'
+            ).execute()
+            
+            # Find most recent sleep session
+            sleep_sessions = []
+            for session in sessions.get('session', []):
+                if 'sleep' in session.get('name', '').lower() or \
+                   session.get('activityType') == 72:  # 72 is sleep
+                    sleep_sessions.append(session)
+            
+            if sleep_sessions:
+                # Sort by start time, get most recent
+                sleep_sessions.sort(key=lambda s: s['startTimeMillis'], reverse=True)
+                latest = sleep_sessions[0]
+                
+                start_ms = int(latest['startTimeMillis'])
+                end_ms = int(latest['endTimeMillis'])
+                duration_hours = (end_ms - start_ms) / (1000 * 60 * 60)
+                
+                bedtime = datetime.fromtimestamp(start_ms / 1000)
+                wake_time = datetime.fromtimestamp(end_ms / 1000)
+                
+                # Calculate quality based on duration
+                if duration_hours >= 8:
+                    quality_score = 10
+                elif duration_hours >= 7:
+                    quality_score = 8
+                elif duration_hours >= 6:
+                    quality_score = 6
+                elif duration_hours >= 5:
+                    quality_score = 4
+                else:
+                    quality_score = 2
+                
+                logger.info(f"Found sleep: {bedtime} to {wake_time} ({duration_hours:.1f}h)")
+                
+                return SleepData(
+                    duration_hours=round(duration_hours, 1),
+                    bedtime=bedtime,
+                    wake_time=wake_time,
+                    quality_score=quality_score
+                )
+            
+            # Fallback to aggregate API if no sessions found
+            body = {
+                "aggregateBy": [{
+                    "dataTypeName": "com.google.sleep.segment"
+                }],
+                "startTimeMillis": int(week_ago.timestamp() * 1000),
+                "endTimeMillis": int(now.timestamp() * 1000)
+            }
+            
+            result = self.fitness_service.users().dataset().aggregate(
+                userId='me',
+                body=body
+            ).execute()
+            
+            # Parse sleep segments
+            total_sleep_ms = 0
+            bedtime = None
+            wake_time = None
+            
+            for bucket in result.get('bucket', []):
+                for dataset in bucket.get('dataset', []):
+                    for point in dataset.get('point', []):
+                        # Get sleep segment times
+                        start_ms = int(point.get('startTimeNanos', 0)) // 1000000
+                        end_ms = int(point.get('endTimeNanos', 0)) // 1000000
+                        
+                        if start_ms and end_ms:
+                            # Track earliest bedtime and latest wake time
+                            segment_start = datetime.fromtimestamp(start_ms / 1000)
+                            segment_end = datetime.fromtimestamp(end_ms / 1000)
+                            
+                            if not bedtime or segment_start < bedtime:
+                                bedtime = segment_start
+                            if not wake_time or segment_end > wake_time:
+                                wake_time = segment_end
+                            
+                            # Add to total sleep
+                            for value in point.get('value', []):
+                                # Sleep segment type: 72 = sleep, 109 = light, 110 = deep, 111 = REM
+                                if 'intVal' in value and value['intVal'] in [72, 109, 110, 111]:
+                                    total_sleep_ms += (end_ms - start_ms)
+            
+            if total_sleep_ms > 0:
+                duration_hours = total_sleep_ms / (1000 * 60 * 60)
+                
+                # Calculate quality score based on duration
+                if duration_hours >= 8:
+                    quality_score = 10
+                elif duration_hours >= 7:
+                    quality_score = 8
+                elif duration_hours >= 6:
+                    quality_score = 6
+                elif duration_hours >= 5:
+                    quality_score = 4
+                else:
+                    quality_score = 2
+                
+                return SleepData(
+                    duration_hours=round(duration_hours, 1),
+                    bedtime=bedtime,
+                    wake_time=wake_time,
+                    quality_score=quality_score
+                )
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Could not get sleep data: {e}")
+            return None
     
     def get_fitness_data(self) -> Optional[FitnessData]:
         """Get fitness data for today."""
@@ -355,13 +496,17 @@ class GoogleIntegration:
             
             last_activity_minutes = int((now - last_activity_time).total_seconds() / 60)
             
+            # Also get sleep data
+            sleep_data = self.get_sleep_data()
+            
             return FitnessData(
                 steps_today=steps_today,
                 steps_last_hour=steps_last_hour,
                 last_activity_minutes_ago=last_activity_minutes,
                 calories_burned=calories,
                 distance_meters=distance,
-                active_minutes=active_minutes
+                active_minutes=active_minutes,
+                sleep_data=sleep_data
             )
             
         except Exception as e:

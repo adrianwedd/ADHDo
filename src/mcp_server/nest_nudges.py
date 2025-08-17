@@ -432,12 +432,11 @@ class NestNudgeSystem:
                 # Create a simple image with text (this works better than HTML)
                 image_url = self._create_text_image_url(message)
                 
-                # Display as an image
+                # Display as an image (remove subtitle parameter that causes issues)
                 media_controller.play_media(
                     image_url,
                     'image/png',
-                    title="ADHD Support",
-                    subtitle=message
+                    title="ADHD Support"
                 )
                 media_controller.block_until_active()
                 logger.info(f"📺 Visual message displayed on {cast_device.name}")
@@ -610,41 +609,16 @@ class NestNudgeSystem:
                         nudge.volume
                     )
                 
-                # Check for scheduled nudges based on time
-                current_hour = datetime.now().hour
-                current_minute = datetime.now().minute
+                # DISABLED: Automatic scheduled nudges
+                # These were too repetitive and not intelligent
+                # Nudges should be context-aware, not time-based
                 
-                # Morning routine nudge
-                if current_hour == 9 and current_minute == 0:
-                    await self.send_nudge(
-                        "Good morning! Ready to start your day? What's your main focus today?",
-                        NudgeType.MOTIVATIONAL,
-                        volume=0.5
-                    )
+                # To re-enable intelligent nudges:
+                # 1. Check user's actual schedule/calendar
+                # 2. Consider recent activity and focus state
+                # 3. Only nudge when truly helpful, not on a fixed schedule
                 
-                # Lunch break reminder
-                elif current_hour == 12 and current_minute == 30:
-                    await self.send_nudge(
-                        "Lunch time! Take a proper break to recharge",
-                        NudgeType.BREAK,
-                        volume=0.4
-                    )
-                
-                # Afternoon focus session
-                elif current_hour == 14 and current_minute == 0:
-                    await self.send_nudge(
-                        "Afternoon focus session. What's your priority for the next 2 hours?",
-                        NudgeType.FOCUS,
-                        volume=0.5
-                    )
-                
-                # End of day wrap-up
-                elif current_hour == 17 and current_minute == 30:
-                    await self.send_nudge(
-                        "Wrapping up the day. Quick wins to finish?",
-                        NudgeType.TRANSITION,
-                        volume=0.4
-                    )
+                pass  # No automatic nudges for now
                     
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")

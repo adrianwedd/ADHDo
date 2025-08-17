@@ -61,7 +61,7 @@ class ChromecastMusic:
             stream = STREAMS.get(mood, STREAMS["focus"])
             
             # Connect to device
-            device_name = device or "Nest Mini"
+            device_name = device or "Shack Speakers"
             if not self.cast or (device and device != self.cast.name):
                 if not self.connect(device_name):
                     return {"success": False, "message": f"Could not find {device_name}"}
