@@ -175,7 +175,7 @@ jobs:
           
     - name: Upload Accessibility Test Results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: accessibility-test-results-${{ matrix.python-version }}
         path: |
@@ -185,7 +185,7 @@ jobs:
         
     - name: Upload Accessibility Screenshots
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: accessibility-failure-screenshots-${{ matrix.python-version }}
         path: test-results/screenshots/

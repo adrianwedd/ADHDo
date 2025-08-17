@@ -166,7 +166,7 @@ jobs:
     
     - name: 📁 Upload report artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: issue-grooming-report-${{ github.run_number }}
         path: ${{ steps.grooming.outputs.output_file }}
