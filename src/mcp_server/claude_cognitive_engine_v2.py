@@ -908,7 +908,7 @@ User feedback: {state.user_feedback or 'none'}"""
         return {
             "reasoning": "Parsed from text response",
             "confidence": 0.5,
-            "response_to_user": response[:500],
+            "response_to_user": response,  # Don't truncate the response!
             "immediate_actions": [],
             "scheduled_actions": [],
             "state_updates": {
