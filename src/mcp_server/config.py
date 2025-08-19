@@ -162,7 +162,7 @@ class Settings(BaseSettings):
     )
     google_calendar_id: str = Field(default="primary", description="Google Calendar ID")
     google_calendar_redirect_uri: str = Field(
-        default="http://localhost:8000/api/calendar/callback",
+        default="http://localhost:23444/api/calendar/callback",
         description="OAuth redirect URI for calendar authentication"
     )
     google_calendar_enabled: bool = Field(

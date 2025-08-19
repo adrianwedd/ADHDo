@@ -291,13 +291,21 @@ class ContextAnalyzer:
         """Continuously analyze context and generate events."""
         logger.info("🔍 Context analyzer started")
         
-        while True:
-            try:
-                await self._analyze_current_state()
-                await asyncio.sleep(60)  # Check every minute
-            except Exception as e:
-                logger.error(f"Context analysis error: {e}")
-                await asyncio.sleep(60)
+        try:
+            while True:
+                try:
+                    await self._analyze_current_state()
+                    await asyncio.sleep(60)  # Check every minute
+                except asyncio.CancelledError:
+                    logger.info("🔍 Context analyzer cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Context analysis error: {e}")
+                    await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            logger.info("🔍 Context analyzer loop cancelled")
+        finally:
+            logger.info("🔍 Context analyzer stopped")
     
     async def _analyze_current_state(self):
         """Analyze current state and emit relevant events."""

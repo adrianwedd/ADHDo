@@ -143,3 +143,14 @@ test_adhd.db
 
 # Server logs
 server_test*.log
+
+# Archive directories
+archivedADHDo/
+archived*/
+
+# Reports and documentation
+*_report.md
+github_issue_grooming_report.md
+
+# Proxy and utility scripts  
+oauth_proxy.py

@@ -371,13 +371,21 @@ class AutoSessionManager:
     
     async def start_background_refresh(self):
         """Start background task for automatic session refresh."""
-        while True:
-            try:
-                await self.ensure_valid_session()
-                await asyncio.sleep(self.refresh_interval)
-            except Exception as e:
-                logger.error(f"Background refresh error: {e}")
-                await asyncio.sleep(300)  # Retry in 5 minutes
+        try:
+            while True:
+                try:
+                    await self.ensure_valid_session()
+                    await asyncio.sleep(self.refresh_interval)
+                except asyncio.CancelledError:
+                    logger.info("Background refresh cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Background refresh error: {e}")
+                    await asyncio.sleep(300)  # Retry in 5 minutes
+        except asyncio.CancelledError:
+            logger.info("Background refresh loop cancelled")
+        finally:
+            logger.info("Background refresh stopped")
 
 
 # Usage example and testing

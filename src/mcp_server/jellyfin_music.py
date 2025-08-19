@@ -157,7 +157,7 @@ class JellyfinMusicController:
                     "IncludeItemTypes": "Audio",
                     "Recursive": "true",
                     "Fields": "Path,MediaSources,Genres,Artists,AlbumArtist",
-                    "Limit": 5000  # Load more tracks from your 600GB library
+                    "Limit": 50  # ADHD-optimized: Small playlists prevent choice paralysis
                 }
             ) as response:
                 if response.status == 200:
@@ -489,56 +489,61 @@ class JellyfinMusicController:
         logger.info("⏰ Starting ADHD music scheduler")
         last_music_start = 0
         
-        while True:
-            try:
-                # Check if auto music changes are locked
-                auto_change_locked = False
+        try:
+            while True:
                 try:
-                    # Import here to avoid circular imports
-                    from mcp_server.minimal_main import redis_client
-                    if redis_client:
-                        lock_status = await redis_client.get("music:auto_change_locked")
-                        auto_change_locked = lock_status == "true"
-                except:
+                    # Check if auto music changes are locked
                     auto_change_locked = False
-                
-                # Also check instance variable if set
-                if hasattr(self, 'auto_change_enabled'):
-                    auto_change_locked = not self.auto_change_enabled
-                
-                if auto_change_locked:
-                    logger.debug("🔒 Music auto-change is locked, skipping scheduler")
-                    await asyncio.sleep(30)
-                    continue
-                
-                now = datetime.now()
-                current_time = now.time()
-                current_timestamp = now.timestamp()
-                
-                # Only play between 9 AM and midnight
-                if time(9, 0) <= current_time or current_time <= time(0, 0):
-                    # Check if we should start ambient music
-                    # Add cooldown: don't restart if music was started in last 5 minutes
-                    time_since_last_start = current_timestamp - last_music_start
+                    try:
+                        # Import here to avoid circular imports
+                        from mcp_server.minimal_main import redis_client
+                        if redis_client:
+                            lock_status = await redis_client.get("music:auto_change_locked")
+                            auto_change_locked = lock_status == "true"
+                    except:
+                        auto_change_locked = False
                     
-                    if (not self.state.is_playing and 
-                        not self._is_system_audio_active() and 
-                        time_since_last_start > 300):  # 5 minute cooldown
+                    # Also check instance variable if set
+                    if hasattr(self, 'auto_change_enabled'):
+                        auto_change_locked = not self.auto_change_enabled
+                    
+                    if auto_change_locked:
+                        logger.debug("🔒 Music auto-change is locked, skipping scheduler")
+                        await asyncio.sleep(30)
+                        continue
+                    
+                    now = datetime.now()
+                    current_time = now.time()
+                    current_timestamp = now.timestamp()
+                    
+                    # Only play between 9 AM and midnight
+                    if time(9, 0) <= current_time or current_time <= time(0, 0):
+                        # Check if we should start ambient music
+                        # Add cooldown: don't restart if music was started in last 5 minutes
+                        time_since_last_start = current_timestamp - last_music_start
                         
-                        logger.info("🎵 Starting ambient focus music (silence detected)")
-                        await self.play_mood_playlist(MusicMood.FOCUS, volume=0.75)
-                        last_music_start = current_timestamp
-                    elif time_since_last_start <= 300 and not self.state.is_playing:
-                        logger.debug(f"🔄 Music restart cooldown: {300 - time_since_last_start:.0f}s remaining")
-                
-                # Check every 30 seconds
-                await asyncio.sleep(30)
-                
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"❌ Music scheduler error: {e}")
-                await asyncio.sleep(60)
+                        if (not self.state.is_playing and 
+                            not self._is_system_audio_active() and 
+                            time_since_last_start > 300):  # 5 minute cooldown
+                            
+                            logger.info("🎵 Starting ambient focus music (silence detected)")
+                            await self.play_mood_playlist(MusicMood.FOCUS, volume=0.75)
+                            last_music_start = current_timestamp
+                        elif time_since_last_start <= 300 and not self.state.is_playing:
+                            logger.debug(f"🔄 Music restart cooldown: {300 - time_since_last_start:.0f}s remaining")
+                    
+                    # Check every 30 seconds
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    logger.info("⏰ Music scheduler cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Music scheduler error: {e}")
+                    await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            logger.info("⏰ Music scheduler loop cancelled")
+        finally:
+            logger.info("⏰ Music scheduler stopped")
     
     def _is_system_audio_active(self) -> bool:
         """Check if other system audio is playing."""
