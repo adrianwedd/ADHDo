@@ -1112,19 +1112,9 @@ async def chat_endpoint(request: ChatRequest):
             processing_time = (asyncio.get_event_loop().time() - start_time) * 1000
             
             return ChatResponse(
-                message=result["response"],
-                user_id=request.user_id,
-                task_focus=request.task_focus,
-                suggested_actions=result.get("actions", []),
-                processing_time=processing_time,
-                pattern_detected=bool(result.get("patterns_detected")),
-                metadata={
-                    "thinking": result.get("thinking"),
-                    "emotional_tone": result.get("emotional_tone"),
-                    "cognitive_load": result.get("cognitive_load_considered"),
-                    "learning": result.get("learning"),
-                    "handler": "real_cognitive_loop"
-                }
+                response=result["response"],
+                thinking=result.get("thinking"),
+                success=result.get("success", False)
             )
         except Exception as e:
             logger.error(f"Simple chat handler failed: {e}")
@@ -1155,12 +1145,8 @@ async def chat_endpoint(request: ChatRequest):
             
         response = ChatResponse(
             response=response_text,
-            thinking=result.response.thinking if result.response else None,  # Include thinking for UI
-            success=result.success,
-            actions_taken=result.actions_taken,
-            cognitive_load=result.cognitive_load,
-            processing_time_ms=processing_time,
-            safety_override=result.response.source == "safety_monitor" if result.response else False
+            thinking=result.response.thinking if result.response else None,
+            success=result.success if result else False
         )
         
         # Store interaction for learning (if storage available)
@@ -1193,8 +1179,8 @@ async def chat_endpoint(request: ChatRequest):
         # Return safe fallback response
         return ChatResponse(
             response="I'm having trouble right now, but I'm here to help. Can you try rephrasing that?",
-            success=False,
-            processing_time_ms=(asyncio.get_event_loop().time() - start_time) * 1000
+            thinking=None,
+            success=False
         )
 
 # User state management
