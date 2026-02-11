@@ -32,7 +32,7 @@ structlog==23.1.0
 sentry-sdk[fastapi]==2.34.1
 
 # Security
-cryptography==44.0.1
+cryptography==46.0.5
 bcrypt==4.0.1
 python-jose[cryptography]==3.4.0
 
