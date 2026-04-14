@@ -412,7 +412,7 @@ This isn't just software. It's a movement of neurodivergent minds building tools
 
 ### 🎯 Ready? Set? EXECUTIVE FUNCTION! 
 
-**[🚀 GET STARTED NOW - 2 MINUTE SETUP](QUICK_START.md)**
+**[🚀 GET STARTED NOW - 2 MINUTE SETUP](README_QUICK_START.md)**
 
 *Built with 🧠 and ⚡ by ADHD minds, for ADHD minds everywhere.*
 
