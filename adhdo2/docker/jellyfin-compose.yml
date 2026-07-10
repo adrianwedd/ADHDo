@@ -1,0 +1,13 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    network_mode: host          # simplest path to LAN-IP reachability + DLNA
+    volumes:
+      - /home/pi/adhdo2/jellyfin/config:/config
+      - /home/pi/Music:/media/music:ro
+      - jellyfin-transcode:/config/transcodes
+    restart: unless-stopped
+volumes:
+  jellyfin-transcode:
+    driver_opts: {type: tmpfs, device: tmpfs, o: "size=512m"}

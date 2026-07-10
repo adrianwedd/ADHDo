@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import hashlib, json, shutil, subprocess, time
+from datetime import datetime
+from pathlib import Path
+from adhdolib import db
+from adhdolib.config import load_config, home
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main
+from adhdolib.nudgelimits import check_allowed
+
+def synthesize(text: str, cache_dir: Path) -> Path:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    out = cache_dir / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".mp3")
+    wav = out.with_suffix(".wav")
+    if out.exists():
+        return out
+    if shutil.which("piper"):
+        subprocess.run(["piper", "--output_file", str(wav)],
+                       input=text.encode(), check=True, timeout=60)
+    elif shutil.which("espeak-ng"):
+        subprocess.run(["espeak-ng", "--stdin", "-w", str(wav)],
+                       input=text.encode(), check=True, timeout=60)
+    else:
+        raise ToolError("tts_failed", "neither piper nor espeak-ng found")
+    if not shutil.which("ffmpeg"):
+        raise ToolError("tts_failed", "ffmpeg not found for mp3 encode")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), str(out)],
+                   check=True, timeout=60)
+    wav.unlink(missing_ok=True)
+    # prune cache >24h
+    cutoff = time.time() - 86400
+    for f in cache_dir.glob("*.mp3"):
+        if f.stat().st_mtime < cutoff and f != out:
+            f.unlink()
+    return out
+
+def play_url_on_device(url: str, device_name: str, cfg: dict):
+    import pychromecast
+    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
+    if not casts:
+        raise ToolError("no_devices", f"{device_name} not found")
+    cc = casts[0]; cc.wait()
+    cc.media_controller.play_media(url, "audio/mpeg")
+    cc.media_controller.block_until_active(timeout=15)
+    browser.stop_discovery()
+
+def wait_until_idle(device_name: str, cfg: dict, timeout: int = 30) -> bool:
+    """Poll the device's media_controller.status every second until the
+    player is IDLE/UNKNOWN or timeout elapses. Returns True if it became
+    idle, False on timeout. Module-level so tests can monkeypatch it."""
+    try:
+        import pychromecast
+    except ImportError:
+        return False
+    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
+    if not casts:
+        return False
+    cc = casts[0]
+    try:
+        cc.wait(timeout=5)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            s = cc.media_controller.status
+            state = getattr(s, "player_state", None)
+            if state in (None, "IDLE", "UNKNOWN"):
+                return True
+            time.sleep(1)
+        return False
+    finally:
+        browser.stop_discovery()
+
+def _resume_previous(cfg) -> bool:
+    np = home() / "data" / "now_playing.json"
+    if not np.exists():
+        return False
+    info = json.loads(np.read_text())
+    if not info.get("url"):
+        return False
+    try:
+        play_url_on_device(info["url"], info["device"], cfg)
+        return True
+    except ToolError:
+        return False
+
+def run(argv, _test_conn=None):
+    ap = ToolArgumentParser(prog="nudge")
+    ap.add_argument("text")
+    ap.add_argument("--device")
+    ap.add_argument("--urgency", choices=["low", "med", "high"], default="low")
+    ap.add_argument("--event")
+    args = ap.parse_args(argv)
+    cfg = load_config()
+    conn = _test_conn or db.connect()
+    try:
+        hour_ago = time.time() - 3600
+        n = conn.execute("SELECT COUNT(*) FROM events WHERE type='nudge' AND ts>?",
+                         (hour_ago,)).fetchone()[0]
+        ok, code = check_allowed(datetime.now(), args.urgency, args.event, n, cfg)
+        if not ok:
+            raise ToolError(code, "nudge blocked; do not retry this cycle")
+        device = args.device or cfg["default_device"]
+        if not device:
+            raise ToolError("no_device_configured", "set default_device in config")
+        real_name = cfg["devices"].get(device, device)
+        mp3 = synthesize(args.text, home() / "tts-cache")
+        url = f"http://{cfg['lan_ip']}:{cfg['httpd_port']}/{mp3.name}"
+        play_url_on_device(url, real_name, cfg)
+        wait_until_idle(real_name, cfg)
+        resumed = _resume_previous(cfg)
+        db.log_event(conn, "nudge", "nudge", json.dumps(
+            {"text": args.text, "urgency": args.urgency, "device": device}))
+        db.audit(conn, "nudge", argv, True, "")
+        return {"nudged": True, "device": device, "resumed": resumed}
+    except ToolError as e:
+        db.audit(conn, "nudge", argv, False, e.code)
+        raise
+    except Exception as e:
+        db.audit(conn, "nudge", argv, False, f"crash: {type(e).__name__}")
+        raise
+
+if __name__ == "__main__":
+    cli_main(lambda: run(sys.argv[1:]))

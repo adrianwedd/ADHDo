@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import fcntl, subprocess, time
+from datetime import datetime, timedelta
+from adhdolib import db, schedule
+from adhdolib.config import home
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main
+from adhdolib.sanitize import clean
+
+BUSY_STALE_S = 15 * 60
+
+def run_tmux(args):
+    subprocess.run(["tmux", *args], check=True, timeout=10)
+
+def inject(text: str) -> str:
+    data = home() / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    text = clean(text)
+    with open(data / "wake.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        busy = data / "busy"
+        try:
+            is_busy = busy.exists() and (time.time() - busy.stat().st_mtime < BUSY_STALE_S)
+        except FileNotFoundError:
+            # marker vanished between exists() and stat() - treat as idle
+            is_busy = False
+        if is_busy:
+            with open(data / "pending.txt", "a") as f:
+                f.write(text + "\n")
+            return "queued"
+        try:
+            busy.unlink(missing_ok=True)  # stale (or never existed)
+        except FileNotFoundError:
+            pass
+        run_tmux(["send-keys", "-t", "adhdo", "-l", "--", text])
+        run_tmux(["send-keys", "-t", "adhdo", "Enter"])
+        return "sent"
+
+def _parse_at(s: str) -> float:
+    if ":" in s and len(s) <= 5:
+        h, m = map(int, s.split(":"))
+        due = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+        if due.timestamp() <= time.time():
+            due = due + timedelta(days=1)
+        return due.timestamp()
+    return datetime.fromisoformat(s).timestamp()
+
+def run(argv, _test_conn=None):
+    ap = ToolArgumentParser(prog="wake")
+    ap.add_argument("prompt", nargs="?")
+    ap.add_argument("--event")
+    ap.add_argument("--at")
+    ap.add_argument("--tag", default="followup")
+    args = ap.parse_args(argv)
+    conn = _test_conn or db.connect()
+    try:
+        if args.at:
+            ok = schedule.add(conn, _parse_at(args.at), args.tag)
+            db.audit(conn, "wake", argv, True, "scheduled" if ok else "duplicate")
+            return {"scheduled": args.tag, "duplicate": not ok}
+        if args.event:
+            text = f"[event:{args.event}] Scheduled event fired. Check state and act."
+        elif args.prompt:
+            text = args.prompt
+        else:
+            raise ToolError("usage", "wake <prompt> | --event TAG | --at TIME --tag T")
+        result = inject(text)
+        db.log_event(conn, "wake", "wake", text[:200])
+        db.audit(conn, "wake", argv, True, result)
+        return {"wake": result}
+    except ToolError as e:
+        db.audit(conn, "wake", argv, False, e.code)
+        raise
+    except Exception as e:
+        db.audit(conn, "wake", argv, False, f"crash: {type(e).__name__}")
+        raise
+
+if __name__ == "__main__":
+    cli_main(lambda: run(sys.argv[1:]))

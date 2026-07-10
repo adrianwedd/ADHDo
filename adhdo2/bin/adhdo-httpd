@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import http.server
+import os
+from adhdolib.config import load_config, home
+
+def main():
+    cfg = load_config()
+    cache_dir = home() / "tts-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.chdir(cache_dir)
+    address = (cfg["lan_ip"], cfg["httpd_port"])
+    httpd = http.server.HTTPServer(address, http.server.SimpleHTTPRequestHandler)
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    main()

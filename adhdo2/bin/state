@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import json, shutil, time
+from datetime import datetime
+from adhdolib import db
+from adhdolib.binload import load_bin_module
+from adhdolib.config import load_config, home
+from adhdolib.envelope import cli_main, ToolError, write_atomic
+
+def scan_devices(cfg):
+    cast = load_bin_module("cast")
+    return cast.device_status(cfg)
+
+def _devices(cfg):
+    cache = home() / "data" / "devices_cache.json"
+    if cache.exists() and time.time() - cache.stat().st_mtime < 60:
+        return json.loads(cache.read_text())
+    devs = scan_devices(cfg)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(cache, json.dumps(devs))
+    return devs
+
+def _day_part(h):
+    return ("night" if h < 6 else "morning" if h < 12
+            else "afternoon" if h < 18 else "evening" if h < 22 else "night")
+
+def run(argv, _test_conn=None):
+    cfg = load_config()
+    conn = _test_conn or db.connect()
+    try:
+        now = time.time()
+        last = {}
+        for t in ("med", "meal", "break", "nudge"):
+            row = conn.execute("SELECT MAX(ts) FROM events WHERE type=?", (t,)).fetchone()
+            last[t] = round(now - row[0], 1) if row[0] else None
+        sched = [{"due_ts": r[0], "tag": r[1]} for r in conn.execute(
+            "SELECT due_ts, tag FROM schedule WHERE delivered=0 ORDER BY due_ts LIMIT 10")]
+        du = shutil.disk_usage("/")
+        pct = round(du.used / du.total * 100, 1)
+        out = {"ts": now, "day_part": _day_part(datetime.now().hour),
+               "devices": _devices(cfg), "last": last, "scheduled": sched,
+               "disk": {"pct": pct, "warn": pct >= cfg["disk_warn_pct"]}}
+        db.audit(conn, "state", argv, True, "")
+        return out
+    except ToolError as e:
+        db.audit(conn, "state", argv, False, e.code)
+        raise
+    except Exception as e:
+        db.audit(conn, "state", argv, False, f"crash: {type(e).__name__}")
+        raise
+
+if __name__ == "__main__":
+    cli_main(lambda: run(sys.argv[1:]))

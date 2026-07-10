@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import fcntl, os, time
+from adhdolib import db, schedule
+from adhdolib.binload import load_bin_module
+from adhdolib.config import home
+from adhdolib.envelope import cli_main, write_atomic
+
+def _wake():
+    return load_bin_module("wake")
+
+def inject(text):
+    return _wake().inject(text)
+
+def run(_test_conn=None):
+    conn = _test_conn or db.connect()
+    try:
+        n_sent, n_queued = _run(conn)
+        db.audit(conn, "adhdo-dispatch", [], True, f"sent={n_sent} queued={n_queued}")
+        return {"delivered": n_sent, "queued": n_queued}
+    except Exception as e:
+        db.audit(conn, "adhdo-dispatch", [], False, f"crash: {type(e).__name__}: {e}")
+        raise
+
+def _run(conn):
+    delivered = 0
+    queued = 0
+    data_dir = home() / "data"
+    pending = data_dir / "pending.txt"
+    processing = data_dir / "pending.processing"
+
+    # Atomic handoff: never read-then-unlink pending.txt, since a crash
+    # between unlinking it and finishing injection of the in-memory lines
+    # would lose them. Instead rename pending.txt -> pending.processing
+    # (os.replace is atomic) and only delete pending.processing once every
+    # line in it has been handed to inject(). If pending.processing already
+    # exists (a previous run crashed mid-loop before finishing), merge its
+    # leftover lines in first so nothing is dropped. A crash mid-loop this
+    # time just leaves the remainder in pending.processing for next run:
+    # at-least-once delivery (possible duplicates) is acceptable, loss is not.
+    # Hold wake.lock only for the merge/rename of pending.txt -> pending.processing,
+    # since wake.inject() also takes this lock to append to pending.txt: if we
+    # held it across the inject loop below, a "queued" inject() call would
+    # deadlock trying to re-acquire it. Only dispatch ever touches
+    # pending.processing, so the trailing unlink() doesn't need the lock either.
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(data_dir / "wake.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if processing.exists() and pending.exists():
+            leftover = [l for l in processing.read_text().splitlines() if l.strip()]
+            new_lines = [l for l in pending.read_text().splitlines() if l.strip()]
+            merged = leftover + new_lines
+            write_atomic(processing, "\n".join(merged) + ("\n" if merged else ""))
+            pending.unlink()
+        elif pending.exists():
+            os.replace(str(pending), str(processing))
+        fcntl.flock(lock, fcntl.LOCK_UN)
+
+    if processing.exists():
+        lines = [l for l in processing.read_text().splitlines() if l.strip()]
+        # inject() re-appends to pending.txt itself when it returns "queued",
+        # so we must not also re-append here (would double-append/duplicate).
+        for line in lines:
+            if inject(line) == "sent":
+                delivered += 1
+            else:
+                queued += 1
+        processing.unlink()
+
+    now = time.time()
+    done = []
+    for id_, tag in schedule.due(conn, now):
+        result = inject(f"[scheduled:{tag}] Follow-up you set is due.")
+        if result == "sent":
+            done.append(id_)
+            delivered += 1
+        elif result == "queued":
+            # Once queued, inject() has guaranteed the text lands in
+            # pending.txt, so delivery there is guaranteed. Mark the
+            # schedule row delivered now anyway, otherwise it would fire
+            # again next cycle and duplicate the pending-queue entry.
+            done.append(id_)
+            queued += 1
+    schedule.mark_delivered(conn, done)
+    return delivered, queued
+
+if __name__ == "__main__":
+    cli_main(run)

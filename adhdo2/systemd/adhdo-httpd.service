@@ -1,0 +1,11 @@
+[Unit]
+Description=ADHDo TTS cache static server
+After=network-online.target
+
+[Service]
+Environment=ADHDO_HOME=%h/adhdo2
+ExecStart=%h/adhdo2/venv/bin/python %h/adhdo2/bin/adhdo-httpd
+Restart=always
+
+[Install]
+WantedBy=default.target
