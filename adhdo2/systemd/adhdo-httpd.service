@@ -1,0 +1,11 @@
+[Unit]
+Description=ADHDo TTS cache static server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/adhdo2/tts-cache
+ExecStart=/usr/bin/python3 -m http.server 8765 --bind 0.0.0.0
+Restart=always
+
+[Install]
+WantedBy=default.target

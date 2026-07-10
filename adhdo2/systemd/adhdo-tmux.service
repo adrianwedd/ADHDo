@@ -1,0 +1,14 @@
+[Unit]
+Description=ADHDo tmux server with resident Claude session
+After=network-online.target
+
+[Service]
+Type=forking
+Environment=ADHDO_HOME=%h/adhdo2
+ExecStart=/usr/bin/tmux new-session -d -s adhdo -c %h/adhdo2/session \
+  "ADHDO_HOME=%h/adhdo2 claude --dangerously-skip-permissions"
+ExecStop=/usr/bin/tmux kill-session -t adhdo
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

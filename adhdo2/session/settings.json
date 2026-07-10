@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command",
+      "command": "touch \"$ADHDO_HOME/data/busy\""}]}],
+    "Stop": [{"hooks": [{"type": "command",
+      "command": "rm -f \"$ADHDO_HOME/data/busy\""}]}]
+  }
+}
