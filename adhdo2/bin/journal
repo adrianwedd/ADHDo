@@ -21,6 +21,17 @@ def cmd_recent(conn, args):
         {"ts": r[0], "source": r[1], "type": r[2],
          "payload": json.loads(r[3]) if r[3] else None} for r in rows]}
 
+def _daypart(hour: int) -> str:
+    if hour < 6:
+        return "night"
+    if hour < 12:
+        return "morning"
+    if hour < 18:
+        return "afternoon"
+    if hour < 22:
+        return "evening"
+    return "night"
+
 def cmd_patterns(conn, args):
     cutoff = time.time() - 30 * 86400
     by_hour, by_type, moods, streaks = {}, {}, {}, {}
@@ -32,10 +43,13 @@ def cmd_patterns(conn, args):
         "SELECT COALESCE(json_extract(payload_json,'$.urgency'),'unknown'), COUNT(*) "
         "FROM events WHERE type='nudge' AND ts>? GROUP BY 1", (cutoff,)):
         by_type[t] = n
-    for (dp, n) in conn.execute(
-        "SELECT COALESCE(json_extract(payload_json,'$.mood'),'unknown'), COUNT(*) "
-        "FROM events WHERE type='cast' AND ts>? GROUP BY 1", (cutoff,)):
-        moods[dp] = n
+    for (h, mood, n) in conn.execute(
+        "SELECT strftime('%H', ts, 'unixepoch', 'localtime'), "
+        "COALESCE(json_extract(payload_json,'$.mood'),'unknown'), COUNT(*) "
+        "FROM events WHERE type='cast' AND ts>? GROUP BY 1, 2", (cutoff,)):
+        dp = _daypart(int(h))
+        bucket = moods.setdefault(dp, {})
+        bucket[mood] = bucket.get(mood, 0) + n
     for (t, n) in conn.execute(
         "SELECT type, COUNT(DISTINCT date(ts,'unixepoch','localtime')) "
         "FROM events WHERE type IN ('med','meal','break') AND ts>? GROUP BY 1",

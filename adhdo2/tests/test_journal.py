@@ -28,3 +28,19 @@ def test_patterns_shape(adhdo_home):
                 "nudge_response_rate_by_type", "mood_by_daypart",
                 "event_streaks"):
         assert key in out
+
+def test_patterns_nudge_response_rate_by_type_values(adhdo_home):
+    run_cli(adhdo_home, "log", "nudge", json.dumps({"urgency": "high"}))
+    code, out = run_cli(adhdo_home, "patterns")
+    assert code == 0
+    assert out["nudge_response_rate_by_type"] == {"high": 1}
+
+def test_patterns_mood_by_daypart_nested(adhdo_home):
+    run_cli(adhdo_home, "log", "cast", json.dumps({"mood": "focused"}))
+    code, out = run_cli(adhdo_home, "patterns")
+    assert code == 0
+    moods = out["mood_by_daypart"]
+    assert len(moods) >= 1
+    found = any(mood_counts.get("focused") == 1
+                for mood_counts in moods.values())
+    assert found

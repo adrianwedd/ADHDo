@@ -34,8 +34,16 @@ def connect() -> sqlite3.Connection:
 def log_event(conn, source: str, type: str, payload: str):
     if type not in EVENT_TYPES:
         raise ValueError(f"unknown event type: {type}")
+    if isinstance(payload, str):
+        try:
+            json.loads(payload)
+            payload_json = payload
+        except (ValueError, TypeError):
+            payload_json = json.dumps(payload)
+    else:
+        payload_json = json.dumps(payload)
     conn.execute("INSERT INTO events(ts, source, type, payload_json) VALUES(?,?,?,?)",
-                 (time.time(), source, type, json.dumps(payload)))
+                 (time.time(), source, type, payload_json))
     conn.commit()
 
 def audit(conn, tool: str, argv: list, ok: bool, detail: str = ""):
