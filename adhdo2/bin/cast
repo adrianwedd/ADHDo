@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import argparse, json, random, sys, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import argparse, json, random, time
 from pathlib import Path
 from adhdolib import db
 from adhdolib.config import load_config, home

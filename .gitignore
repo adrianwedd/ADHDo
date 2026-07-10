@@ -153,5 +153,7 @@ archived*/
 *_report.md
 github_issue_grooming_report.md
 
-# Proxy and utility scripts  
+# Proxy and utility scripts
 oauth_proxy.py
+
+adhdo2/tests/__pycache__/

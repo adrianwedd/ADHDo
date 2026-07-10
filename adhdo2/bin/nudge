@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import argparse, hashlib, json, shutil, subprocess, sys, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import argparse, hashlib, json, shutil, subprocess, time
 from datetime import datetime
 from pathlib import Path
 from adhdolib import db

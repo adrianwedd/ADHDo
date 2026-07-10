@@ -2,12 +2,14 @@
 # @reboot: deliver one consolidated missed-events wake after the session is up.
 sleep 120
 ~/adhdo2/venv/bin/python - <<'EOF'
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.home() / "adhdo2"))
+
 import time
 from adhdolib import db, schedule
 from adhdolib.config import load_config
-import importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("wake_cli", pathlib.Path.home() / "adhdo2/bin/wake")
-wake = importlib.util.module_from_spec(spec); spec.loader.exec_module(wake)
+from adhdolib.binload import load_bin_module
+wake = load_bin_module("wake")
 conn = db.connect()
 row = conn.execute("SELECT MAX(ts) FROM events WHERE type='wake'").fetchone()
 last = row[0] or (time.time() - 86400)

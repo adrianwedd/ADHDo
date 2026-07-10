@@ -6,3 +6,6 @@ dependencies = ["PyYAML>=6", "pychromecast>=14"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["adhdolib"]

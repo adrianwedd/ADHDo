@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-import importlib.machinery, importlib.util, os, pathlib, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import fcntl, os, time
 from adhdolib import db, schedule
+from adhdolib.binload import load_bin_module
 from adhdolib.config import home
 from adhdolib.envelope import cli_main
 
 def _wake():
-    loader = importlib.machinery.SourceFileLoader(
-        "wake_cli", str(pathlib.Path(__file__).parent / "wake"))
-    spec = importlib.util.spec_from_file_location(
-        "wake_cli", pathlib.Path(__file__).parent / "wake", loader=loader)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return load_bin_module("wake")
 
 def inject(text):
     return _wake().inject(text)
@@ -33,13 +31,22 @@ def run(_test_conn=None):
     # leftover lines in first so nothing is dropped. A crash mid-loop this
     # time just leaves the remainder in pending.processing for next run:
     # at-least-once delivery (possible duplicates) is acceptable, loss is not.
-    if processing.exists() and pending.exists():
-        leftover = [l for l in processing.read_text().splitlines() if l.strip()]
-        new_lines = [l for l in pending.read_text().splitlines() if l.strip()]
-        processing.write_text("\n".join(leftover + new_lines) + ("\n" if leftover + new_lines else ""))
-        pending.unlink()
-    elif pending.exists():
-        os.replace(str(pending), str(processing))
+    # Hold wake.lock only for the merge/rename of pending.txt -> pending.processing,
+    # since wake.inject() also takes this lock to append to pending.txt: if we
+    # held it across the inject loop below, a "queued" inject() call would
+    # deadlock trying to re-acquire it. Only dispatch ever touches
+    # pending.processing, so the trailing unlink() doesn't need the lock either.
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(data_dir / "wake.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if processing.exists() and pending.exists():
+            leftover = [l for l in processing.read_text().splitlines() if l.strip()]
+            new_lines = [l for l in pending.read_text().splitlines() if l.strip()]
+            processing.write_text("\n".join(leftover + new_lines) + ("\n" if leftover + new_lines else ""))
+            pending.unlink()
+        elif pending.exists():
+            os.replace(str(pending), str(processing))
+        fcntl.flock(lock, fcntl.LOCK_UN)
 
     if processing.exists():
         lines = [l for l in processing.read_text().splitlines() if l.strip()]

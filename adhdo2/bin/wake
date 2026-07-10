@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import argparse, fcntl, subprocess, sys, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import argparse, fcntl, subprocess, time
 from datetime import datetime, timedelta
 from adhdolib import db, schedule
 from adhdolib.config import home
@@ -23,7 +26,7 @@ def inject(text: str) -> str:
                 with open(data / "pending.txt", "a") as f:
                     f.write(text + "\n")
                 return "queued"
-            busy.unlink()  # stale
+            busy.unlink(missing_ok=True)  # stale
         run_tmux(["send-keys", "-t", "adhdo", "-l", text])
         run_tmux(["send-keys", "-t", "adhdo", "Enter"])
         return "sent"

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import json, sys, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import json, time
 from adhdolib import db
 from adhdolib.envelope import ToolError, cli_main
 

@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-import json, shutil, sys, time
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import json, shutil, time
 from datetime import datetime
 from adhdolib import db
+from adhdolib.binload import load_bin_module
 from adhdolib.config import load_config, home
 from adhdolib.envelope import cli_main, ToolError
 
 def scan_devices(cfg):
-    import importlib.util, importlib.machinery, pathlib
-    path = pathlib.Path(__file__).parent / "cast"
-    loader = importlib.machinery.SourceFileLoader("cast_cli", str(path))
-    spec = importlib.util.spec_from_file_location("cast_cli", str(path), loader=loader)
-    cast = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cast)
+    cast = load_bin_module("cast")
     return cast.device_status(cfg)
 
 def _devices(cfg):
