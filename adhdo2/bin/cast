@@ -2,14 +2,11 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import json, os, random, re, time
+import json, os, random, time
 from pathlib import Path
 from adhdolib import db
 from adhdolib.config import load_config, home
-from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic
-
-def _redact(url: str) -> str:
-    return re.sub(r"api_key=[^&]+", "api_key=REDACTED", url)
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic, scrub
 
 def resolve_mood(mood_or_url: str, cfg: dict):
     if mood_or_url.startswith(("http://", "https://")):
@@ -90,7 +87,7 @@ def run(argv, _test_conn=None, _test_cfg=None):
             os.chmod(np_path, 0o600)
             db.log_event(conn, "cast", "cast",
                          json.dumps({"mood": args.arg, "device": device}))
-            out = {"playing": _redact(url), "device": device, "source": source}
+            out = {"playing": scrub(url), "device": device, "source": source}
         elif args.cmd == "stop":
             device = args.device or cfg["default_device"]
             real = cfg["devices"].get(device, device)

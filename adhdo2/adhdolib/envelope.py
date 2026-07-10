@@ -1,5 +1,11 @@
-import argparse, json, os, sys, traceback
+import argparse, json, os, sys, traceback, re
 from pathlib import Path
+
+_SECRET_RE = re.compile(r"(api_key|apikey|token|password|secret)=[^&\s\"']+", re.I)
+
+def scrub(text: str) -> str:
+    """Redact sensitive data from text: replaces secret values with REDACTED."""
+    return _SECRET_RE.sub(r"\1=REDACTED", text)
 
 class ToolError(Exception):
     def __init__(self, code: str, detail: str = ""):
@@ -24,16 +30,16 @@ def write_atomic(path, text: str) -> None:
 def cli_main(fn):
     try:
         out = fn()
-        print(json.dumps(out, default=str))
+        print(scrub(json.dumps(out, default=str)))
         sys.exit(0)
     except ToolError as e:
-        print(json.dumps({"error": e.code, "detail": e.detail}))
+        print(json.dumps({"error": e.code, "detail": scrub(e.detail)}))
         sys.exit(1)
     except SystemExit:
         raise
     except BaseException as e:
         tail = "".join(traceback.format_tb(e.__traceback__)[-3:])
         print(json.dumps({"error": "crash",
-                          "detail": f"{type(e).__name__}: {e}",
-                          "trace_tail": tail}))
+                          "detail": scrub(f"{type(e).__name__}: {e}"),
+                          "trace_tail": scrub(tail)}))
         sys.exit(1)

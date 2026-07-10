@@ -1,6 +1,6 @@
 import json, subprocess, sys, pathlib
 import pytest
-from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic, scrub
 
 def run(fn, capsys):
     with pytest.raises(SystemExit) as e:
@@ -48,3 +48,61 @@ def test_write_atomic(tmp_path):
     assert not (tmp_path / "data.json.tmp").exists()
     write_atomic(target, '{"a": 2}')
     assert target.read_text() == '{"a": 2}'
+
+def test_scrub_api_key():
+    text = "GET http://x/Items?api_key=SECRET123 failed"
+    scrubbed = scrub(text)
+    assert "SECRET123" not in scrubbed
+    assert "api_key=REDACTED" in scrubbed
+
+def test_scrub_multiple_patterns():
+    text = "api_key=SECRET1 token=SECRET2 password=SECRET3 apikey=SECRET4"
+    scrubbed = scrub(text)
+    assert "SECRET1" not in scrubbed
+    assert "SECRET2" not in scrubbed
+    assert "SECRET3" not in scrubbed
+    assert "SECRET4" not in scrubbed
+    assert "api_key=REDACTED" in scrubbed
+    assert "token=REDACTED" in scrubbed
+    assert "password=REDACTED" in scrubbed
+    assert "apikey=REDACTED" in scrubbed
+
+def test_scrub_url_with_multiple_params():
+    url = "http://x?api_key=SECRET&user=alice&token=MY_TOKEN"
+    scrubbed = scrub(url)
+    assert "SECRET" not in scrubbed
+    assert "MY_TOKEN" not in scrubbed
+    assert "user=alice" in scrubbed
+    assert "api_key=REDACTED" in scrubbed
+    assert "token=REDACTED" in scrubbed
+
+def test_tool_error_detail_scrubbed(capsys):
+    def f(): raise ToolError("jellyfin_error", "GET http://x/Items?api_key=SECRET123 failed")
+    code, out = run(f, capsys)
+    assert code == 1
+    assert out["error"] == "jellyfin_error"
+    assert "SECRET123" not in out["detail"]
+    assert "api_key=REDACTED" in out["detail"]
+
+def test_success_with_secret_url_scrubbed(capsys):
+    def f(): return {"url": "http://x?api_key=SECRET"}
+    code, out = run(f, capsys)
+    assert code == 0
+    assert "SECRET" not in json.dumps(out)
+    assert "api_key=REDACTED" in json.dumps(out)
+
+def test_crash_detail_scrubbed(capsys):
+    def f(): raise ValueError("api_key=SECRET123")
+    code, out = run(f, capsys)
+    assert code == 1
+    assert out["error"] == "crash"
+    assert "SECRET123" not in out["detail"]
+    assert "api_key=REDACTED" in out["detail"]
+
+def test_crash_trace_scrubbed(capsys):
+    def inner(): raise ValueError("token=MYSECRET")
+    def f(): inner()
+    code, out = run(f, capsys)
+    assert code == 1
+    assert "MYSECRET" not in out["trace_tail"]
+    assert "token=REDACTED" in out["trace_tail"]
