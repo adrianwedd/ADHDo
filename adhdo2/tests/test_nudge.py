@@ -42,3 +42,17 @@ def test_tts_failure_enveloped(adhdo_home, monkeypatch):
         nudge.run(["hi"], _test_conn=conn)
     assert e.value.code == "tts_failed"
     assert conn.execute("SELECT ok FROM audit WHERE tool='nudge'").fetchone()[0] == 0
+
+def test_non_toolerrror_crash_audited(adhdo_home, monkeypatch):
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    def boom(text, d): raise RuntimeError("boom")
+    monkeypatch.setattr(nudge, "synthesize", boom)
+    conn = db.connect()
+    with pytest.raises(RuntimeError) as e:
+        nudge.run(["hi"], _test_conn=conn)
+    assert str(e.value) == "boom"
+    audit_row = conn.execute("SELECT ok, detail FROM audit WHERE tool='nudge'").fetchone()
+    assert audit_row is not None
+    assert audit_row[0] == 0  # ok = False
+    assert "crash: RuntimeError" in audit_row[1]  # detail contains crash info

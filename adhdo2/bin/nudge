@@ -87,6 +87,9 @@ def run(argv, _test_conn=None):
     except ToolError as e:
         db.audit(conn, "nudge", argv, False, e.code)
         raise
+    except Exception as e:
+        db.audit(conn, "nudge", argv, False, f"crash: {type(e).__name__}")
+        raise
 
 if __name__ == "__main__":
     cli_main(lambda: run(sys.argv[1:]))
