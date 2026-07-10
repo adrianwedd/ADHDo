@@ -9,7 +9,7 @@ ssh pi@pi5-hailo '
   cd ~/adhdo2
   [ -d venv ] || python3 -m venv venv
   venv/bin/pip -q install PyYAML pychromecast pytest
-  mkdir -p data tts-cache
+  mkdir -p data tts-cache jellyfin/config
   [ -f config.yaml ] || cp config.example.yaml config.yaml
   mkdir -p ~/.config/systemd/user
   cp systemd/*.service ~/.config/systemd/user/

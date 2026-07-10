@@ -6,9 +6,10 @@ from adhdolib.config import load_config, home
 from adhdolib.envelope import cli_main, ToolError
 
 def scan_devices(cfg):
-    import importlib.util, pathlib
-    spec = importlib.util.spec_from_file_location(
-        "cast_cli", pathlib.Path(__file__).parent / "cast")
+    import importlib.util, importlib.machinery, pathlib
+    path = pathlib.Path(__file__).parent / "cast"
+    loader = importlib.machinery.SourceFileLoader("cast_cli", str(path))
+    spec = importlib.util.spec_from_file_location("cast_cli", str(path), loader=loader)
     cast = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cast)
     return cast.device_status(cfg)
