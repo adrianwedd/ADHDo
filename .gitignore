@@ -112,6 +112,7 @@ tunnel-*.txt
 # Test files
 test_*.py
 test_*.json
+!adhdo2/tests/**
 
 # Temporary files
 *.txt
