@@ -1,0 +1,18 @@
+lan_ip: 192.168.x.x          # static; used by httpd + cast URLs
+httpd_port: 8765
+devices:                      # friendly-name → cast device
+  office: "Nest Hub Max"
+  kitchen: "Nest Mini"
+default_device: office
+moods:
+  focus:  {jellyfin_playlist: "<id>", streams: ["https://..."]}
+  calm:   {jellyfin_playlist: "<id>", streams: ["https://..."]}
+jellyfin: {url: "http://<lan_ip>:8096", api_key: "..."}
+nudge:
+  max_per_hour: 4
+  quiet_hours: ["22:00", "07:00"]
+  high_urgency_events: [medication, safety, user_requested]
+disk_warn_pct: 94
+crisis:
+  contacts: ["Lifeline Australia 13 11 14"]
+telegram: {chat_id_allowlist: []}      # P3
