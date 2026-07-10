@@ -2,12 +2,12 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import argparse, hashlib, json, shutil, subprocess, time
+import hashlib, json, shutil, subprocess, time
 from datetime import datetime
 from pathlib import Path
 from adhdolib import db
 from adhdolib.config import load_config, home
-from adhdolib.envelope import ToolError, cli_main
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main
 from adhdolib.nudgelimits import check_allowed
 
 def synthesize(text: str, cache_dir: Path) -> Path:
@@ -20,7 +20,8 @@ def synthesize(text: str, cache_dir: Path) -> Path:
         subprocess.run(["piper", "--output_file", str(wav)],
                        input=text.encode(), check=True, timeout=60)
     elif shutil.which("espeak-ng"):
-        subprocess.run(["espeak-ng", "-w", str(wav), text], check=True, timeout=60)
+        subprocess.run(["espeak-ng", "--stdin", "-w", str(wav)],
+                       input=text.encode(), check=True, timeout=60)
     else:
         raise ToolError("tts_failed", "neither piper nor espeak-ng found")
     if not shutil.which("ffmpeg"):
@@ -45,6 +46,31 @@ def play_url_on_device(url: str, device_name: str, cfg: dict):
     cc.media_controller.block_until_active(timeout=15)
     browser.stop_discovery()
 
+def wait_until_idle(device_name: str, cfg: dict, timeout: int = 30) -> bool:
+    """Poll the device's media_controller.status every second until the
+    player is IDLE/UNKNOWN or timeout elapses. Returns True if it became
+    idle, False on timeout. Module-level so tests can monkeypatch it."""
+    try:
+        import pychromecast
+    except ImportError:
+        return False
+    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
+    if not casts:
+        return False
+    cc = casts[0]
+    try:
+        cc.wait(timeout=5)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            s = cc.media_controller.status
+            state = getattr(s, "player_state", None)
+            if state in (None, "IDLE", "UNKNOWN"):
+                return True
+            time.sleep(1)
+        return False
+    finally:
+        browser.stop_discovery()
+
 def _resume_previous(cfg) -> bool:
     np = home() / "data" / "now_playing.json"
     if not np.exists():
@@ -59,7 +85,7 @@ def _resume_previous(cfg) -> bool:
         return False
 
 def run(argv, _test_conn=None):
-    ap = argparse.ArgumentParser(prog="nudge")
+    ap = ToolArgumentParser(prog="nudge")
     ap.add_argument("text")
     ap.add_argument("--device")
     ap.add_argument("--urgency", choices=["low", "med", "high"], default="low")
@@ -81,7 +107,7 @@ def run(argv, _test_conn=None):
         mp3 = synthesize(args.text, home() / "tts-cache")
         url = f"http://{cfg['lan_ip']}:{cfg['httpd_port']}/{mp3.name}"
         play_url_on_device(url, real_name, cfg)
-        time.sleep(1)
+        wait_until_idle(real_name, cfg)
         resumed = _resume_previous(cfg)
         db.log_event(conn, "nudge", "nudge", json.dumps(
             {"text": args.text, "urgency": args.urgency, "device": device}))

@@ -32,6 +32,21 @@ def test_successful_nudge_audits_and_journals(adhdo_home, monkeypatch):
     assert conn.execute("SELECT COUNT(*) FROM events WHERE type='nudge'").fetchone()[0] == 1
     assert conn.execute("SELECT COUNT(*) FROM audit WHERE tool='nudge'").fetchone()[0] == 1
 
+def test_wait_until_idle_called_between_play_and_resume(adhdo_home, monkeypatch):
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    order = []
+    monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "x.mp3")
+    monkeypatch.setattr(nudge, "play_url_on_device",
+                        lambda url, dev, cfg: order.append("play"))
+    monkeypatch.setattr(nudge, "wait_until_idle",
+                        lambda dev, cfg, timeout=30: order.append("wait") or True)
+    monkeypatch.setattr(nudge, "_resume_previous",
+                        lambda cfg: order.append("resume") or False)
+    conn = db.connect()
+    out = nudge.run(["step away"], _test_conn=conn)
+    assert order == ["play", "wait", "resume"]
+
 def test_tts_failure_enveloped(adhdo_home, monkeypatch):
     (adhdo_home / "config.yaml").write_text("default_device: office\n")
     nudge = load_nudge()

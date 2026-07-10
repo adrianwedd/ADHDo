@@ -7,7 +7,7 @@ from datetime import datetime
 from adhdolib import db
 from adhdolib.binload import load_bin_module
 from adhdolib.config import load_config, home
-from adhdolib.envelope import cli_main, ToolError
+from adhdolib.envelope import cli_main, ToolError, write_atomic
 
 def scan_devices(cfg):
     cast = load_bin_module("cast")
@@ -19,7 +19,7 @@ def _devices(cfg):
         return json.loads(cache.read_text())
     devs = scan_devices(cfg)
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps(devs))
+    write_atomic(cache, json.dumps(devs))
     return devs
 
 def _day_part(h):

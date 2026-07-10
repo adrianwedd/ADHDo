@@ -6,7 +6,7 @@ import fcntl, os, time
 from adhdolib import db, schedule
 from adhdolib.binload import load_bin_module
 from adhdolib.config import home
-from adhdolib.envelope import cli_main
+from adhdolib.envelope import cli_main, write_atomic
 
 def _wake():
     return load_bin_module("wake")
@@ -16,6 +16,15 @@ def inject(text):
 
 def run(_test_conn=None):
     conn = _test_conn or db.connect()
+    try:
+        n_sent, n_queued = _run(conn)
+        db.audit(conn, "adhdo-dispatch", [], True, f"sent={n_sent} queued={n_queued}")
+        return {"delivered": n_sent, "queued": n_queued}
+    except Exception as e:
+        db.audit(conn, "adhdo-dispatch", [], False, f"crash: {type(e).__name__}: {e}")
+        raise
+
+def _run(conn):
     delivered = 0
     queued = 0
     data_dir = home() / "data"
@@ -42,7 +51,8 @@ def run(_test_conn=None):
         if processing.exists() and pending.exists():
             leftover = [l for l in processing.read_text().splitlines() if l.strip()]
             new_lines = [l for l in pending.read_text().splitlines() if l.strip()]
-            processing.write_text("\n".join(leftover + new_lines) + ("\n" if leftover + new_lines else ""))
+            merged = leftover + new_lines
+            write_atomic(processing, "\n".join(merged) + ("\n" if merged else ""))
             pending.unlink()
         elif pending.exists():
             os.replace(str(pending), str(processing))
@@ -74,7 +84,7 @@ def run(_test_conn=None):
             done.append(id_)
             queued += 1
     schedule.mark_delivered(conn, done)
-    return {"delivered": delivered, "queued": queued}
+    return delivered, queued
 
 if __name__ == "__main__":
     cli_main(run)

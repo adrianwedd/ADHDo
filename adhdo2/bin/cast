@@ -2,11 +2,14 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import argparse, json, random, time
+import json, os, random, re, time
 from pathlib import Path
 from adhdolib import db
 from adhdolib.config import load_config, home
-from adhdolib.envelope import ToolError, cli_main
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic
+
+def _redact(url: str) -> str:
+    return re.sub(r"api_key=[^&]+", "api_key=REDACTED", url)
 
 def resolve_mood(mood_or_url: str, cfg: dict):
     if mood_or_url.startswith(("http://", "https://")):
@@ -35,28 +38,36 @@ def resolve_mood(mood_or_url: str, cfg: dict):
 def play_on_device(url: str, device_name: str):
     import pychromecast
     casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
-    if not casts:
-        raise ToolError("no_devices", f"{device_name} not found")
-    cc = casts[0]; cc.wait()
-    cc.media_controller.play_media(url, "audio/mpeg")
-    cc.media_controller.block_until_active(timeout=15)
-    browser.stop_discovery()
+    try:
+        if not casts:
+            raise ToolError("no_devices", f"{device_name} not found")
+        cc = casts[0]; cc.wait()
+        cc.media_controller.play_media(url, "audio/mpeg")
+        cc.media_controller.block_until_active(timeout=15)
+    finally:
+        browser.stop_discovery()
 
 def device_status(cfg):
     import pychromecast
     names = list(cfg["devices"].values())
     casts, browser = pychromecast.get_listed_chromecasts(friendly_names=names)
-    online = {}
-    for cc in casts:
-        cc.wait(timeout=5)
-        s = cc.media_controller.status
-        online[cc.name] = s.title if s and s.player_is_playing else None
-    browser.stop_discovery()
-    return [{"name": n, "online": n in online, "now_playing": online.get(n)}
-            for n in names]
+    try:
+        now_playing = {}
+        for cc in casts:
+            try:
+                cc.wait(timeout=5)
+                s = cc.media_controller.status
+                now_playing[cc.name] = s.title if s and s.player_is_playing else None
+            except Exception:
+                pass  # this device errored; treat as offline below
+        return [{"name": n, "online": n in now_playing,
+                 "now_playing": now_playing.get(n)}
+                for n in names]
+    finally:
+        browser.stop_discovery()
 
 def run(argv, _test_conn=None, _test_cfg=None):
-    ap = argparse.ArgumentParser(prog="cast")
+    ap = ToolArgumentParser(prog="cast")
     ap.add_argument("cmd", choices=["play", "stop", "volume", "status"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("--device")
@@ -73,19 +84,22 @@ def run(argv, _test_conn=None, _test_cfg=None):
             real = cfg["devices"].get(device, device)
             play_on_device(url, real)
             np_path.parent.mkdir(parents=True, exist_ok=True)
-            np_path.write_text(json.dumps(
+            write_atomic(np_path, json.dumps(
                 {"url": url, "device": real, "mood": args.arg,
                  "started_ts": time.time()}))
+            os.chmod(np_path, 0o600)
             db.log_event(conn, "cast", "cast",
                          json.dumps({"mood": args.arg, "device": device}))
-            out = {"playing": url, "device": device, "source": source}
+            out = {"playing": _redact(url), "device": device, "source": source}
         elif args.cmd == "stop":
             device = args.device or cfg["default_device"]
             real = cfg["devices"].get(device, device)
             import pychromecast
             casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
-            if casts:
-                casts[0].wait(); casts[0].media_controller.stop()
+            try:
+                if casts:
+                    casts[0].wait(); casts[0].media_controller.stop()
+            finally:
                 browser.stop_discovery()
             np_path.unlink(missing_ok=True)
             out = {"stopped": True}
@@ -97,10 +111,12 @@ def run(argv, _test_conn=None, _test_cfg=None):
             real = cfg["devices"].get(device, device)
             import pychromecast
             casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
-            if not casts:
-                raise ToolError("no_devices", f"{real} not found")
-            casts[0].wait(); casts[0].set_volume(level)
-            browser.stop_discovery()
+            try:
+                if not casts:
+                    raise ToolError("no_devices", f"{real} not found")
+                casts[0].wait(); casts[0].set_volume(level)
+            finally:
+                browser.stop_discovery()
             out = {"volume": level}
         else:
             out = {"devices": device_status(cfg)}

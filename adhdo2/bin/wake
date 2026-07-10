@@ -2,11 +2,11 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import argparse, fcntl, subprocess, time
+import fcntl, subprocess, time
 from datetime import datetime, timedelta
 from adhdolib import db, schedule
 from adhdolib.config import home
-from adhdolib.envelope import ToolError, cli_main
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main
 from adhdolib.sanitize import clean
 
 BUSY_STALE_S = 15 * 60
@@ -21,13 +21,20 @@ def inject(text: str) -> str:
     with open(data / "wake.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         busy = data / "busy"
-        if busy.exists():
-            if time.time() - busy.stat().st_mtime < BUSY_STALE_S:
-                with open(data / "pending.txt", "a") as f:
-                    f.write(text + "\n")
-                return "queued"
-            busy.unlink(missing_ok=True)  # stale
-        run_tmux(["send-keys", "-t", "adhdo", "-l", text])
+        try:
+            is_busy = busy.exists() and (time.time() - busy.stat().st_mtime < BUSY_STALE_S)
+        except FileNotFoundError:
+            # marker vanished between exists() and stat() - treat as idle
+            is_busy = False
+        if is_busy:
+            with open(data / "pending.txt", "a") as f:
+                f.write(text + "\n")
+            return "queued"
+        try:
+            busy.unlink(missing_ok=True)  # stale (or never existed)
+        except FileNotFoundError:
+            pass
+        run_tmux(["send-keys", "-t", "adhdo", "-l", "--", text])
         run_tmux(["send-keys", "-t", "adhdo", "Enter"])
         return "sent"
 
@@ -41,7 +48,7 @@ def _parse_at(s: str) -> float:
     return datetime.fromisoformat(s).timestamp()
 
 def run(argv, _test_conn=None):
-    ap = argparse.ArgumentParser(prog="wake")
+    ap = ToolArgumentParser(prog="wake")
     ap.add_argument("prompt", nargs="?")
     ap.add_argument("--event")
     ap.add_argument("--at")

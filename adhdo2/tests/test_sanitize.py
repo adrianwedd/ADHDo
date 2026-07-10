@@ -8,3 +8,6 @@ def test_newlines_collapsed():
 
 def test_length_capped():
     assert len(clean("x" * 9000)) == 4000
+
+def test_del_char_stripped():
+    assert clean("a\x7fb") == "ab"
