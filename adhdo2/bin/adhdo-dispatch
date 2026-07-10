@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+import importlib.machinery, importlib.util, pathlib, time
+from adhdolib import db, schedule
+from adhdolib.config import home
+from adhdolib.envelope import cli_main
+
+def _wake():
+    loader = importlib.machinery.SourceFileLoader(
+        "wake_cli", str(pathlib.Path(__file__).parent / "wake"))
+    spec = importlib.util.spec_from_file_location(
+        "wake_cli", pathlib.Path(__file__).parent / "wake", loader=loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+def inject(text):
+    return _wake().inject(text)
+
+def run(_test_conn=None):
+    conn = _test_conn or db.connect()
+    delivered = 0
+    pending = home() / "data" / "pending.txt"
+    if pending.exists():
+        lines = [l for l in pending.read_text().splitlines() if l.strip()]
+        pending.unlink()
+        # inject() re-appends to pending.txt itself when it returns "queued",
+        # so we must not also re-append here (would double-append/duplicate).
+        for line in lines:
+            if inject(line) == "sent":
+                delivered += 1
+    now = time.time()
+    done = []
+    for id_, tag in schedule.due(conn, now):
+        if inject(f"[scheduled:{tag}] Follow-up you set is due.") == "sent":
+            done.append(id_)
+            delivered += 1
+    schedule.mark_delivered(conn, done)
+    return {"delivered": delivered}
+
+if __name__ == "__main__":
+    cli_main(run)
