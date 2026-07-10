@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+import json, sys, time
+from adhdolib import db
+from adhdolib.envelope import ToolError, cli_main
+
+def cmd_log(conn, args):
+    if len(args) < 2:
+        raise ToolError("usage", "journal log <type> <text>")
+    type_, text = args[0], " ".join(args[1:])
+    if type_ not in db.EVENT_TYPES:
+        raise ToolError("bad_type", f"type must be one of {sorted(db.EVENT_TYPES)}")
+    db.log_event(conn, "session", type_, text)
+    return {"logged": type_}
+
+def cmd_recent(conn, args):
+    n = int(args[0]) if args else 20
+    rows = conn.execute(
+        "SELECT ts, source, type, payload_json FROM events "
+        "ORDER BY ts DESC LIMIT ?", (n,)).fetchall()
+    return {"events": [
+        {"ts": r[0], "source": r[1], "type": r[2],
+         "payload": json.loads(r[3]) if r[3] else None} for r in rows]}
+
+def cmd_patterns(conn, args):
+    cutoff = time.time() - 30 * 86400
+    by_hour, by_type, moods, streaks = {}, {}, {}, {}
+    for (h, n) in conn.execute(
+        "SELECT strftime('%H', ts, 'unixepoch', 'localtime'), COUNT(*) "
+        "FROM events WHERE type='nudge' AND ts>? GROUP BY 1", (cutoff,)):
+        by_hour[h] = n
+    for (t, n) in conn.execute(
+        "SELECT COALESCE(json_extract(payload_json,'$.urgency'),'unknown'), COUNT(*) "
+        "FROM events WHERE type='nudge' AND ts>? GROUP BY 1", (cutoff,)):
+        by_type[t] = n
+    for (dp, n) in conn.execute(
+        "SELECT COALESCE(json_extract(payload_json,'$.mood'),'unknown'), COUNT(*) "
+        "FROM events WHERE type='cast' AND ts>? GROUP BY 1", (cutoff,)):
+        moods[dp] = n
+    for (t, n) in conn.execute(
+        "SELECT type, COUNT(DISTINCT date(ts,'unixepoch','localtime')) "
+        "FROM events WHERE type IN ('med','meal','break') AND ts>? GROUP BY 1",
+        (cutoff,)):
+        streaks[t] = n
+    return {"window_days": 30, "nudge_response_rate_by_hour": by_hour,
+            "nudge_response_rate_by_type": by_type,
+            "mood_by_daypart": moods, "event_streaks": streaks}
+
+def main():
+    if len(sys.argv) < 2:
+        raise ToolError("usage", "journal <log|recent|patterns> ...")
+    conn = db.connect()
+    cmd = {"log": cmd_log, "recent": cmd_recent, "patterns": cmd_patterns}.get(sys.argv[1])
+    if not cmd:
+        raise ToolError("usage", f"unknown subcommand {sys.argv[1]}")
+    return cmd(conn, sys.argv[2:])
+
+if __name__ == "__main__":
+    cli_main(main)
