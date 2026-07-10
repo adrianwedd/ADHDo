@@ -1,0 +1,44 @@
+import importlib.machinery, importlib.util, json, pathlib, time
+import pytest
+from adhdolib import db
+from adhdolib.envelope import ToolError
+
+BIN = pathlib.Path(__file__).resolve().parents[1] / "bin" / "nudge"
+
+def load_nudge():
+    loader = importlib.machinery.SourceFileLoader("nudge_cli", str(BIN))
+    spec = importlib.util.spec_from_file_location("nudge_cli", BIN, loader=loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+def test_rate_limited_returns_distinct_code(adhdo_home, monkeypatch):
+    nudge = load_nudge()
+    conn = db.connect()
+    for _ in range(4):
+        db.log_event(conn, "nudge", "nudge", json.dumps({"urgency": "low"}))
+    with pytest.raises(ToolError) as e:
+        nudge.run(["hello"], _test_conn=conn)
+    assert e.value.code == "rate_limited"
+
+def test_successful_nudge_audits_and_journals(adhdo_home, monkeypatch):
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "x.mp3")
+    monkeypatch.setattr(nudge, "play_url_on_device", lambda url, dev, cfg: None)
+    conn = db.connect()
+    out = nudge.run(["step away", "--urgency", "med"], _test_conn=conn)
+    assert out["nudged"] is True
+    assert conn.execute("SELECT COUNT(*) FROM events WHERE type='nudge'").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM audit WHERE tool='nudge'").fetchone()[0] == 1
+
+def test_tts_failure_enveloped(adhdo_home, monkeypatch):
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    def boom(text, d): raise ToolError("tts_failed", "no engine")
+    monkeypatch.setattr(nudge, "synthesize", boom)
+    conn = db.connect()
+    with pytest.raises(ToolError) as e:
+        nudge.run(["hi"], _test_conn=conn)
+    assert e.value.code == "tts_failed"
+    assert conn.execute("SELECT ok FROM audit WHERE tool='nudge'").fetchone()[0] == 0
