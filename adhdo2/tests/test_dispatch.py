@@ -18,8 +18,9 @@ def test_delivers_pending_and_due(adhdo_home, monkeypatch):
     conn = db.connect()
     schedule.add(conn, time.time() - 5, "checkin")
     out = d.run(_test_conn=conn)
-    assert out == {"delivered": 2}
+    assert out == {"delivered": 2, "queued": 0}
     assert not (adhdo_home / "data" / "pending.txt").exists()
+    assert not (adhdo_home / "data" / "pending.processing").exists()
     assert schedule.due(conn, time.time()) == []
 
 def test_requeues_when_busy(adhdo_home, monkeypatch):
@@ -28,4 +29,27 @@ def test_requeues_when_busy(adhdo_home, monkeypatch):
     (adhdo_home / "data" / "pending.txt").write_text("msg\n")
     conn = db.connect()
     out = d.run(_test_conn=conn)
-    assert out == {"delivered": 0}
+    assert out == {"delivered": 0, "queued": 1}
+    assert not (adhdo_home / "data" / "pending.processing").exists()
+
+def test_crash_recovery_replays_processing_file(adhdo_home, monkeypatch):
+    d = load_dispatch()
+    sent = []
+    monkeypatch.setattr(d, "inject", lambda t: sent.append(t) or "sent")
+    (adhdo_home / "data" / "pending.processing").write_text("leftover msg\n")
+    conn = db.connect()
+    out = d.run(_test_conn=conn)
+    assert sent == ["leftover msg"]
+    assert out == {"delivered": 1, "queued": 0}
+    assert not (adhdo_home / "data" / "pending.processing").exists()
+    assert not (adhdo_home / "data" / "pending.txt").exists()
+
+def test_scheduled_queued_marks_delivered_without_duplicate_fire(adhdo_home, monkeypatch):
+    d = load_dispatch()
+    monkeypatch.setattr(d, "inject", lambda t: "queued")
+    conn = db.connect()
+    schedule.add(conn, time.time() - 5, "checkin")
+    out = d.run(_test_conn=conn)
+    assert out == {"delivered": 0, "queued": 1}
+    # row is marked delivered so it won't fire again next cycle
+    assert schedule.due(conn, time.time()) == []
