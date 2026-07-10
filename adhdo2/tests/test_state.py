@@ -31,3 +31,16 @@ def test_device_cache_used(adhdo_home, monkeypatch):
     st.run([], _test_conn=conn)
     st.run([], _test_conn=conn)
     assert len(calls) == 1  # second call served from 60s cache
+
+def test_non_toolerrror_crash_audited(adhdo_home, monkeypatch):
+    st = load_state()
+    def boom(cfg): raise RuntimeError("boom")
+    monkeypatch.setattr(st, "scan_devices", boom)
+    conn = db.connect()
+    with pytest.raises(RuntimeError) as e:
+        st.run([], _test_conn=conn)
+    assert str(e.value) == "boom"
+    audit_row = conn.execute("SELECT ok, detail FROM audit WHERE tool='state'").fetchone()
+    assert audit_row is not None
+    assert audit_row[0] == 0  # ok = False
+    assert "crash: RuntimeError" in audit_row[1]  # detail contains crash info

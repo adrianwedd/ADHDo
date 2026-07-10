@@ -3,7 +3,7 @@ import json, shutil, sys, time
 from datetime import datetime
 from adhdolib import db
 from adhdolib.config import load_config, home
-from adhdolib.envelope import cli_main
+from adhdolib.envelope import cli_main, ToolError
 
 def scan_devices(cfg):
     import importlib.util, pathlib
@@ -29,20 +29,27 @@ def _day_part(h):
 def run(argv, _test_conn=None):
     cfg = load_config()
     conn = _test_conn or db.connect()
-    now = time.time()
-    last = {}
-    for t in ("med", "meal", "break", "nudge"):
-        row = conn.execute("SELECT MAX(ts) FROM events WHERE type=?", (t,)).fetchone()
-        last[t] = round(now - row[0], 1) if row[0] else None
-    sched = [{"due_ts": r[0], "tag": r[1]} for r in conn.execute(
-        "SELECT due_ts, tag FROM schedule WHERE delivered=0 ORDER BY due_ts LIMIT 10")]
-    du = shutil.disk_usage("/")
-    pct = round(du.used / du.total * 100, 1)
-    out = {"ts": now, "day_part": _day_part(datetime.now().hour),
-           "devices": _devices(cfg), "last": last, "scheduled": sched,
-           "disk": {"pct": pct, "warn": pct >= cfg["disk_warn_pct"]}}
-    db.audit(conn, "state", argv, True, "")
-    return out
+    try:
+        now = time.time()
+        last = {}
+        for t in ("med", "meal", "break", "nudge"):
+            row = conn.execute("SELECT MAX(ts) FROM events WHERE type=?", (t,)).fetchone()
+            last[t] = round(now - row[0], 1) if row[0] else None
+        sched = [{"due_ts": r[0], "tag": r[1]} for r in conn.execute(
+            "SELECT due_ts, tag FROM schedule WHERE delivered=0 ORDER BY due_ts LIMIT 10")]
+        du = shutil.disk_usage("/")
+        pct = round(du.used / du.total * 100, 1)
+        out = {"ts": now, "day_part": _day_part(datetime.now().hour),
+               "devices": _devices(cfg), "last": last, "scheduled": sched,
+               "disk": {"pct": pct, "warn": pct >= cfg["disk_warn_pct"]}}
+        db.audit(conn, "state", argv, True, "")
+        return out
+    except ToolError as e:
+        db.audit(conn, "state", argv, False, e.code)
+        raise
+    except Exception as e:
+        db.audit(conn, "state", argv, False, f"crash: {type(e).__name__}")
+        raise
 
 if __name__ == "__main__":
     cli_main(lambda: run(sys.argv[1:]))
