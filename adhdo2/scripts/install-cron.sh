@@ -11,6 +11,7 @@ cat >> "$TMP" <<CRON
 30 22 * * * ADHDO_HOME=\$HOME/adhdo2 $PY \$HOME/adhdo2/bin/wake --event bedtime >/dev/null 2>&1
 */5 * * * * ADHDO_HOME=\$HOME/adhdo2 $PY \$HOME/adhdo2/bin/adhdo-dispatch >/dev/null 2>&1
 */5 * * * * \$HOME/adhdo2/scripts/adhdo-watchdog.sh >/dev/null 2>&1
+15 3 * * *  \$HOME/adhdo2/scripts/adhdo-rollup.sh >/dev/null 2>&1
 30 3 * * *  \$HOME/adhdo2/scripts/adhdo-recycle.sh >/dev/null 2>&1
 @reboot     \$HOME/adhdo2/scripts/adhdo-catchup.sh >/dev/null 2>&1
 # ADHDO-END
