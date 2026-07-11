@@ -91,6 +91,12 @@ that requires a human physically listening at the Pi's location).
       SKIPPED — explicitly instructed not to reboot the Pi during this
       automated pass.
 
+- [ ] Nightly rollup: after re-running `install-cron.sh` (adds a 03:15
+      `adhdo-rollup.sh` entry), verify next morning that `journal rollup`
+      wrote rows (`sqlite3 ~/adhdo2/data/journal.db "SELECT * FROM rollups"`)
+      and `~/adhdo2/data/backup/journal.db` exists. Depends on cron being
+      enabled (human-gated switch below).
+
 - [ ] Full heartbeat observed: cron fires, session runs state, journals a decision
       SKIPPED — install-cron.sh intentionally NOT run yet (final human-gated
       switch, see Step 4 notes). No heartbeat cron installed, so nothing to

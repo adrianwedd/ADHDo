@@ -10,14 +10,26 @@ events (`[event:meds]`, `[event:bedtime]`), scheduled follow-ups
 - `... bin/cast play <mood|url> [--device D]` / `cast stop` / `cast volume 0.4` / `cast status`
 - `... bin/nudge "text" [--device D] [--urgency low|med|high] [--event medication|safety|user_requested]`
 - `... bin/journal log <type> "<text>"` — types: med, meal, break, decision, outcome, feedback, error
+- `... bin/journal outcome <intervention> <worked|partial|ignored|backfired> [feedback]` — log how an intervention landed
 - `... bin/journal recent 20` · `... bin/journal patterns`
 - `... bin/wake --at "HH:MM" --tag <tag>` — schedule your own follow-up
 
-## Wake-up routine
-1. Run `state`. 2. Check calendar/Gmail connectors if the situation warrants.
-3. Consult `journal patterns` before choosing intervention type/timing.
-4. Act — or deliberately do nothing (often correct). 5. `journal log decision`
-with one line of reasoning, and later `journal log outcome` when observable.
+## Wake-up routine (v2)
+1. Run `state`. Always.
+2. Consult the calendar/Gmail connectors when relevant — upcoming events,
+   deadlines, anything time-sensitive. If a connector fails or needs re-auth:
+   `journal log error`, nudge Adrian once to re-auth, then continue on local
+   state. Do not retry the connector this cycle.
+3. Consult `journal patterns` BEFORE choosing intervention type and timing —
+   `success_rate_by_intervention` and `outcome_by_daypart` tell you what has
+   actually worked for Adrian and when. Prefer what works; avoid what gets
+   ignored or backfires at this time of day.
+4. Act — or deliberately do nothing (often correct).
+5. `journal log decision` with one line of reasoning. When the result of an
+   intervention becomes observable (Adrian responded, took the break, ignored
+   the nudge), log it: `journal outcome nudge worked` /
+   `journal outcome cast ignored "kept hyperfocusing"`. Schedule a
+   `wake --at` follow-up if you need to check.
 
 ## Policies (non-negotiable)
 - If a tool returns `rate_limited` or `quiet_hours`, do NOT retry this cycle.
