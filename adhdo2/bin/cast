@@ -32,12 +32,26 @@ def resolve_mood(mood_or_url: str, cfg: dict):
         return random.choice(streams), "stream"
     raise ToolError("unknown_mood", f"mood '{mood_or_url}' has no playable source")
 
-def play_on_device(url: str, device_name: str):
+def device_not_found(device: str, real: str) -> ToolError:
+    """Uniform device-not-found error across all cast subcommands.
+    Reports the logical (configured) name, plus the real cast name if
+    they differ."""
+    detail = (f"device '{device}' ('{real}') not found"
+              if real != device else f"device '{device}' not found")
+    return ToolError("no_devices", detail)
+
+def resolve_device(requested, cfg):
+    """Map a logical device name (or None for the default) to its real
+    discovered/cast name via the config alias table."""
+    device = requested or cfg["default_device"]
+    return device, cfg["devices"].get(device, device)
+
+def play_on_device(url: str, device: str, real: str):
     import pychromecast
-    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
+    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
     try:
         if not casts:
-            raise ToolError("no_devices", f"{device_name} not found")
+            raise device_not_found(device, real)
         cc = casts[0]; cc.wait()
         cc.media_controller.play_media(url, "audio/mpeg")
         cc.media_controller.block_until_active(timeout=15)
@@ -46,7 +60,8 @@ def play_on_device(url: str, device_name: str):
 
 def device_status(cfg):
     import pychromecast
-    names = list(cfg["devices"].values())
+    aliases = cfg["devices"]  # logical name -> real cast name
+    names = list(aliases.values())
     casts, browser = pychromecast.get_listed_chromecasts(friendly_names=names)
     try:
         now_playing = {}
@@ -57,9 +72,9 @@ def device_status(cfg):
                 now_playing[cc.name] = s.title if s and s.player_is_playing else None
             except Exception:
                 pass  # this device errored; treat as offline below
-        return [{"name": n, "online": n in now_playing,
-                 "now_playing": now_playing.get(n)}
-                for n in names]
+        return [{"device": logical, "name": real, "online": real in now_playing,
+                 "now_playing": now_playing.get(real)}
+                for logical, real in aliases.items()]
     finally:
         browser.stop_discovery()
 
@@ -77,44 +92,51 @@ def run(argv, _test_conn=None, _test_cfg=None):
             if not args.arg:
                 raise ToolError("usage", "cast play <mood|url>")
             url, source = resolve_mood(args.arg, cfg)
-            device = args.device or cfg["default_device"]
-            real = cfg["devices"].get(device, device)
-            play_on_device(url, real)
+            device, real = resolve_device(args.device, cfg)
+            play_on_device(url, device, real)
             np_path.parent.mkdir(parents=True, exist_ok=True)
             write_atomic(np_path, json.dumps(
                 {"url": url, "device": real, "mood": args.arg,
                  "started_ts": time.time()}))
             os.chmod(np_path, 0o600)
             db.log_event(conn, "cast", "cast",
-                         json.dumps({"mood": args.arg, "device": device}))
-            out = {"playing": scrub(url), "device": device, "source": source}
+                         json.dumps({"action": "play", "mood": args.arg,
+                                     "device": device}))
+            out = {"playing": scrub(url), "device": device,
+                   "cast_name": real, "source": source}
         elif args.cmd == "stop":
-            device = args.device or cfg["default_device"]
-            real = cfg["devices"].get(device, device)
-            import pychromecast
-            casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
-            try:
-                if casts:
-                    casts[0].wait(); casts[0].media_controller.stop()
-            finally:
-                browser.stop_discovery()
-            np_path.unlink(missing_ok=True)
-            out = {"stopped": True}
-        elif args.cmd == "volume":
-            level = float(args.arg)
-            if not 0 <= level <= 1:
-                raise ToolError("usage", "volume must be 0..1")
-            device = args.device or cfg["default_device"]
-            real = cfg["devices"].get(device, device)
+            device, real = resolve_device(args.device, cfg)
             import pychromecast
             casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
             try:
                 if not casts:
-                    raise ToolError("no_devices", f"{real} not found")
+                    raise device_not_found(device, real)
+                casts[0].wait(); casts[0].media_controller.stop()
+            finally:
+                browser.stop_discovery()
+            np_path.unlink(missing_ok=True)
+            db.log_event(conn, "cast", "cast",
+                         json.dumps({"action": "stop", "device": device}))
+            out = {"stopped": True, "device": device, "cast_name": real}
+        elif args.cmd == "volume":
+            if args.arg is None:
+                raise ToolError("usage", "cast volume <0..1>")
+            try:
+                level = float(args.arg)
+            except ValueError:
+                raise ToolError("usage", "volume must be 0..1")
+            if not 0 <= level <= 1:
+                raise ToolError("usage", "volume must be 0..1")
+            device, real = resolve_device(args.device, cfg)
+            import pychromecast
+            casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
+            try:
+                if not casts:
+                    raise device_not_found(device, real)
                 casts[0].wait(); casts[0].set_volume(level)
             finally:
                 browser.stop_discovery()
-            out = {"volume": level}
+            out = {"volume": level, "device": device, "cast_name": real}
         else:
             out = {"devices": device_status(cfg)}
         db.audit(conn, "cast", argv, True, "")
