@@ -1,0 +1,11 @@
+[Unit]
+Description=ADHDo read-only LAN dashboard
+After=network-online.target
+
+[Service]
+Environment=ADHDO_HOME=%h/adhdo2
+ExecStart=%h/adhdo2/venv/bin/python %h/adhdo2/bin/adhdo-dashboard
+Restart=always
+
+[Install]
+WantedBy=default.target
