@@ -10,6 +10,20 @@ from adhdolib.config import load_config, home
 from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main
 from adhdolib.nudgelimits import check_allowed
 
+def prune_cache(cache_dir: Path, max_age: float = 86400) -> int:
+    """Delete cached mp3s older than max_age seconds. Runs on every nudge
+    invocation (not just on cache misses) so the cache can't grow unbounded.
+    Returns the number of files removed."""
+    if not cache_dir.is_dir():
+        return 0
+    cutoff = time.time() - max_age
+    removed = 0
+    for f in cache_dir.glob("*.mp3"):
+        if f.stat().st_mtime < cutoff:
+            f.unlink()
+            removed += 1
+    return removed
+
 def synthesize(text: str, cache_dir: Path) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     out = cache_dir / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".mp3")
@@ -29,11 +43,6 @@ def synthesize(text: str, cache_dir: Path) -> Path:
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), str(out)],
                    check=True, timeout=60)
     wav.unlink(missing_ok=True)
-    # prune cache >24h
-    cutoff = time.time() - 86400
-    for f in cache_dir.glob("*.mp3"):
-        if f.stat().st_mtime < cutoff and f != out:
-            f.unlink()
     return out
 
 def play_url_on_device(url: str, device_name: str, cfg: dict):
@@ -104,7 +113,9 @@ def run(argv, _test_conn=None):
         if not device:
             raise ToolError("no_device_configured", "set default_device in config")
         real_name = cfg["devices"].get(device, device)
-        mp3 = synthesize(args.text, home() / "tts-cache")
+        cache_dir = home() / "tts-cache"
+        prune_cache(cache_dir)
+        mp3 = synthesize(args.text, cache_dir)
         url = f"http://{cfg['lan_ip']}:{cfg['httpd_port']}/{mp3.name}"
         play_url_on_device(url, real_name, cfg)
         wait_until_idle(real_name, cfg)

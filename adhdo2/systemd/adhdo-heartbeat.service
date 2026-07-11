@@ -1,0 +1,7 @@
+[Unit]
+Description=ADHDo heartbeat wake (fired by adhdo-heartbeat.timer)
+
+[Service]
+Type=oneshot
+Environment=ADHDO_HOME=%h/adhdo2
+ExecStart=%h/adhdo2/venv/bin/python %h/adhdo2/bin/wake "[heartbeat] Run state, reason, act or do nothing."

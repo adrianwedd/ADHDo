@@ -1,5 +1,15 @@
 # ADHDo 2.0 P1 Hardware E2E (pi5-hailo)
 
+> How boot catch-up interacts with the dispatcher and fixed-event schedule
+> (and why they never double-fire) is documented in
+> [docs/catchup-vs-schedule.md](docs/catchup-vs-schedule.md).
+>
+> Note (P2 quality pass): the heartbeat is no longer a `*/25` cron line —
+> `install-cron.sh` now installs the `adhdo-heartbeat.timer` systemd user
+> timer (true 25-min cadence). On-device step: re-run
+> `~/adhdo2/scripts/install-cron.sh` after the next deploy so the old cron
+> heartbeat line is replaced and the timer is enabled.
+
 Run 2026-07-10, automated portion only (no audible verification performed —
 that requires a human physically listening at the Pi's location).
 

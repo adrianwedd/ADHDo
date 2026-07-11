@@ -58,6 +58,40 @@ def test_tts_failure_enveloped(adhdo_home, monkeypatch):
     assert e.value.code == "tts_failed"
     assert conn.execute("SELECT ok FROM audit WHERE tool='nudge'").fetchone()[0] == 0
 
+def test_prune_cache_removes_only_stale_mp3s(adhdo_home):
+    import os, time as _t
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    old = cache / "old.mp3"; old.write_bytes(b"x")
+    os.utime(old, (_t.time() - 90000, _t.time() - 90000))
+    fresh = cache / "fresh.mp3"; fresh.write_bytes(b"x")
+    other = cache / "old.wav"; other.write_bytes(b"x")
+    os.utime(other, (_t.time() - 90000, _t.time() - 90000))
+    assert nudge.prune_cache(cache) == 1
+    assert not old.exists() and fresh.exists() and other.exists()
+
+def test_prune_cache_missing_dir_is_noop(adhdo_home):
+    nudge = load_nudge()
+    assert nudge.prune_cache(adhdo_home / "nope") == 0
+
+def test_prune_runs_on_every_nudge_even_with_cache_hit(adhdo_home, monkeypatch):
+    import os, time as _t
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    stale = cache / "stale.mp3"; stale.write_bytes(b"x")
+    os.utime(stale, (_t.time() - 90000, _t.time() - 90000))
+    # cache-hit path: synthesize returns an existing file without pruning
+    monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "hit.mp3")
+    monkeypatch.setattr(nudge, "play_url_on_device", lambda url, dev, cfg: None)
+    monkeypatch.setattr(nudge, "wait_until_idle", lambda dev, cfg, timeout=30: True)
+    conn = db.connect()
+    out = nudge.run(["hello there"], _test_conn=conn)
+    assert out["nudged"] is True
+    assert not stale.exists()
+
 def test_non_toolerrror_crash_audited(adhdo_home, monkeypatch):
     (adhdo_home / "config.yaml").write_text("default_device: office\n")
     nudge = load_nudge()
