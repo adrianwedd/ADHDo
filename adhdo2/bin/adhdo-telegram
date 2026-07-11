@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import time
+from adhdolib import db, telegram as tg
+from adhdolib.binload import load_bin_module
+from adhdolib.config import home, load_config
+from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic
+
+
+def read_offset(path) -> int:
+    try:
+        return int(path.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return 0
+
+
+def poll_once(bridge, api, offset_path) -> int:
+    """One getUpdates long-poll cycle: handle every update and persist the
+    advanced offset after each so a crash never re-delivers. Returns the
+    number of updates processed."""
+    offset = read_offset(offset_path)
+    updates = api.get_updates(offset)
+    for upd in updates:
+        write_atomic(offset_path, str(upd["update_id"] + 1))
+        bridge.handle_update(upd)
+    return len(updates)
+
+
+def daemon(cfg, conn, api, once=False):
+    data = home() / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    wake = load_bin_module("wake")
+    bridge = tg.Bridge(cfg, conn, wake.inject, api)
+    offset_path = data / "telegram.offset"
+    n = 0
+    while True:
+        try:
+            n += poll_once(bridge, api, offset_path)
+        except ToolError as e:
+            # transient API/network failure: journal once, back off, keep polling
+            db.log_event(conn, "telegram", "error", f"poll: {e.code}: {e.detail}")
+            if not once:
+                time.sleep(10)
+        if once:
+            return {"polled": True, "handled": n}
+
+
+def run(argv, _test_conn=None):
+    ap = ToolArgumentParser(prog="adhdo-telegram")
+    sub = ap.add_subparsers(dest="cmd")
+    runp = sub.add_parser("run")
+    runp.add_argument("--once", action="store_true")
+    sendp = sub.add_parser("send")
+    sendp.add_argument("chat_id", type=int)
+    sendp.add_argument("text")
+    args = ap.parse_args(argv)
+    if not args.cmd:
+        raise ToolError("usage", "adhdo-telegram run [--once] | send <chat_id> <text>")
+    cfg = load_config()
+    conn = _test_conn or db.connect()
+    api = tg.TelegramAPI(tg.get_token(cfg))
+    try:
+        if args.cmd == "send":
+            api.send_message(args.chat_id, args.text)
+            db.audit(conn, "adhdo-telegram", argv, True, "sent")
+            return {"sent": True, "chat_id": args.chat_id}
+        return daemon(cfg, conn, api, once=args.once)
+    except ToolError as e:
+        db.audit(conn, "adhdo-telegram", argv, False, e.code)
+        raise
+    except Exception as e:
+        db.audit(conn, "adhdo-telegram", argv, False, f"crash: {type(e).__name__}")
+        raise
+
+
+if __name__ == "__main__":
+    cli_main(lambda: run(sys.argv[1:]))

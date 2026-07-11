@@ -10,6 +10,26 @@
 > `~/adhdo2/scripts/install-cron.sh` after the next deploy so the old cron
 > heartbeat line is replaced and the timer is enabled.
 
+## P3 Telegram bridge — on-device setup (human steps)
+
+1. Create a bot with @BotFather on Telegram; copy the bot token.
+2. On the Pi, put the token in `~/adhdo2/config.yaml` under
+   `telegram.bot_token` (or export `TELEGRAM_BOT_TOKEN` in the service
+   environment — env overrides config).
+3. Message the bot once from your own Telegram account, then find your
+   numeric chat ID (e.g. via `curl "https://api.telegram.org/bot<TOKEN>/getUpdates"`
+   → `message.chat.id`) and add it to `telegram.chat_id_allowlist` in
+   `~/adhdo2/config.yaml`.
+4. `cp ~/adhdo2/systemd/adhdo-telegram.service ~/.config/systemd/user/ &&
+   systemctl --user daemon-reload && systemctl --user enable --now adhdo-telegram`
+5. Verify:
+   - [ ] Text the bot "hello" → appears in the adhdo tmux pane as
+         `[telegram chat:<id>] User says: "hello"` and Claude responds.
+   - [ ] `bin/adhdo-telegram send <chat_id> "test reply"` → arrives in Telegram.
+   - [ ] Message from a non-allowlisted chat → ignored, `error` row in journal.
+   - [ ] Send a photo → bot replies "Text messages only"; nothing injected.
+   - [ ] 7 rapid messages in a minute → later ones get a rate-limit reply.
+
 Run 2026-07-10, automated portion only (no audible verification performed —
 that requires a human physically listening at the Pi's location).
 

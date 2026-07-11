@@ -15,4 +15,7 @@ nudge:
 disk_warn_pct: 94
 crisis:
   contacts: ["Lifeline Australia 13 11 14"]
-telegram: {chat_id_allowlist: []}      # P3
+telegram:                     # P3 bridge
+  chat_id_allowlist: []       # numeric Telegram chat IDs allowed to talk to the session
+  bot_token: ""               # from @BotFather; env TELEGRAM_BOT_TOKEN overrides
+  rate_limit_per_minute: 6    # per-chat inbound message cap
