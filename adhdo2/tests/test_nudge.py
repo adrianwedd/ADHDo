@@ -58,6 +58,85 @@ def test_tts_failure_enveloped(adhdo_home, monkeypatch):
     assert e.value.code == "tts_failed"
     assert conn.execute("SELECT ok FROM audit WHERE tool='nudge'").fetchone()[0] == 0
 
+def test_prune_cache_removes_only_stale_mp3s(adhdo_home):
+    import os, time as _t
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    old = cache / "old.mp3"; old.write_bytes(b"x")
+    os.utime(old, (_t.time() - 90000, _t.time() - 90000))
+    fresh = cache / "fresh.mp3"; fresh.write_bytes(b"x")
+    other = cache / "old.wav"; other.write_bytes(b"x")
+    os.utime(other, (_t.time() - 90000, _t.time() - 90000))
+    assert nudge.prune_cache(cache) == 1
+    assert not old.exists() and fresh.exists() and other.exists()
+
+def test_prune_cache_missing_dir_is_noop(adhdo_home):
+    nudge = load_nudge()
+    assert nudge.prune_cache(adhdo_home / "nope") == 0
+
+def test_prune_cache_tolerates_concurrent_deletion(adhdo_home, monkeypatch):
+    """A concurrent nudge may delete a cached mp3 between glob and
+    stat/unlink; prune_cache must skip it instead of crashing."""
+    import os, time as _t
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    racy = cache / "racy.mp3"; racy.write_bytes(b"x")
+    stale = cache / "stale.mp3"; stale.write_bytes(b"x")
+    os.utime(stale, (_t.time() - 90000, _t.time() - 90000))
+    orig_stat = pathlib.Path.stat
+    def racy_stat(self, **kw):
+        if self.name == "racy.mp3":
+            # simulate the other process deleting it mid-scan
+            if os.path.exists(str(self)):
+                os.unlink(str(self))
+            raise FileNotFoundError(str(self))
+        return orig_stat(self, **kw)
+    monkeypatch.setattr(pathlib.Path, "stat", racy_stat)
+    assert nudge.prune_cache(cache) == 1
+    monkeypatch.undo()
+    assert not stale.exists()
+
+def test_prune_cache_tolerates_unlink_race(adhdo_home, monkeypatch):
+    """File vanishes between stat and unlink: unlink(missing_ok=True)
+    must swallow it and still count/continue."""
+    import os, time as _t
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    a = cache / "a.mp3"; a.write_bytes(b"x")
+    b = cache / "b.mp3"; b.write_bytes(b"x")
+    old = (_t.time() - 90000, _t.time() - 90000)
+    os.utime(a, old); os.utime(b, old)
+    orig_stat = pathlib.Path.stat
+    def stat_then_delete(self, **kw):
+        st = orig_stat(self, **kw)
+        if self.name == "a.mp3":
+            os.unlink(str(self))  # concurrent prune wins the race
+        return st
+    monkeypatch.setattr(pathlib.Path, "stat", stat_then_delete)
+    assert nudge.prune_cache(cache) == 2
+    monkeypatch.undo()
+    assert not a.exists() and not b.exists()
+
+def test_prune_runs_on_every_nudge_even_with_cache_hit(adhdo_home, monkeypatch):
+    import os, time as _t
+    (adhdo_home / "config.yaml").write_text("default_device: office\n")
+    nudge = load_nudge()
+    cache = adhdo_home / "tts-cache"
+    cache.mkdir()
+    stale = cache / "stale.mp3"; stale.write_bytes(b"x")
+    os.utime(stale, (_t.time() - 90000, _t.time() - 90000))
+    # cache-hit path: synthesize returns an existing file without pruning
+    monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "hit.mp3")
+    monkeypatch.setattr(nudge, "play_url_on_device", lambda url, dev, cfg: None)
+    monkeypatch.setattr(nudge, "wait_until_idle", lambda dev, cfg, timeout=30: True)
+    conn = db.connect()
+    out = nudge.run(["hello there"], _test_conn=conn)
+    assert out["nudged"] is True
+    assert not stale.exists()
+
 def test_non_toolerrror_crash_audited(adhdo_home, monkeypatch):
     (adhdo_home / "config.yaml").write_text("default_device: office\n")
     nudge = load_nudge()

@@ -15,8 +15,13 @@ DEFAULTS = {
         "high_urgency_events": ["medication", "safety", "user_requested"],
     },
     "disk_warn_pct": 94,
+    "dashboard": {"bind": None, "port": 8766},
     "crisis": {"contacts": ["Lifeline Australia 13 11 14"]},
-    "telegram": {"chat_id_allowlist": []},
+    "telegram": {
+        "chat_id_allowlist": [],
+        "bot_token": None,
+        "rate_limit_per_minute": 6,
+    },
 }
 
 def home() -> Path:

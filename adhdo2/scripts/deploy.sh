@@ -9,10 +9,12 @@ ssh pi@pi5-hailo '
   cd ~/adhdo2
   [ -d venv ] || python3 -m venv venv
   venv/bin/pip -q install PyYAML pychromecast pytest
+  # TTS engine: piper-tts (idempotent; pip is a no-op when already installed)
+  venv/bin/pip -q install piper-tts
   mkdir -p data tts-cache jellyfin/config
   [ -f config.yaml ] || cp config.example.yaml config.yaml
   mkdir -p ~/.config/systemd/user
-  cp systemd/*.service ~/.config/systemd/user/
+  cp systemd/*.service systemd/*.timer ~/.config/systemd/user/
   systemctl --user daemon-reload
   echo "deployed; run scripts/install-cron.sh and enable units when ready"
 '

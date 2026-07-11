@@ -1,5 +1,35 @@
 # ADHDo 2.0 P1 Hardware E2E (pi5-hailo)
 
+> How boot catch-up interacts with the dispatcher and fixed-event schedule
+> (and why they never double-fire) is documented in
+> [docs/catchup-vs-schedule.md](docs/catchup-vs-schedule.md).
+>
+> Note (P2 quality pass): the heartbeat is no longer a `*/25` cron line —
+> `install-cron.sh` now installs the `adhdo-heartbeat.timer` systemd user
+> timer (true 25-min cadence). On-device step: re-run
+> `~/adhdo2/scripts/install-cron.sh` after the next deploy so the old cron
+> heartbeat line is replaced and the timer is enabled.
+
+## P3 Telegram bridge — on-device setup (human steps)
+
+1. Create a bot with @BotFather on Telegram; copy the bot token.
+2. On the Pi, put the token in `~/adhdo2/config.yaml` under
+   `telegram.bot_token` (or export `TELEGRAM_BOT_TOKEN` in the service
+   environment — env overrides config).
+3. Message the bot once from your own Telegram account, then find your
+   numeric chat ID (e.g. via `curl "https://api.telegram.org/bot<TOKEN>/getUpdates"`
+   → `message.chat.id`) and add it to `telegram.chat_id_allowlist` in
+   `~/adhdo2/config.yaml`.
+4. `cp ~/adhdo2/systemd/adhdo-telegram.service ~/.config/systemd/user/ &&
+   systemctl --user daemon-reload && systemctl --user enable --now adhdo-telegram`
+5. Verify:
+   - [ ] Text the bot "hello" → appears in the adhdo tmux pane as
+         `[telegram chat:<id>] User says: "hello"` and Claude responds.
+   - [ ] `bin/adhdo-telegram send <chat_id> "test reply"` → arrives in Telegram.
+   - [ ] Message from a non-allowlisted chat → ignored, `error` row in journal.
+   - [ ] Send a photo → bot replies "Text messages only"; nothing injected.
+   - [ ] 7 rapid messages in a minute → later ones get a rate-limit reply.
+
 Run 2026-07-10, automated portion only (no audible verification performed —
 that requires a human physically listening at the Pi's location).
 
@@ -80,6 +110,12 @@ that requires a human physically listening at the Pi's location).
 - [ ] Reboot Pi with a meds event in the past → single consolidated catch-up wake, no storm
       SKIPPED — explicitly instructed not to reboot the Pi during this
       automated pass.
+
+- [ ] Nightly rollup: after re-running `install-cron.sh` (adds a 03:15
+      `adhdo-rollup.sh` entry), verify next morning that `journal rollup`
+      wrote rows (`sqlite3 ~/adhdo2/data/journal.db "SELECT * FROM rollups"`)
+      and `~/adhdo2/data/backup/journal.db` exists. Depends on cron being
+      enabled (human-gated switch below).
 
 - [ ] Full heartbeat observed: cron fires, session runs state, journals a decision
       SKIPPED — install-cron.sh intentionally NOT run yet (final human-gated
@@ -197,3 +233,13 @@ installed as a safety net per Step 1).
    `media_controller.status` until idle, max 30s) was NOT implemented — it
    requires audible hardware observation to tune correctly, which is a human
    step.
+8. P3 dashboard (`bin/adhdo-dashboard`, port 8766): on-device verification —
+   `systemctl --user enable --now adhdo-dashboard` (unit in
+   `systemd/adhdo-dashboard.service`), then open
+   `http://<lan_ip>:8766/` from another LAN machine and confirm the page
+   shows live state (devices, disk, last-event ages) and recent journal rows,
+   auto-refreshing every 30s. Confirm `curl -X POST http://<lan_ip>:8766/`
+   returns 405 (read-only) and that the service is NOT reachable from outside
+   the LAN (binds to `dashboard.bind`, defaulting to `lan_ip`). Contract
+   tests (routing, JSON schemas, secret scrubbing, method rejection) are
+   covered in `tests/test_dashboard.py`.

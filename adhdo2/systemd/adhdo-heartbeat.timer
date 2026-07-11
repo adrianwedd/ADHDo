@@ -1,0 +1,15 @@
+[Unit]
+Description=ADHDo heartbeat every 25 minutes
+# Why a systemd timer and not cron: cron's "*/25" only divides the minute
+# field within each hour (fires :00, :25, :50, then :00 again), leaving a
+# 10-minute gap at every hour boundary. OnUnitActiveSec gives a true
+# 25-minute cadence measured from the previous activation, independent of
+# wall-clock hour boundaries.
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=25min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
