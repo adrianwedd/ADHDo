@@ -39,13 +39,22 @@ def inject(text: str) -> str:
         return "sent"
 
 def _parse_at(s: str) -> float:
-    if ":" in s and len(s) <= 5:
-        h, m = map(int, s.split(":"))
-        due = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
-        if due.timestamp() <= time.time():
-            due = due + timedelta(days=1)
-        return due.timestamp()
-    return datetime.fromisoformat(s).timestamp()
+    try:
+        if ":" in s and "-" not in s and "T" not in s and " " not in s:
+            # time-of-day: HH:MM or HH:MM:SS (next occurrence, today or tomorrow)
+            parts = s.split(":")
+            if len(parts) not in (2, 3):
+                raise ValueError(s)
+            h, m = int(parts[0]), int(parts[1])
+            sec = int(parts[2]) if len(parts) == 3 else 0
+            due = datetime.now().replace(hour=h, minute=m, second=sec, microsecond=0)
+            if due.timestamp() <= time.time():
+                due = due + timedelta(days=1)
+            return due.timestamp()
+        # ISO-8601 datetime or date (date-only means midnight)
+        return datetime.fromisoformat(s).timestamp()
+    except ValueError:
+        raise ToolError("usage", f"invalid --at value: {s!r} (use HH:MM[:SS] or ISO-8601)")
 
 def run(argv, _test_conn=None):
     ap = ToolArgumentParser(prog="wake")
