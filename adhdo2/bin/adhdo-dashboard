@@ -2,7 +2,7 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import json
+import json, time, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from adhdolib import db
 from adhdolib.binload import load_bin_module
@@ -118,7 +118,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(data)
+        if self.command != "HEAD":
+            self.wfile.write(data)
 
     def _send_json(self, code, obj):
         self._send(code, scrub(json.dumps(obj, default=str)), "application/json")
@@ -134,23 +135,47 @@ class DashboardHandler(BaseHTTPRequestHandler):
         else:
             self._send_json(404, {"error": "not_found", "detail": path})
 
+    def do_HEAD(self):
+        # Same routing as GET; _send suppresses the body for HEAD.
+        self.do_GET()
+
     def _api(self, fn):
         try:
             self._send_json(200, fn())
-        except Exception as e:
+        except Exception:
+            # Full detail to the server log only; generic error to the client.
+            print(f"[dashboard] {self.path} failed:\n{traceback.format_exc()}",
+                  file=sys.stderr, flush=True)
             self._send_json(500, {"error": "internal",
-                                  "detail": f"{type(e).__name__}: {e}"})
+                                  "detail": "internal error (see server log)"})
 
     def _reject(self):
         self._send_json(405, {"error": "method_not_allowed",
                               "detail": "dashboard is read-only (GET only)"})
 
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _reject
+    do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _reject
+
+BIND_RETRIES = 6
+BIND_RETRY_DELAY = 5.0
+
+def _bind_server(bind, port, retries=BIND_RETRIES, delay=BIND_RETRY_DELAY):
+    """Bind with a short bounded retry: at boot the static lan_ip may not be
+    assigned yet, so give the network a little time before giving up."""
+    for attempt in range(retries):
+        try:
+            return ThreadingHTTPServer((bind, port), DashboardHandler)
+        except OSError as e:
+            if attempt == retries - 1:
+                raise
+            print(f"[dashboard] bind {bind}:{port} failed ({e}), "
+                  f"retry {attempt + 1}/{retries - 1} in {delay}s",
+                  file=sys.stderr, flush=True)
+            time.sleep(delay)
 
 def main():
     cfg = load_config()
     bind = cfg["dashboard"]["bind"] or cfg["lan_ip"]
-    httpd = ThreadingHTTPServer((bind, cfg["dashboard"]["port"]), DashboardHandler)
+    httpd = _bind_server(bind, cfg["dashboard"]["port"])
     httpd.serve_forever()
 
 if __name__ == "__main__":

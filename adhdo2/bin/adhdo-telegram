@@ -2,11 +2,12 @@
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-import time
+import json, time
 from adhdolib import db, telegram as tg
 from adhdolib.binload import load_bin_module
 from adhdolib.config import home, load_config
 from adhdolib.envelope import ToolArgumentParser, ToolError, cli_main, write_atomic
+from adhdolib.sanitize import redact
 
 
 def read_offset(path) -> int:
@@ -17,14 +18,24 @@ def read_offset(path) -> int:
 
 
 def poll_once(bridge, api, offset_path) -> int:
-    """One getUpdates long-poll cycle: handle every update and persist the
-    advanced offset after each so a crash never re-delivers. Returns the
-    number of updates processed."""
+    """One getUpdates long-poll cycle. Each update is handled inside its own
+    try/except so a broken injector (e.g. tmux session down) can never crash
+    the daemon: the failure is journaled and polling continues. The offset is
+    persisted only AFTER an update is handled (success or handled failure),
+    so a hard crash re-delivers the in-flight update instead of dropping it.
+    Returns the number of updates processed."""
     offset = read_offset(offset_path)
     updates = api.get_updates(offset)
     for upd in updates:
+        try:
+            bridge.handle_update(upd)
+        except Exception as e:
+            chat_id = (upd.get("message") or {}).get("chat", {}).get("id")
+            db.log_event(bridge.conn, "telegram", "error", json.dumps(
+                {"reason": "handle_failed", "chat_id": chat_id,
+                 "error": redact(f"{type(e).__name__}: {e}",
+                                 getattr(api, "token", None))}))
         write_atomic(offset_path, str(upd["update_id"] + 1))
-        bridge.handle_update(upd)
     return len(updates)
 
 

@@ -110,6 +110,14 @@ def run(argv, _test_conn=None, _test_cfg=None):
             casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[real])
             try:
                 if not casts:
+                    # The user asked to stop: clear now_playing.json even
+                    # though the device is unreachable, so a later nudge's
+                    # resume doesn't restart music they tried to stop.
+                    if np_path.exists():
+                        np_path.unlink(missing_ok=True)
+                        db.log_event(conn, "cast", "cast", json.dumps(
+                            {"action": "stop_cleared_now_playing",
+                             "device": device}))
                     raise device_not_found(device, real)
                 casts[0].wait(); casts[0].media_controller.stop()
             finally:

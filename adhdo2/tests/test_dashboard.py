@@ -82,13 +82,75 @@ def test_write_methods_rejected(server):
         assert e.value.code == 405
         assert json.loads(e.value.read())["error"] == "method_not_allowed"
 
-def test_state_failure_returns_500_envelope(server, dash, monkeypatch):
+def test_state_failure_returns_500_generic(server, dash, monkeypatch, capfd):
     def boom():
-        raise RuntimeError("scan exploded")
+        raise RuntimeError("scan exploded with secret path /home/pi/x")
     monkeypatch.setattr(dash, "get_state", boom)
     with pytest.raises(urllib.error.HTTPError) as e:
         _get(server + "/api/state")
     assert e.value.code == 500
-    payload = json.loads(e.value.read())
+    body = e.value.read().decode()
+    payload = json.loads(body)
     assert payload["error"] == "internal"
-    assert "RuntimeError" in payload["detail"]
+    # No exception detail leaks to the client...
+    assert "RuntimeError" not in body
+    assert "scan exploded" not in body
+    # ...but the full traceback is logged server-side (stderr).
+    err = capfd.readouterr().err
+    assert "RuntimeError" in err and "scan exploded" in err
+
+def _head(url):
+    req = urllib.request.Request(url, method="HEAD")
+    with urllib.request.urlopen(req) as r:
+        return r.status, r.headers, r.read()
+
+def test_head_valid_paths_headers_only(server):
+    for path in ("/", "/api/state", "/api/journal"):
+        status, headers, body = _head(server + path)
+        assert status == 200
+        assert body == b""  # HEAD must carry no body
+        assert int(headers["Content-Length"]) > 0  # same headers as GET
+
+def test_head_unknown_path_404(server):
+    req = urllib.request.Request(server + "/nope", method="HEAD")
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req)
+    assert e.value.code == 404
+    assert e.value.read() == b""
+
+@pytest.fixture
+def real_server(adhdo_home, monkeypatch):
+    # Real bin/adhdo-dashboard wired to the real bin/state; only the slow
+    # device scan is mocked out.
+    mod = load_bin_module("adhdo-dashboard")
+    real_load = load_bin_module
+
+    def load_with_fake_scan(name):
+        m = real_load(name)
+        if name == "state":
+            m.scan_devices = lambda cfg: [
+                {"name": "office", "online": True, "now_playing": None}]
+        return m
+
+    monkeypatch.setattr(mod, "load_bin_module", load_with_fake_scan)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), mod.DashboardHandler)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}"
+    httpd.shutdown()
+    httpd.server_close()
+
+def test_api_state_real_state_module(real_server):
+    conn = db.connect()
+    db.log_event(conn, "session", "med", "morning dose")
+    conn.close()
+    status, ctype, body = _get(real_server + "/api/state")
+    assert status == 200
+    assert ctype.startswith("application/json")
+    s = json.loads(body)
+    assert s["devices"] == [{"name": "office", "online": True, "now_playing": None}]
+    assert s["last"]["med"] is not None and s["last"]["med"] >= 0
+    assert s["last"]["meal"] is None
+    assert s["day_part"] in ("night", "morning", "afternoon", "evening")
+    assert 0 <= s["disk"]["pct"] <= 100
+    assert s["scheduled"] == []

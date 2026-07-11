@@ -19,9 +19,14 @@ def prune_cache(cache_dir: Path, max_age: float = 86400) -> int:
     cutoff = time.time() - max_age
     removed = 0
     for f in cache_dir.glob("*.mp3"):
-        if f.stat().st_mtime < cutoff:
-            f.unlink()
-            removed += 1
+        # A concurrent nudge may prune the same file between glob and
+        # stat/unlink; tolerate the race instead of crashing.
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink(missing_ok=True)
+                removed += 1
+        except FileNotFoundError:
+            continue
     return removed
 
 def synthesize(text: str, cache_dir: Path) -> Path:

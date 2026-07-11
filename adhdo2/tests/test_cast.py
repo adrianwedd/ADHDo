@@ -145,6 +145,42 @@ def test_device_not_found_unaliased_name(adhdo_home, monkeypatch):
     assert e.value.code == "no_devices"
     assert e.value.detail == "device 'garage' not found"
 
+def test_stop_clears_now_playing_when_device_not_found(adhdo_home, monkeypatch):
+    """stop must clear now_playing.json even when the device is
+    undiscoverable, so a later nudge's resume can't restart music the
+    user tried to stop. The clear is journaled."""
+    cast = load_cast()
+    import sys
+    np = adhdo_home / "data" / "now_playing.json"
+    np.parent.mkdir(parents=True, exist_ok=True)
+    np.write_text(json.dumps({"url": "http://x/y.mp3", "device": "Nest Hub Max"}))
+    stopped = []
+    monkeypatch.setitem(sys.modules, "pychromecast",
+                        _fake_pychromecast([], stopped))
+    from adhdolib import db
+    conn = db.connect()
+    with pytest.raises(ToolError) as e:
+        cast.run(["stop"], _test_conn=conn, _test_cfg=CFG_DEV)
+    assert e.value.code == "no_devices"
+    assert not np.exists()
+    assert {"action": "stop_cleared_now_playing",
+            "device": "office"} in _events(conn)
+    assert stopped == [True]
+
+def test_stop_device_not_found_no_now_playing_no_journal(adhdo_home, monkeypatch):
+    """When nothing was playing, the not-found stop path raises without
+    journaling a spurious clear event."""
+    cast = load_cast()
+    import sys
+    monkeypatch.setitem(sys.modules, "pychromecast",
+                        _fake_pychromecast([], []))
+    from adhdolib import db
+    conn = db.connect()
+    with pytest.raises(ToolError) as e:
+        cast.run(["stop"], _test_conn=conn, _test_cfg=CFG_DEV)
+    assert e.value.code == "no_devices"
+    assert _events(conn) == []
+
 def test_volume_reports_logical_device(adhdo_home, monkeypatch):
     cast = load_cast()
     import sys

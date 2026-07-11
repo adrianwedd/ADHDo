@@ -9,7 +9,7 @@ events (`[event:meds]`, `[event:bedtime]`), scheduled follow-ups
 - `~/adhdo2/venv/bin/python ~/adhdo2/bin/state` — situation snapshot. Run this FIRST on every wake-up.
 - `... bin/cast play <mood|url> [--device D]` / `cast stop` / `cast volume 0.4` / `cast status`
 - `... bin/nudge "text" [--device D] [--urgency low|med|high] [--event medication|safety|user_requested]`
-- `... bin/journal log <type> "<text>"` — types: med, meal, break, decision, outcome, feedback, error
+- `... bin/journal log <type> "<text>"` — types: med, meal, break, decision, feedback, error. Never log intervention outcomes here — use `journal outcome` below, or the learning-loop stats miss them.
 - `... bin/journal outcome <intervention> <worked|partial|ignored|backfired> [feedback]` — log how an intervention landed
 - `... bin/journal recent 20` · `... bin/journal patterns`
 - `... bin/wake --at "HH:MM" --tag <tag>` — schedule your own follow-up

@@ -14,9 +14,27 @@ def test_install_cron_has_no_slash25_heartbeat():
 def test_install_cron_keeps_other_entries():
     text = (ROOT / "scripts" / "install-cron.sh").read_text()
     for needle in ["--event meds", "--event bedtime", "adhdo-dispatch",
-                   "adhdo-watchdog.sh", "adhdo-recycle.sh",
+                   "adhdo-watchdog.sh", "adhdo-rollup.sh", "adhdo-recycle.sh",
                    "@reboot", "adhdo-catchup.sh"]:
         assert needle in text
+
+
+def test_session_doc_excludes_outcome_from_free_text_log_types():
+    """Outcomes must go through `journal outcome`, not free-text `journal log`.
+
+    A free-text "outcome" row bypasses the structured intervention/result
+    fields and silently corrupts success_rate_by_intervention stats.
+    """
+    text = (ROOT / "session" / "CLAUDE.md").read_text()
+    log_line = next(line for line in text.splitlines()
+                    if "bin/journal log" in line)
+    types = re.search(r"types:\s*([a-z, ]+)", log_line).group(1)
+    listed = [t.strip() for t in types.split(",")]
+    assert "outcome" not in listed, (
+        "'outcome' must not be a free-text journal log type; "
+        "use `journal outcome` instead")
+    # the structured command must still be documented
+    assert "bin/journal outcome" in text
 
 
 def test_heartbeat_timer_true_25min_cadence():

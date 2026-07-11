@@ -28,6 +28,17 @@ def crisis_screen(text: str) -> bool:
     return any(p.search(text) for p in CRISIS_PATTERNS)
 
 
+def neutralize(text: str) -> str:
+    """Make user text inert inside the injected trusted framing.
+
+    Square brackets are the trusted-marker syntax (e.g. [telegram chat:N],
+    [crisis_advisory], [event:...]) and the payload wraps user text in double
+    quotes — so user-supplied brackets become parentheses and double quotes
+    are backslash-escaped, keeping the text readable while ensuring it can
+    never be parsed as trusted framing."""
+    return text.replace("[", "(").replace("]", ")").replace('"', '\\"')
+
+
 def get_token(cfg: dict) -> str:
     token = os.environ.get("TELEGRAM_BOT_TOKEN") or cfg["telegram"].get("bot_token")
     if not token:
@@ -92,6 +103,16 @@ class Bridge:
         q.append(now)
         return False
 
+    def _reply(self, chat_id, text: str):
+        """Best-effort outbound courtesy reply: a sendMessage failure is
+        journaled and swallowed so it can never kill the daemon."""
+        try:
+            self.api.send_message(chat_id, text)
+        except Exception as e:
+            db.log_event(self.conn, "telegram", "error", json.dumps(
+                {"reason": "send_failed", "chat_id": chat_id,
+                 "error": type(e).__name__}))
+
     def handle_update(self, update: dict) -> dict:
         msg = update.get("message")
         if not msg or "chat" not in msg:
@@ -103,20 +124,27 @@ class Bridge:
             return {"action": "denied", "chat_id": chat_id}
         text = msg.get("text")
         if not text:
-            db.log_event(self.conn, "telegram", "error",
-                         json.dumps({"reason": "non_text_refused", "chat_id": chat_id}))
-            self.api.send_message(chat_id, "Text messages only, sorry — media is ignored.")
-            return {"action": "refused_media", "chat_id": chat_id}
+            # non-text messages count against the rate limit too, and the
+            # courtesy reply is suppressed once limited — a media flood can't
+            # generate unlimited outbound sendMessage calls.
+            limited = self._rate_limited(chat_id, time.time())
+            db.log_event(self.conn, "telegram", "error", json.dumps(
+                {"reason": "non_text_refused", "chat_id": chat_id,
+                 "rate_limited": limited}))
+            if not limited:
+                self._reply(chat_id, "Text messages only, sorry — media is ignored.")
+            return {"action": "refused_media", "chat_id": chat_id,
+                    "rate_limited": limited}
         if self._rate_limited(chat_id, time.time()):
             db.log_event(self.conn, "telegram", "error",
                          json.dumps({"reason": "rate_limited", "chat_id": chat_id}))
-            self.api.send_message(chat_id, "Slow down a moment — rate limit hit, try again shortly.")
+            self._reply(chat_id, "Slow down a moment — rate limit hit, try again shortly.")
             return {"action": "rate_limited", "chat_id": chat_id}
         crisis = crisis_screen(text)
         db.log_event(self.conn, "telegram", "wake", json.dumps(
             {"chat_id": chat_id, "text": text, "crisis_advisory": crisis}))
         flag = " [crisis_advisory]" if crisis else ""
-        payload = f'[telegram chat:{chat_id}]{flag} User says: "{text}"'
+        payload = f'[telegram chat:{chat_id}]{flag} User says: "{neutralize(text)}"'
         delivery = self.injector(payload)
         return {"action": "forwarded", "chat_id": chat_id,
                 "crisis_advisory": crisis, "delivery": delivery}
