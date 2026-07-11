@@ -13,6 +13,9 @@ nudge:
   quiet_hours: ["22:00", "07:00"]
   high_urgency_events: [medication, safety, user_requested]
 disk_warn_pct: 94
+dashboard:                    # P3 read-only LAN dashboard (separate service)
+  bind: null                  # null → falls back to lan_ip
+  port: 8766
 crisis:
   contacts: ["Lifeline Australia 13 11 14"]
 telegram:                     # P3 bridge

@@ -233,3 +233,13 @@ installed as a safety net per Step 1).
    `media_controller.status` until idle, max 30s) was NOT implemented — it
    requires audible hardware observation to tune correctly, which is a human
    step.
+8. P3 dashboard (`bin/adhdo-dashboard`, port 8766): on-device verification —
+   `systemctl --user enable --now adhdo-dashboard` (unit in
+   `systemd/adhdo-dashboard.service`), then open
+   `http://<lan_ip>:8766/` from another LAN machine and confirm the page
+   shows live state (devices, disk, last-event ages) and recent journal rows,
+   auto-refreshing every 30s. Confirm `curl -X POST http://<lan_ip>:8766/`
+   returns 405 (read-only) and that the service is NOT reachable from outside
+   the LAN (binds to `dashboard.bind`, defaulting to `lan_ip`). Contract
+   tests (routing, JSON schemas, secret scrubbing, method rejection) are
+   covered in `tests/test_dashboard.py`.
