@@ -1,5 +1,6 @@
 import importlib.machinery, importlib.util, json, pathlib, time
 import pytest
+from datetime import datetime
 from adhdolib import db
 from adhdolib.envelope import ToolError
 
@@ -10,6 +11,13 @@ def load_nudge():
     spec = importlib.util.spec_from_file_location("nudge_cli", BIN, loader=loader)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # These tests exercise delivery/cache/audit, not the wall-clock policy.
+    # Keep them outside quiet hours on both UTC CI and Australian hosts.
+    class Midday(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 24, 12, tzinfo=tz)
+    mod.datetime = Midday
     return mod
 
 def test_rate_limited_returns_distinct_code(adhdo_home, monkeypatch):
