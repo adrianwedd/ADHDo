@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import json, time, traceback
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from adhdolib import db
+from adhdolib.binload import load_bin_module
+from adhdolib.config import load_config
+from adhdolib.envelope import scrub
+
+JOURNAL_LIMIT = 50
+
+def get_state():
+    state = load_bin_module("state")
+    return state.run(["--via", "dashboard"])
+
+def get_journal(limit=JOURNAL_LIMIT):
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT ts, source, type, payload_json FROM events "
+            "ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        return {"events": [
+            {"ts": r[0], "source": r[1], "type": r[2],
+             "payload": json.loads(r[3]) if r[3] else None} for r in rows]}
+    finally:
+        conn.close()
+
+PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADHDo Dashboard</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem auto; max-width: 60rem;
+         padding: 0 1rem; background: #14161a; color: #dde3ea; }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #2a2e35; }
+  .warn { color: #ff9f43; } .muted { color: #8a93a0; }
+  #err { color: #ff6b6b; }
+  code { background: #1e2127; padding: 0.1rem 0.3rem; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>ADHDo <span class="muted">read-only dashboard</span></h1>
+<p id="err"></p>
+<h2>State <span class="muted" id="state-ts"></span></h2>
+<table id="state"><tbody></tbody></table>
+<h2>Devices</h2>
+<table id="devices"><tbody></tbody></table>
+<h2>Recent journal</h2>
+<table id="journal"><tbody></tbody></table>
+<script>
+function row(tbody, cells, cls) {
+  const tr = document.createElement("tr");
+  if (cls) tr.className = cls;
+  for (const c of cells) {
+    const td = document.createElement("td");
+    td.textContent = c === null || c === undefined ? "-" : String(c);
+    tr.appendChild(td);
+  }
+  tbody.appendChild(tr);
+}
+function fmtAge(sec) {
+  if (sec === null || sec === undefined) return "never";
+  if (sec < 90) return Math.round(sec) + "s ago";
+  if (sec < 5400) return Math.round(sec / 60) + "m ago";
+  return (sec / 3600).toFixed(1) + "h ago";
+}
+function fmtTs(ts) { return new Date(ts * 1000).toLocaleString(); }
+async function refresh() {
+  const err = document.getElementById("err");
+  err.textContent = "";
+  try {
+    const [s, j] = await Promise.all([
+      fetch("/api/state").then(r => { if (!r.ok) throw new Error("state " + r.status); return r.json(); }),
+      fetch("/api/journal").then(r => { if (!r.ok) throw new Error("journal " + r.status); return r.json(); }),
+    ]);
+    document.getElementById("state-ts").textContent = "as of " + fmtTs(s.ts);
+    const st = document.querySelector("#state tbody");
+    st.textContent = "";
+    row(st, ["day part", s.day_part]);
+    row(st, ["disk", s.disk.pct + "%" + (s.disk.warn ? " (WARN)" : "")], s.disk.warn ? "warn" : "");
+    for (const k of ["med", "meal", "break", "nudge"]) row(st, ["last " + k, fmtAge(s.last[k])]);
+    for (const sch of s.scheduled) row(st, ["scheduled: " + (sch.tag || "(untagged)"), fmtTs(sch.due_ts)]);
+    const dv = document.querySelector("#devices tbody");
+    dv.textContent = "";
+    if (!s.devices.length) row(dv, ["no devices configured or reachable", ""], "muted");
+    for (const d of s.devices)
+      row(dv, [d.name, d.online ? "online" : "offline", d.now_playing || "idle"], d.online ? "" : "muted");
+    const jt = document.querySelector("#journal tbody");
+    jt.textContent = "";
+    if (!j.events.length) row(jt, ["no journal entries yet", "", "", ""], "muted");
+    for (const e of j.events)
+      row(jt, [fmtTs(e.ts), e.source, e.type,
+               typeof e.payload === "string" ? e.payload : JSON.stringify(e.payload)]);
+  } catch (e) {
+    err.textContent = "refresh failed: " + e.message;
+  }
+}
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>
+"""
+
+class DashboardHandler(BaseHTTPRequestHandler):
+    server_version = "adhdo-dashboard"
+
+    def _send(self, code, body, ctype):
+        data = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def _send_json(self, code, obj):
+        self._send(code, scrub(json.dumps(obj, default=str)), "application/json")
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/":
+            self._send(200, PAGE, "text/html; charset=utf-8")
+        elif path == "/api/state":
+            self._api(get_state)
+        elif path == "/api/journal":
+            self._api(get_journal)
+        else:
+            self._send_json(404, {"error": "not_found", "detail": path})
+
+    def do_HEAD(self):
+        # Same routing as GET; _send suppresses the body for HEAD.
+        self.do_GET()
+
+    def _api(self, fn):
+        try:
+            self._send_json(200, fn())
+        except Exception:
+            # Full detail to the server log only; generic error to the client.
+            print(f"[dashboard] {self.path} failed:\n{traceback.format_exc()}",
+                  file=sys.stderr, flush=True)
+            self._send_json(500, {"error": "internal",
+                                  "detail": "internal error (see server log)"})
+
+    def _reject(self):
+        self._send_json(405, {"error": "method_not_allowed",
+                              "detail": "dashboard is read-only (GET only)"})
+
+    do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _reject
+
+BIND_RETRIES = 6
+BIND_RETRY_DELAY = 5.0
+
+def _bind_server(bind, port, retries=BIND_RETRIES, delay=BIND_RETRY_DELAY):
+    """Bind with a short bounded retry: at boot the static lan_ip may not be
+    assigned yet, so give the network a little time before giving up."""
+    for attempt in range(retries):
+        try:
+            return ThreadingHTTPServer((bind, port), DashboardHandler)
+        except OSError as e:
+            if attempt == retries - 1:
+                raise
+            print(f"[dashboard] bind {bind}:{port} failed ({e}), "
+                  f"retry {attempt + 1}/{retries - 1} in {delay}s",
+                  file=sys.stderr, flush=True)
+            time.sleep(delay)
+
+def main():
+    cfg = load_config()
+    bind = cfg["dashboard"]["bind"] or cfg["lan_ip"]
+    httpd = _bind_server(bind, cfg["dashboard"]["port"])
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    main()

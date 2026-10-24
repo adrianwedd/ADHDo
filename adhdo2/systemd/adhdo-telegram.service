@@ -1,0 +1,12 @@
+[Unit]
+Description=ADHDo Telegram bridge (long-polling bot -> wake)
+After=network-online.target
+
+[Service]
+Environment=ADHDO_HOME=%h/adhdo2
+ExecStart=%h/adhdo2/venv/bin/python %h/adhdo2/bin/adhdo-telegram run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

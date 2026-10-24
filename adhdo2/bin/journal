@@ -15,6 +15,21 @@ def cmd_log(conn, args):
     db.log_event(conn, "session", type_, text)
     return {"logged": type_}
 
+OUTCOMES = frozenset({"worked", "partial", "ignored", "backfired"})
+
+def cmd_outcome(conn, args):
+    if len(args) < 2:
+        raise ToolError(
+            "usage", "journal outcome <intervention> <worked|partial|ignored|backfired> [feedback...]")
+    intervention, outcome = args[0], args[1]
+    if outcome not in OUTCOMES:
+        raise ToolError("bad_outcome", f"outcome must be one of {sorted(OUTCOMES)}")
+    payload = {"intervention": intervention, "outcome": outcome}
+    if len(args) > 2:
+        payload["feedback"] = " ".join(args[2:])
+    db.log_event(conn, "session", "outcome", json.dumps(payload))
+    return {"logged": "outcome", "intervention": intervention, "outcome": outcome}
+
 def cmd_recent(conn, args):
     n = int(args[0]) if args else 20
     rows = conn.execute(
@@ -58,15 +73,78 @@ def cmd_patterns(conn, args):
         "FROM events WHERE type IN ('med','meal','break') AND ts>? GROUP BY 1",
         (cutoff,)):
         streaks[t] = n
+    outcome_by_intervention, outcome_by_daypart = {}, {}
+    for (intervention, outcome, n) in conn.execute(
+        "SELECT COALESCE(json_extract(payload_json,'$.intervention'),'unknown'), "
+        "COALESCE(json_extract(payload_json,'$.outcome'),'unknown'), COUNT(*) "
+        "FROM events WHERE type='outcome' AND ts>? GROUP BY 1, 2", (cutoff,)):
+        bucket = outcome_by_intervention.setdefault(intervention, {})
+        bucket[outcome] = bucket.get(outcome, 0) + n
+    for (h, outcome, n) in conn.execute(
+        "SELECT strftime('%H', ts, 'unixepoch', 'localtime'), "
+        "COALESCE(json_extract(payload_json,'$.outcome'),'unknown'), COUNT(*) "
+        "FROM events WHERE type='outcome' AND ts>? GROUP BY 1, 2", (cutoff,)):
+        dp = _daypart(int(h))
+        bucket = outcome_by_daypart.setdefault(dp, {})
+        bucket[outcome] = bucket.get(outcome, 0) + n
+    success_rate_by_intervention = {}
+    for intervention, counts in outcome_by_intervention.items():
+        total = sum(counts.values())
+        good = counts.get("worked", 0) + counts.get("partial", 0) * 0.5
+        success_rate_by_intervention[intervention] = round(good / total, 3) if total else None
     return {"window_days": 30, "nudge_response_rate_by_hour": by_hour,
             "nudge_response_rate_by_type": by_type,
-            "mood_by_daypart": moods, "event_streaks": streaks}
+            "mood_by_daypart": moods, "event_streaks": streaks,
+            "outcome_by_intervention": outcome_by_intervention,
+            "outcome_by_daypart": outcome_by_daypart,
+            "success_rate_by_intervention": success_rate_by_intervention}
+
+RETENTION_DAYS = 90
+
+def cmd_rollup(conn, args):
+    """Aggregate complete days of events into rollups, then prune raw
+    events/audit rows older than RETENTION_DAYS. Idempotent."""
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    days = [r[0] for r in conn.execute(
+        "SELECT DISTINCT date(ts,'unixepoch','localtime') FROM events "
+        "WHERE date(ts,'unixepoch','localtime') < ? "
+        "AND date(ts,'unixepoch','localtime') NOT IN "
+        "(SELECT day FROM rollups WHERE metric='events_by_type')", (today,))]
+    for day in days:
+        by_type = {t: n for (t, n) in conn.execute(
+            "SELECT type, COUNT(*) FROM events "
+            "WHERE date(ts,'unixepoch','localtime')=? GROUP BY 1", (day,))}
+        outcomes = {}
+        for (intervention, outcome, n) in conn.execute(
+            "SELECT COALESCE(json_extract(payload_json,'$.intervention'),'unknown'), "
+            "COALESCE(json_extract(payload_json,'$.outcome'),'unknown'), COUNT(*) "
+            "FROM events WHERE type='outcome' "
+            "AND date(ts,'unixepoch','localtime')=? GROUP BY 1, 2", (day,)):
+            outcomes[f"{intervention}:{outcome}"] = n
+        nudges_by_hour = {h: n for (h, n) in conn.execute(
+            "SELECT strftime('%H', ts, 'unixepoch', 'localtime'), COUNT(*) "
+            "FROM events WHERE type='nudge' "
+            "AND date(ts,'unixepoch','localtime')=? GROUP BY 1", (day,))}
+        for metric, value in (("events_by_type", by_type),
+                              ("outcomes", outcomes),
+                              ("nudges_by_hour", nudges_by_hour)):
+            conn.execute("INSERT OR REPLACE INTO rollups(day, metric, value_json) "
+                         "VALUES(?,?,?)", (day, metric, json.dumps(value)))
+    prune_cutoff = time.time() - RETENTION_DAYS * 86400
+    pruned_events = conn.execute(
+        "DELETE FROM events WHERE ts<?", (prune_cutoff,)).rowcount
+    pruned_audit = conn.execute(
+        "DELETE FROM audit WHERE ts<?", (prune_cutoff,)).rowcount
+    conn.commit()
+    return {"rolled_up_days": days, "pruned_events": pruned_events,
+            "pruned_audit": pruned_audit}
 
 def main():
     if len(sys.argv) < 2:
-        raise ToolError("usage", "journal <log|recent|patterns> ...")
+        raise ToolError("usage", "journal <log|outcome|recent|patterns|rollup> ...")
     conn = db.connect()
-    cmd = {"log": cmd_log, "recent": cmd_recent, "patterns": cmd_patterns}.get(sys.argv[1])
+    cmd = {"log": cmd_log, "outcome": cmd_outcome, "recent": cmd_recent,
+           "patterns": cmd_patterns, "rollup": cmd_rollup}.get(sys.argv[1])
     if not cmd:
         raise ToolError("usage", f"unknown subcommand {sys.argv[1]}")
     return cmd(conn, sys.argv[2:])

@@ -35,9 +35,9 @@ def cli_main(fn):
     except ToolError as e:
         print(json.dumps({"error": e.code, "detail": scrub(e.detail)}))
         sys.exit(1)
-    except SystemExit:
-        raise
-    except BaseException as e:
+    except Exception as e:
+        # Deliberately Exception, not BaseException: KeyboardInterrupt and
+        # SystemExit must propagate so Ctrl-C / exit codes behave normally.
         tail = "".join(traceback.format_tb(e.__traceback__)[-3:])
         print(json.dumps({"error": "crash",
                           "detail": scrub(f"{type(e).__name__}: {e}"),

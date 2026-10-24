@@ -23,6 +23,19 @@ def test_crash_is_enveloped(capsys):
     assert "ValueError: boom" in out["detail"]
     assert "trace_tail" in out
 
+def test_keyboard_interrupt_propagates(capsys):
+    def f(): raise KeyboardInterrupt
+    with pytest.raises(KeyboardInterrupt):
+        cli_main(f)
+    assert capsys.readouterr().out == ""
+
+def test_system_exit_propagates(capsys):
+    def f(): raise SystemExit(3)
+    with pytest.raises(SystemExit) as e:
+        cli_main(f)
+    assert e.value.code == 3
+    assert capsys.readouterr().out == ""
+
 def test_tool_argument_parser_raises_tool_error(capsys):
     ap = ToolArgumentParser(prog="x")
     ap.add_argument("cmd", choices=["a", "b"])

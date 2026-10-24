@@ -2,17 +2,25 @@
 # Deploy adhdo2 from the repo to pi@pi5-hailo:~/adhdo2
 set -eu
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-rsync -av --exclude venv --exclude data --exclude tts-cache --exclude jellyfin \
+rsync -av --exclude venv --exclude .venv --exclude data --exclude tts-cache --exclude jellyfin \
+  --exclude config.yaml --exclude NOTES.md --exclude .env \
+  --exclude /docker/jellyfin-compose.yml \
   "$SRC/" pi@pi5-hailo:~/adhdo2/
+# An existing device may pin a locally hardened Jellyfin image. Provision the
+# example on new installations, but never replace an existing device pin.
+rsync -av --ignore-existing "$SRC/docker/jellyfin-compose.yml" \
+  pi@pi5-hailo:~/adhdo2/docker/
 ssh pi@pi5-hailo '
   set -eu
   cd ~/adhdo2
   [ -d venv ] || python3 -m venv venv
   venv/bin/pip -q install PyYAML pychromecast pytest
+  # TTS engine: piper-tts (idempotent; pip is a no-op when already installed)
+  venv/bin/pip -q install piper-tts
   mkdir -p data tts-cache jellyfin/config
   [ -f config.yaml ] || cp config.example.yaml config.yaml
   mkdir -p ~/.config/systemd/user
-  cp systemd/*.service ~/.config/systemd/user/
+  cp systemd/*.service systemd/*.timer ~/.config/systemd/user/
   systemctl --user daemon-reload
   echo "deployed; run scripts/install-cron.sh and enable units when ready"
 '

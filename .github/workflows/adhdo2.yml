@@ -1,0 +1,25 @@
+name: ADHDo 2
+
+on:
+  push:
+    branches: [main]
+    paths: ['adhdo2/**', '.github/workflows/adhdo2.yml']
+  pull_request:
+    paths: ['adhdo2/**', '.github/workflows/adhdo2.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install ./adhdo2 pytest
+      - name: Test isolated ADHDo 2 source
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: python -m pytest -c adhdo2/pyproject.toml --confcutdir=adhdo2/tests adhdo2/tests -q
