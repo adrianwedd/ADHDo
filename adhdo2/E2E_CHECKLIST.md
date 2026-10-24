@@ -264,4 +264,3 @@ and acceptance; do not infer current token, connector or audio readiness from
 the historical checklist. Do not run `install-cron.sh`, enable the bot, or send
 test messages until the resident-session and explicit setup prerequisites are
 met. Protect the existing private `config.yaml` and `NOTES.md` when deploying.
-
