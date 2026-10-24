@@ -85,7 +85,7 @@ def test_allowed_text_forwarded_quoted_and_journaled(adhdo_home):
     assert row[0] == "telegram" and row[1] == "wake"
     payload = json.loads(row[2])
     assert payload == {"chat_id": 42, "text": "please play focus music",
-                       "crisis_advisory": False}
+                       "crisis_advisory": False, "update_id": 1}
 
 
 def test_crisis_advisory_flag_never_blocks(adhdo_home):
@@ -285,8 +285,8 @@ def test_daemon_once_poll_error_journaled(adhdo_home, monkeypatch):
 
     monkeypatch.setattr(tg, "TelegramAPI", lambda token: ErrAPI())
     conn = db.connect()
-    out = cli.run(["run", "--once"], _test_conn=conn)
-    assert out == {"polled": True, "handled": 0}
+    with pytest.raises(ToolError, match="boom"):
+        cli.run(["run", "--once"], _test_conn=conn)
     row = conn.execute("SELECT type, payload_json FROM events").fetchone()
     assert row[0] == "error" and "telegram_api" in row[1]
 
@@ -371,40 +371,24 @@ def test_failing_send_message_on_rate_limit_is_survived(adhdo_home):
 
 # --- daemon crash resilience ---------------------------------------------
 
-def test_crashed_injector_journals_and_loop_continues(adhdo_home, monkeypatch):
-    import subprocess
+def test_once_reports_failed_delivery(adhdo_home, monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok")
     cli = load_cli()
     fake = FakeAPI()
     fake.token = "tok"
-    fake.updates = [msg(42, "boom", update_id=10),
-                    msg(42, "fine", update_id=11)]
+    fake.updates = [msg(42, "boom", update_id=10)]
     monkeypatch.setattr(tg, "TelegramAPI", lambda token: fake)
     (adhdo_home / "config.yaml").write_text("telegram: {chat_id_allowlist: [42]}\n")
-    calls = []
     wake = load_bin_module("wake")
 
-    def flaky_inject(payload):
-        calls.append(payload)
-        if "boom" in payload:
-            raise subprocess.CalledProcessError(1, ["tmux"])
-        return "sent"
+    def broken(payload):
+        raise RuntimeError("tmux unavailable")
 
-    monkeypatch.setattr(wake, "inject", flaky_inject)
+    monkeypatch.setattr(wake, "inject", broken)
     monkeypatch.setattr(cli, "load_bin_module", lambda name: wake)
-    conn = db.connect()
-    out = cli.run(["run", "--once"], _test_conn=conn)
-    # daemon did NOT crash; both updates were consumed and offset advanced
-    assert out == {"polled": True, "handled": 2}
-    assert (adhdo_home / "data" / "telegram.offset").read_text() == "12"
-    assert len(calls) == 2 and "fine" in calls[1]
-    rows = [json.loads(r[0]) for r in conn.execute(
-        "SELECT payload_json FROM events WHERE type='error'")]
-    fails = [r for r in rows if r.get("reason") == "handle_failed"]
-    assert len(fails) == 1
-    assert fails[0]["chat_id"] == 42
-    assert "CalledProcessError" in fails[0]["error"]
-    assert "tok" not in fails[0]["error"] or "REDACTED" in fails[0]["error"]
+    with pytest.raises(ToolError, match="retrying"):
+        cli.run(["run", "--once"], _test_conn=db.connect())
+    assert not (adhdo_home / "data" / "telegram.offset").exists()
 
 
 def test_offset_persisted_only_after_handling(adhdo_home):
@@ -429,24 +413,50 @@ def test_offset_persisted_only_after_handling(adhdo_home):
     assert offset_path.read_text() == "21"
 
 
-def test_offset_advances_even_when_handling_fails(adhdo_home):
+def test_failed_delivery_retries_before_later_updates_even_at_quota(adhdo_home):
     cli = load_cli()
     conn = db.connect()
-    cfg = {"telegram": {"chat_id_allowlist": [42], "rate_limit_per_minute": 6}}
+    cfg = {"telegram": {"chat_id_allowlist": [42], "rate_limit_per_minute": 1}}
     api = FakeAPI()
-    api.updates = [msg(42, "x", update_id=30)]
+    updates = [msg(42, "first", update_id=30), msg(42, "later", update_id=31)]
+    api.updates = updates.copy()
     offset_path = adhdo_home / "data" / "telegram.offset"
-    offset_path.parent.mkdir(parents=True, exist_ok=True)
+    calls = []
 
     def injector(payload):
-        raise RuntimeError("tmux gone")
+        calls.append(payload)
+        if len(calls) == 1:
+            raise RuntimeError("tmux gone")
+        return "sent"
 
     bridge = tg.Bridge(cfg, conn, injector, api)
-    assert cli.poll_once(bridge, api, offset_path) == 1
-    assert offset_path.read_text() == "31"
-    rows = [json.loads(r[0]) for r in conn.execute(
-        "SELECT payload_json FROM events WHERE type='error'")]
-    assert any(r.get("reason") == "handle_failed" for r in rows)
+    with pytest.raises(ToolError, match="retrying"):
+        cli.poll_once(bridge, api, offset_path)
+    assert not offset_path.exists()
+    assert len(calls) == 1
+    # Telegram redelivers unacknowledged updates; a failed admitted message
+    # retains its slot rather than becoming an intentional rate-limit refusal.
+    api.updates = updates.copy()
+    assert cli.poll_once(bridge, api, offset_path) == 2
+    assert offset_path.read_text() == "32"
+    assert len(calls) == 2 and "first" in calls[1]
+    assert conn.execute("SELECT COUNT(*) FROM events WHERE type='wake'").fetchone()[0] == 1
+    assert bridge._retrying == {}
+
+
+def test_text_flood_has_bounded_warning_replies(adhdo_home, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(tg.time, "time", lambda: clock[0])
+    bridge, api, injected = make_bridge(db.connect(), rate=1)
+    bridge.handle_update(msg(42, "accepted", update_id=1))
+    for i in range(2, 102):
+        assert bridge.handle_update(msg(42, "too much", update_id=i))["action"] == "rate_limited"
+    assert len(injected) == 1
+    assert len(api.sent) == 1
+    clock[0] += 61
+    bridge.handle_update(msg(42, "accepted again", update_id=102))
+    bridge.handle_update(msg(42, "limited again", update_id=103))
+    assert len(api.sent) == 2
 
 
 def test_config_defaults_include_telegram_fields(adhdo_home):
@@ -455,3 +465,24 @@ def test_config_defaults_include_telegram_fields(adhdo_home):
     assert cfg["telegram"]["chat_id_allowlist"] == []
     assert cfg["telegram"]["bot_token"] is None
     assert cfg["telegram"]["rate_limit_per_minute"] == 6
+
+
+def test_journal_failure_does_not_turn_retry_into_rate_refusal(adhdo_home, monkeypatch):
+    bridge, api, injected = make_bridge(db.connect(), rate=1)
+    real_log = db.log_event
+    failed = []
+
+    def flaky_log(conn, source, kind, payload):
+        if kind == "wake" and not failed:
+            failed.append(True)
+            raise RuntimeError("database temporarily busy")
+        return real_log(conn, source, kind, payload)
+
+    monkeypatch.setattr(db, "log_event", flaky_log)
+    update = msg(42, "retain me", update_id=70)
+    with pytest.raises(RuntimeError):
+        bridge.handle_update(update)
+    assert injected == []
+    assert bridge.handle_update(update)["action"] == "forwarded"
+    assert len(injected) == 1
+    assert bridge.conn.execute("SELECT COUNT(*) FROM events WHERE type='wake'").fetchone()[0] == 1

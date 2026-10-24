@@ -93,6 +93,8 @@ class Bridge:
         self.injector = injector  # wake.inject: returns "sent" or "queued"
         self.api = api
         self._recent = defaultdict(deque)  # chat_id -> timestamps of forwarded msgs
+        self._retrying = {}  # admitted update -> whether inbound journalling succeeded
+        self._rate_notice = {}  # at most one courtesy warning per chat/window
 
     def _rate_limited(self, chat_id, now: float) -> bool:
         q = self._recent[chat_id]
@@ -135,16 +137,26 @@ class Bridge:
                 self._reply(chat_id, "Text messages only, sorry — media is ignored.")
             return {"action": "refused_media", "chat_id": chat_id,
                     "rate_limited": limited}
-        if self._rate_limited(chat_id, time.time()):
+        key = (chat_id, update.get("update_id"))
+        retrying = key in self._retrying
+        now = time.time()
+        if not retrying and self._rate_limited(chat_id, now):
             db.log_event(self.conn, "telegram", "error",
                          json.dumps({"reason": "rate_limited", "chat_id": chat_id}))
-            self._reply(chat_id, "Slow down a moment — rate limit hit, try again shortly.")
+            if now - self._rate_notice.get(chat_id, float("-inf")) >= 60:
+                self._rate_notice[chat_id] = now
+                self._reply(chat_id, "Slow down a moment — rate limit hit, try again shortly.")
             return {"action": "rate_limited", "chat_id": chat_id}
+        self._retrying.setdefault(key, False)
         crisis = crisis_screen(text)
-        db.log_event(self.conn, "telegram", "wake", json.dumps(
-            {"chat_id": chat_id, "text": text, "crisis_advisory": crisis}))
+        if not self._retrying[key]:
+            db.log_event(self.conn, "telegram", "wake", json.dumps(
+                {"chat_id": chat_id, "text": text, "crisis_advisory": crisis,
+                 "update_id": update.get("update_id")}))
+            self._retrying[key] = True
         flag = " [crisis_advisory]" if crisis else ""
         payload = f'[telegram chat:{chat_id}]{flag} User says: "{neutralize(text)}"'
         delivery = self.injector(payload)
+        self._retrying.pop(key)
         return {"action": "forwarded", "chat_id": chat_id,
                 "crisis_advisory": crisis, "delivery": delivery}

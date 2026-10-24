@@ -26,6 +26,7 @@ def test_successful_nudge_audits_and_journals(adhdo_home, monkeypatch):
     nudge = load_nudge()
     monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "x.mp3")
     monkeypatch.setattr(nudge, "play_url_on_device", lambda url, dev, cfg: None)
+    monkeypatch.setattr(nudge, "wait_until_idle", lambda *a, **k: True)
     conn = db.connect()
     out = nudge.run(["step away", "--urgency", "med"], _test_conn=conn)
     assert out["nudged"] is True

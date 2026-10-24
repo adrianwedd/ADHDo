@@ -243,3 +243,25 @@ installed as a safety net per Step 1).
    the LAN (binds to `dashboard.bind`, defaulting to `lan_ip`). Contract
    tests (routing, JSON schemas, secret scrubbing, method rejection) are
    covered in `tests/test_dashboard.py`.
+# 2026-10-24 source-readiness checkpoint
+
+PR #117 now retains failed Telegram updates for retry, bounds text-flood
+courtesy warnings, and uses SQLite's backup API to include committed WAL rows.
+The backup replaces the previous snapshot only after a successful integrity
+check; failure exits nonzero. Deployment excludes the device's configuration,
+runtime notes, environment file, databases, caches and virtual environments.
+
+Local isolated validation: 175 tests passed, including a held-open WAL writer,
+failed injection and journal-write retries, and a 100-message warning flood.
+These are synthetic tests, not live Telegram or audible acceptance. A crash
+after injection but before offset persistence can still redeliver a message;
+delivery remains at least once, with intentional policy refusals acknowledged.
+
+Fresh read-only Pi inspection found the resident tmux session present, but
+the Telegram, dashboard and heartbeat user units not installed. Existing July
+observations below are historical. Keep #114 and #115 open for current setup
+and acceptance; do not infer current token, connector or audio readiness from
+the historical checklist. Do not run `install-cron.sh`, enable the bot, or send
+test messages until the resident-session and explicit setup prerequisites are
+met. Protect the existing private `config.yaml` and `NOTES.md` when deploying.
+

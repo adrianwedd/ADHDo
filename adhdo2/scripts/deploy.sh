@@ -2,7 +2,8 @@
 # Deploy adhdo2 from the repo to pi@pi5-hailo:~/adhdo2
 set -eu
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-rsync -av --exclude venv --exclude data --exclude tts-cache --exclude jellyfin \
+rsync -av --exclude venv --exclude .venv --exclude data --exclude tts-cache --exclude jellyfin \
+  --exclude config.yaml --exclude NOTES.md --exclude .env \
   "$SRC/" pi@pi5-hailo:~/adhdo2/
 ssh pi@pi5-hailo '
   set -eu

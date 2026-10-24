@@ -1,4 +1,5 @@
-import json, sqlite3, time
+import json, os, pathlib, sqlite3, tempfile, time
+from contextlib import closing
 from .config import home
 
 EVENT_TYPES = frozenset({"nudge", "cast", "med", "meal", "break",
@@ -30,6 +31,39 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=3000")
     conn.executescript(SCHEMA)
     return conn
+
+def backup(source, destination, timeout=30):
+    """Atomically retain a consistent snapshot, including committed WAL rows.
+
+    Open the source read-only: a missing journal must not become an empty
+    successful backup. Keep the previous snapshot if any operation fails.
+    """
+    source, destination = pathlib.Path(source), pathlib.Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=".journal-", suffix=".db",
+                                dir=destination.parent)
+    os.close(fd)
+    temporary = pathlib.Path(name)
+    deadline = time.monotonic() + timeout
+
+    def progress(status, remaining, total):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("journal backup exceeded its time limit")
+
+    try:
+        with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as src:
+            with closing(sqlite3.connect(temporary)) as dst:
+                src.backup(dst, pages=256, progress=progress, sleep=0.05)
+                if dst.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+                    raise sqlite3.DatabaseError("journal backup integrity check failed")
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    root = home() / "data"
+    backup(root / "journal.db", root / "backup" / "journal.db")
 
 def log_event(conn, source: str, type: str, payload: str):
     if type not in EVENT_TYPES:

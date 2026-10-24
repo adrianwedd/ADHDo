@@ -21,8 +21,8 @@ def poll_once(bridge, api, offset_path) -> int:
     """One getUpdates long-poll cycle. Each update is handled inside its own
     try/except so a broken injector (e.g. tmux session down) can never crash
     the daemon: the failure is journaled and polling continues. The offset is
-    persisted only AFTER an update is handled (success or handled failure),
-    so a hard crash re-delivers the in-flight update instead of dropping it.
+    persisted only AFTER handling succeeds (including intentional refusals).
+    A delivery failure leaves this and later updates unacknowledged for retry.
     Returns the number of updates processed."""
     offset = read_offset(offset_path)
     updates = api.get_updates(offset)
@@ -35,6 +35,7 @@ def poll_once(bridge, api, offset_path) -> int:
                 {"reason": "handle_failed", "chat_id": chat_id,
                  "error": redact(f"{type(e).__name__}: {e}",
                                  getattr(api, "token", None))}))
+            raise ToolError("delivery_failed", "inbound update was not accepted; retrying") from e
         write_atomic(offset_path, str(upd["update_id"] + 1))
     return len(updates)
 
@@ -52,8 +53,10 @@ def daemon(cfg, conn, api, once=False):
         except ToolError as e:
             # transient API/network failure: journal once, back off, keep polling
             db.log_event(conn, "telegram", "error", f"poll: {e.code}: {e.detail}")
-            if not once:
-                time.sleep(10)
+            if once:
+                raise
+            delay = max(10, 60 / max(1, bridge.rate_limit)) if e.code == "delivery_failed" else 10
+            time.sleep(delay)
         if once:
             return {"polled": True, "handled": n}
 

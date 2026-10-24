@@ -6,10 +6,7 @@ ADHDO_HOME=${ADHDO_HOME:-$HOME/adhdo2}
 export ADHDO_HOME
 "$ADHDO_HOME"/venv/bin/python "$ADHDO_HOME"/bin/journal rollup || \
   "$ADHDO_HOME"/venv/bin/python "$ADHDO_HOME"/bin/journal log error "nightly rollup failed" || true
-mkdir -p "$ADHDO_HOME"/data/backup
-if command -v sqlite3 >/dev/null 2>&1; then
-  sqlite3 "$ADHDO_HOME"/data/journal.db \
-    ".backup '$ADHDO_HOME/data/backup/journal.db'" || true
-else
-  cp "$ADHDO_HOME"/data/journal.db "$ADHDO_HOME"/data/backup/journal.db || true
-fi
+# Python is already required by the journal. Its backup API includes WAL data
+# without requiring the sqlite3 CLI, and preserves the previous backup on error.
+cd "$ADHDO_HOME"
+"$ADHDO_HOME"/venv/bin/python -m adhdolib.db
