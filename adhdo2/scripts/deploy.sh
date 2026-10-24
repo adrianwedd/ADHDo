@@ -4,7 +4,12 @@ set -eu
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 rsync -av --exclude venv --exclude .venv --exclude data --exclude tts-cache --exclude jellyfin \
   --exclude config.yaml --exclude NOTES.md --exclude .env \
+  --exclude /docker/jellyfin-compose.yml \
   "$SRC/" pi@pi5-hailo:~/adhdo2/
+# An existing device may pin a locally hardened Jellyfin image. Provision the
+# example on new installations, but never replace an existing device pin.
+rsync -av --ignore-existing "$SRC/docker/jellyfin-compose.yml" \
+  pi@pi5-hailo:~/adhdo2/docker/
 ssh pi@pi5-hailo '
   set -eu
   cd ~/adhdo2

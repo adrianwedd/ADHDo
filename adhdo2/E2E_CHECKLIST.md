@@ -250,6 +250,8 @@ courtesy warnings, and uses SQLite's backup API to include committed WAL rows.
 The backup replaces the previous snapshot only after a successful integrity
 check; failure exits nonzero. Deployment excludes the device's configuration,
 runtime notes, environment file, databases, caches and virtual environments.
+An existing device's Jellyfin Compose file is retained, including local image
+pins; the repository example is copied only when that file is absent.
 
 Local isolated validation: 175 tests passed, including a held-open WAL writer,
 failed injection and journal-write retries, and a 100-message warning flood.
