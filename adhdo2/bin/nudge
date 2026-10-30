@@ -50,52 +50,88 @@ def synthesize(text: str, cache_dir: Path) -> Path:
     wav.unlink(missing_ok=True)
     return out
 
-def play_url_on_device(url: str, device_name: str, cfg: dict):
+def play_url_on_device(url: str, device_name: str, cfg: dict, *, current_time=None, stream_type="LIVE"):
     import pychromecast
     casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
-    if not casts:
-        raise ToolError("no_devices", f"{device_name} not found")
-    cc = casts[0]; cc.wait()
-    cc.media_controller.play_media(url, "audio/mpeg")
-    cc.media_controller.block_until_active(timeout=15)
-    browser.stop_discovery()
+    try:
+        if not casts:
+            raise ToolError("no_devices", f"{device_name} not found")
+        cc = casts[0]; cc.wait()
+        kwargs = {"stream_type": stream_type}
+        if current_time is not None:
+            kwargs["current_time"] = current_time
+        cc.media_controller.play_media(url, "audio/mpeg", **kwargs)
+        cc.media_controller.block_until_active(timeout=15)
+    finally:
+        browser.stop_discovery()
 
-def wait_until_idle(device_name: str, cfg: dict, timeout: int = 30) -> bool:
+def wait_until_idle(device_name: str, cfg: dict, timeout: int = 30, *, expected_url=None) -> bool:
     """Poll the device's media_controller.status every second until the
-    player is IDLE/UNKNOWN or timeout elapses. Returns True if it became
+    player is IDLE or timeout elapses. Returns True if it became
     idle, False on timeout. Module-level so tests can monkeypatch it."""
     try:
         import pychromecast
     except ImportError:
         return False
     casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
-    if not casts:
-        return False
-    cc = casts[0]
     try:
+        if not casts:
+            return False
+        cc = casts[0]
         cc.wait(timeout=5)
         deadline = time.time() + timeout
         while time.time() < deadline:
             s = cc.media_controller.status
             state = getattr(s, "player_state", None)
-            if state in (None, "IDLE", "UNKNOWN"):
+            if expected_url and getattr(s, "content_id", None) != expected_url:
+                return False  # another sender took over, or status is unknown
+            if state == "IDLE":
                 return True
             time.sleep(1)
         return False
     finally:
         browser.stop_discovery()
 
-def _resume_previous(cfg) -> bool:
+def _interrupted_playback(device_name):
+    """Snapshot only cast-owned content actively playing on the nudge target."""
     np = home() / "data" / "now_playing.json"
-    if not np.exists():
-        return False
-    info = json.loads(np.read_text())
-    if not info.get("url"):
-        return False
     try:
-        play_url_on_device(info["url"], info["device"], cfg)
+        info = json.loads(np.read_text())
+    except (OSError, ValueError):
+        return None
+    if not info.get("url") or info.get("device") != device_name:
+        return None
+    import pychromecast
+    casts, browser = pychromecast.get_listed_chromecasts(friendly_names=[device_name])
+    try:
+        if not casts:
+            return None
+        cc = casts[0]; cc.wait(timeout=5)
+        status = cc.media_controller.status
+        if (getattr(status, "player_state", None) != "PLAYING"
+                or getattr(status, "content_id", None) != info["url"]):
+            np.unlink(missing_ok=True)
+            return None
+        position = (None if getattr(status, "stream_type", None) == "LIVE"
+                    else getattr(status, "current_time", None))
+        return info, position, getattr(status, "stream_type", "LIVE")
+    finally:
+        browser.stop_discovery()
+
+
+def _resume_previous(cfg, interrupted) -> bool:
+    if interrupted is None:
+        return False
+    info, position, stream_type = interrupted
+    # Honour a cast stop/new play issued while the nudge was speaking.
+    try:
+        current = json.loads((home() / "data" / "now_playing.json").read_text())
+        if current != info:
+            return False
+        play_url_on_device(info["url"], info["device"], cfg, current_time=position,
+                           stream_type=stream_type)
         return True
-    except ToolError:
+    except (ToolError, OSError, ValueError):
         return False
 
 def run(argv, _test_conn=None):
@@ -122,9 +158,10 @@ def run(argv, _test_conn=None):
         prune_cache(cache_dir)
         mp3 = synthesize(args.text, cache_dir)
         url = f"http://{cfg['lan_ip']}:{cfg['httpd_port']}/{mp3.name}"
+        interrupted = _interrupted_playback(real_name)
         play_url_on_device(url, real_name, cfg)
-        wait_until_idle(real_name, cfg)
-        resumed = _resume_previous(cfg)
+        finished = wait_until_idle(real_name, cfg, expected_url=url)
+        resumed = _resume_previous(cfg, interrupted) if finished else False
         db.log_event(conn, "nudge", "nudge", json.dumps(
             {"text": args.text, "urgency": args.urgency, "device": device}))
         db.audit(conn, "nudge", argv, True, "")

@@ -49,9 +49,9 @@ def test_wait_until_idle_called_between_play_and_resume(adhdo_home, monkeypatch)
     monkeypatch.setattr(nudge, "play_url_on_device",
                         lambda url, dev, cfg: order.append("play"))
     monkeypatch.setattr(nudge, "wait_until_idle",
-                        lambda dev, cfg, timeout=30: order.append("wait") or True)
+                        lambda dev, cfg, timeout=30, **kw: order.append("wait") or True)
     monkeypatch.setattr(nudge, "_resume_previous",
-                        lambda cfg: order.append("resume") or False)
+                        lambda cfg, interrupted: order.append("resume") or False)
     conn = db.connect()
     out = nudge.run(["step away"], _test_conn=conn)
     assert order == ["play", "wait", "resume"]
@@ -140,7 +140,7 @@ def test_prune_runs_on_every_nudge_even_with_cache_hit(adhdo_home, monkeypatch):
     # cache-hit path: synthesize returns an existing file without pruning
     monkeypatch.setattr(nudge, "synthesize", lambda text, d: d / "hit.mp3")
     monkeypatch.setattr(nudge, "play_url_on_device", lambda url, dev, cfg: None)
-    monkeypatch.setattr(nudge, "wait_until_idle", lambda dev, cfg, timeout=30: True)
+    monkeypatch.setattr(nudge, "wait_until_idle", lambda dev, cfg, timeout=30, **kw: True)
     conn = db.connect()
     out = nudge.run(["hello there"], _test_conn=conn)
     assert out["nudged"] is True
@@ -159,3 +159,88 @@ def test_non_toolerrror_crash_audited(adhdo_home, monkeypatch):
     assert audit_row is not None
     assert audit_row[0] == 0  # ok = False
     assert "crash: RuntimeError" in audit_row[1]  # detail contains crash info
+
+@pytest.mark.parametrize('state,content,record_device,finished,expected', [
+    ('IDLE', 'http://music/track.mp3', 'Nest', True, False),
+    ('PAUSED', 'http://music/track.mp3', 'Nest', True, False),
+    ('PLAYING', 'http://other/track.mp3', 'Nest', True, False),
+    ('PLAYING', 'http://music/track.mp3', 'Other Nest', True, False),
+    ('PLAYING', 'http://music/track.mp3', 'Nest', False, False),
+    ('PLAYING', 'http://music/track.mp3', 'Nest', True, True),
+])
+def test_resume_only_interrupted_content(adhdo_home, monkeypatch, state, content,
+                                         record_device, finished, expected):
+    import sys
+    from types import SimpleNamespace
+    (adhdo_home / 'config.yaml').write_text('default_device: office\ndevices: {office: Nest}\n')
+    record = adhdo_home / 'data' / 'now_playing.json'
+    record.parent.mkdir(exist_ok=True)
+    record.write_text(json.dumps({'url': 'http://music/track.mp3', 'device': record_device}))
+    calls, discoveries = [], []
+    status = SimpleNamespace(player_state=state, content_id=content,
+                             current_time=42.5, stream_type='BUFFERED')
+    class MC:
+        def __init__(self):
+            self.status = status
+        def play_media(self, url, content_type, **kwargs):
+            calls.append((url, content_type, kwargs))
+            self.status = SimpleNamespace(player_state='PLAYING', content_id=url, current_time=0)
+        def block_until_active(self, timeout):
+            pass
+    cc = SimpleNamespace(media_controller=MC(), wait=lambda **kw: None)
+    def discover(friendly_names):
+        assert friendly_names == ['Nest']
+        return [cc], SimpleNamespace(stop_discovery=lambda: discoveries.append(True))
+    monkeypatch.setitem(sys.modules, 'pychromecast', SimpleNamespace(get_listed_chromecasts=discover))
+    nudge = load_nudge()
+    monkeypatch.setattr(nudge, 'synthesize', lambda text, d: d / 'x.mp3')
+    monkeypatch.setattr(nudge, 'wait_until_idle', lambda *a, **kw: finished)
+    out = nudge.run(['hello'], _test_conn=db.connect())
+    assert out['resumed'] is expected
+    assert len(calls) == (2 if expected else 1)
+    if expected:
+        assert calls[-1] == ('http://music/track.mp3', 'audio/mpeg', {'current_time': 42.5, 'stream_type': 'BUFFERED'})
+    assert discoveries
+
+@pytest.mark.parametrize('state,content,expected', [
+    ('IDLE', 'http://nudge', True),
+    ('PLAYING', 'http://nudge', False),
+    ('UNKNOWN', 'http://nudge', False),
+    ('IDLE', 'http://someone-else', False),
+    ('IDLE', None, False),
+])
+def test_wait_requires_target_nudge_idle(monkeypatch, state, content, expected):
+    import sys
+    from types import SimpleNamespace
+    nudge = load_nudge()
+    stopped = []
+    status = SimpleNamespace(player_state=state, content_id=content)
+    cc = SimpleNamespace(wait=lambda **kw: None, media_controller=SimpleNamespace(status=status))
+    monkeypatch.setitem(sys.modules, 'pychromecast', SimpleNamespace(
+        get_listed_chromecasts=lambda **kw: ([cc], SimpleNamespace(stop_discovery=lambda: stopped.append(True)))))
+    clock = iter([0, 0, 2])
+    monkeypatch.setattr(nudge.time, 'time', lambda: next(clock))
+    monkeypatch.setattr(nudge.time, 'sleep', lambda _: None)
+    assert nudge.wait_until_idle('Nest', {}, timeout=1, expected_url='http://nudge') is expected
+    assert stopped == [True]
+
+
+@pytest.mark.parametrize('changed', [None, {'url': 'http://new', 'device': 'Nest'}])
+def test_restore_honours_stop_or_new_play(adhdo_home, monkeypatch, changed):
+    nudge = load_nudge()
+    record = adhdo_home / 'data' / 'now_playing.json'
+    original = {'url': 'http://music', 'device': 'Nest'}
+    if changed is not None:
+        record.write_text(json.dumps(changed))
+    monkeypatch.setattr(nudge, 'play_url_on_device', lambda *a, **kw: pytest.fail('must not resume'))
+    assert not nudge._resume_previous({}, (original, 42.5, 'BUFFERED'))
+
+
+def test_live_restore_has_no_seek(adhdo_home, monkeypatch):
+    nudge = load_nudge()
+    original = {'url': 'http://stream', 'device': 'Nest'}
+    (adhdo_home / 'data' / 'now_playing.json').write_text(json.dumps(original))
+    calls = []
+    monkeypatch.setattr(nudge, 'play_url_on_device', lambda *a, **kw: calls.append((a, kw)))
+    assert nudge._resume_previous({}, (original, None, 'LIVE'))
+    assert calls == [(('http://stream', 'Nest', {}), {'current_time': None, 'stream_type': 'LIVE'})]

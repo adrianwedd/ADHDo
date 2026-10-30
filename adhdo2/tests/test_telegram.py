@@ -486,3 +486,32 @@ def test_journal_failure_does_not_turn_retry_into_rate_refusal(adhdo_home, monke
     assert bridge.handle_update(update)["action"] == "forwarded"
     assert len(injected) == 1
     assert bridge.conn.execute("SELECT COUNT(*) FROM events WHERE type='wake'").fetchone()[0] == 1
+
+@pytest.mark.parametrize('prefix', ['text', 'media'])
+@pytest.mark.parametrize('original', ['I want to kill myself', 'I can’t\u00a0go\non'])
+def test_advisory_after_quota_is_forwarded_and_journaled(adhdo_home, prefix, original):
+    conn = db.connect()
+    bridge, api, injected = make_bridge(conn, rate=1)
+    first = msg(42, 'ordinary', update_id=1) if prefix == 'text' else msg(42, photo=[], update_id=1)
+    bridge.handle_update(first)
+    result = bridge.handle_update(msg(42, original, update_id=2))
+    assert result['action'] == 'forwarded'
+    assert result['crisis_advisory'] is True
+    assert '[crisis_advisory]' in injected[-1]
+    payload = json.loads(conn.execute("SELECT payload_json FROM events WHERE type='wake' ORDER BY id DESC").fetchone()[0])
+    assert payload['text'] == original and payload['crisis_advisory'] is True
+    assert bridge.handle_update(msg(42, 'ordinary again', update_id=3))['action'] == 'rate_limited'
+
+@pytest.mark.parametrize('text', [
+    'I can’t go on', 'life isn’t worth it', 'I can‘t go on',
+    "can't  go on", "life\tisn't\nworth it", 'I can’t\u00a0go\u2003on',
+])
+def test_advisory_normalises_punctuation_and_whitespace(text):
+    assert tg.crisis_screen(text)
+
+
+def test_advisory_does_not_consume_ordinary_quota(adhdo_home):
+    bridge, api, injected = make_bridge(db.connect(), rate=1)
+    assert bridge.handle_update(msg(42, 'I want to die', update_id=1))['crisis_advisory']
+    assert bridge.handle_update(msg(42, 'ordinary', update_id=2))['action'] == 'forwarded'
+    assert bridge.handle_update(msg(42, 'ordinary again', update_id=3))['action'] == 'rate_limited'
