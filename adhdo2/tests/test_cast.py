@@ -294,3 +294,13 @@ def test_device_status_isolates_offline_device(monkeypatch):
     assert by_name["Bad Speaker"]["online"] is False
     assert by_name["Bad Speaker"]["now_playing"] is None
     assert stopped == [True]  # finally block still ran discovery stop
+
+
+def test_jellyfin_play_is_buffered_for_position_resume(adhdo_home, monkeypatch):
+    from adhdolib import db
+    cast = load_cast()
+    calls = []
+    monkeypatch.setattr(cast, 'resolve_mood', lambda arg, cfg: ('http://jf/track', 'jellyfin'))
+    monkeypatch.setattr(cast, 'play_on_device', lambda *a, **kw: calls.append((a, kw)))
+    cast.run(['play', 'focus'], _test_conn=db.connect(), _test_cfg=CFG_DEV)
+    assert calls == [(('http://jf/track', 'office', 'Nest Hub Max'), {'stream_type': 'BUFFERED'})]

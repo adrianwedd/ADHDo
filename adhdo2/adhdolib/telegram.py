@@ -25,6 +25,9 @@ CRISIS_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
 
 
 def crisis_screen(text: str) -> bool:
+    # Match keyboard punctuation/spacing variants without altering the
+    # original text retained in the journal and forwarded payload.
+    text = " ".join(text.replace("’", "'").replace("‘", "'").split())
     return any(p.search(text) for p in CRISIS_PATTERNS)
 
 
@@ -82,8 +85,8 @@ class TelegramAPI:
 
 
 class Bridge:
-    """Handles inbound updates: allowlist -> text-only -> rate limit ->
-    crisis screen (advisory) -> journal -> inject into the session."""
+    """Handles inbound updates: allowlist -> text-only -> advisory screen ->
+    ordinary-message rate limit -> journal -> inject into the session."""
 
     def __init__(self, cfg: dict, conn, injector, api: TelegramAPI):
         tcfg = cfg["telegram"]
@@ -140,7 +143,8 @@ class Bridge:
         key = (chat_id, update.get("update_id"))
         retrying = key in self._retrying
         now = time.time()
-        if not retrying and self._rate_limited(chat_id, now):
+        crisis = crisis_screen(text)
+        if not retrying and not crisis and self._rate_limited(chat_id, now):
             db.log_event(self.conn, "telegram", "error",
                          json.dumps({"reason": "rate_limited", "chat_id": chat_id}))
             if now - self._rate_notice.get(chat_id, float("-inf")) >= 60:
@@ -148,7 +152,6 @@ class Bridge:
                 self._reply(chat_id, "Slow down a moment — rate limit hit, try again shortly.")
             return {"action": "rate_limited", "chat_id": chat_id}
         self._retrying.setdefault(key, False)
-        crisis = crisis_screen(text)
         if not self._retrying[key]:
             db.log_event(self.conn, "telegram", "wake", json.dumps(
                 {"chat_id": chat_id, "text": text, "crisis_advisory": crisis,
