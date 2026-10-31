@@ -729,3 +729,6 @@ class OAuthProvider(Base):
         Index("ix_oauth_providers_user_provider", "user_id", "provider_name", unique=True),
         Index("ix_oauth_providers_external_id", "provider_name", "provider_user_id", unique=True),
     )
+
+# Historical public name; both refer to the same mapped sessions table.
+UserSession = Session

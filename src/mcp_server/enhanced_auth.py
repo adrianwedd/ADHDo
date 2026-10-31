@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
 from mcp_server.config import settings
-from mcp_server.database import get_db_session
+from mcp_server.database import get_db_session, get_database_session
 from mcp_server.db_models import (
     User as DBUser, Session as DBSession, APIKey as DBAPIKey,
     JWTSecret, SessionActivity, SecurityEvent, RateLimit, UserRole
@@ -827,7 +827,7 @@ enhanced_auth_manager = EnhancedAuthManager()
 async def get_current_user_enhanced(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> User:
     """Enhanced dependency to get current authenticated user."""
     
@@ -893,7 +893,7 @@ async def get_current_user_enhanced(
 async def get_optional_user_enhanced(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> Optional[User]:
     """Optional enhanced user dependency - returns None if not authenticated."""
     try:

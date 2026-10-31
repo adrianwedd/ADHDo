@@ -41,7 +41,7 @@ class CreateAPIKeyRequest(BaseModel):
 async def register_user(
     registration: RegistrationRequest, 
     request: Request,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> AuthResponse:
     """Register a new user with enhanced security measures."""
     try:
@@ -71,7 +71,7 @@ async def register_user(
 async def login_user(
     login: LoginRequest, 
     request: Request,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_database_session)
 ) -> AuthResponse:
     """Authenticate user with enhanced security and session management."""
     try:

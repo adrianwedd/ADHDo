@@ -11,7 +11,8 @@ from datetime import datetime
 from unittest.mock import Mock, AsyncMock, patch
 
 from adhd.enhanced_cognitive_loop import enhanced_cognitive_loop, EnhancedCognitiveLoopResult
-from mcp_server.models import NudgeTier, LLMResponse
+from mcp_server.models import NudgeTier
+from mcp_server.llm_client import LLMResponse
 
 
 class TestEnhancedCognitiveLoop:

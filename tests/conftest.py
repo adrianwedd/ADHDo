@@ -269,7 +269,7 @@ def test_client(app_with_mocks):
 @pytest.fixture
 async def async_client(app_with_mocks):
     """Create async test client."""
-    async with httpx.AsyncClient(app=app_with_mocks, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_with_mocks), base_url="http://test") as client:
         yield client
 
 
@@ -471,3 +471,26 @@ def performance_thresholds():
         'max_memory_usage_mb': 512,
         'max_cpu_usage_percent': 80.0
     }
+
+@pytest.fixture
+def auth_manager():
+    from mcp_server.auth import AuthManager
+    return AuthManager()
+
+
+@pytest.fixture
+def health_monitor():
+    from mcp_server.health_monitor import HealthMonitor
+    return HealthMonitor()
+
+
+@pytest.fixture
+def metrics_collector():
+    from mcp_server.metrics import MetricsCollector
+    return MetricsCollector()
+
+
+@pytest.fixture
+def alert_manager():
+    from mcp_server.alerting import AlertManager
+    return AlertManager()

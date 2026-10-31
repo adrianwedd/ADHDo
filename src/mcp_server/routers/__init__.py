@@ -11,7 +11,6 @@ from .chat_routes import chat_router
 from .user_routes import user_router
 from .webhook_routes import webhook_router
 from .beta_routes import beta_router
-from .evolution_routes import evolution_router
 from .docs_routes import docs_router
 from .calendar_routes import router as calendar_router
 from .onboarding_routes import onboarding_router
@@ -30,3 +29,11 @@ __all__ = [
     "onboarding_router",
     "adhd_router"
 ]
+
+# Evolution is optional and the application already loads its router lazily.
+# Do not import the experimental engine while importing core routes.
+def __getattr__(name):
+    if name == "evolution_router":
+        from .evolution_routes import evolution_router
+        return evolution_router
+    raise AttributeError(name)

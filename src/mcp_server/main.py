@@ -134,6 +134,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     mcp_integration_module = None
     evolution_router_module = None
     github_router_module = None
+    background_tasks = []
     
     try:
         # Initialize core systems in parallel where possible
@@ -145,9 +146,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Run core initializations in parallel
         core_tasks = []
         core_tasks.append(init_database())
-        core_tasks.append(health_monitor.initialize())
-        core_tasks.append(metrics_collector.initialize())
-        core_tasks.append(alert_manager.initialize())
         
         # Initialize comprehensive monitoring system
         core_tasks.append(monitoring_system.initialize())
@@ -208,7 +206,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 optional_services.append(mcp_integration_module.initialize_mcp_system())
         
         # Lazy load Telegram bot if configured
-        if should_enable_service('telegram_bot') and hasattr(settings, 'TELEGRAM_BOT_TOKEN') and settings.TELEGRAM_BOT_TOKEN:
+        if should_enable_service('telegram_bot') and hasattr(settings, 'telegram_bot_token') and settings.telegram_bot_token:
             logger.info("Loading Telegram bot...")
             telegram_bot_module = lazy_importer.get_module(
                 'telegram_bot', 'mcp_server.telegram_bot'
@@ -219,14 +217,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Start background workers if enabled
         if settings.background_processing_enabled and _background_systems_loaded:
             logger.info("Starting background workers...")
-            from .background_processing import background_task_manager
+            from .background_processing import background_task_manager, TaskPriority
             worker_counts = {
                 # ADHD-optimized worker allocation
-                'crisis': 2,      # Always available for crisis
-                'high': 4,        # Ample capacity for user interactions  
-                'normal': 3,      # Background processing
-                'low': 1,         # Maintenance
-                'maintenance': 1  # System optimization
+                TaskPriority.CRISIS: 2,      # Always available for crisis
+                TaskPriority.HIGH: 4,        # Ample capacity for user interactions
+                TaskPriority.NORMAL: 3,      # Background processing
+                TaskPriority.LOW: 1,         # Maintenance
+                TaskPriority.MAINTENANCE: 1  # System optimization
             }
             await background_task_manager.start_workers(worker_counts)
             
@@ -249,8 +247,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         background_tasks = []
         background_tasks.append(asyncio.create_task(start_periodic_health_check()))
-        background_tasks.append(asyncio.create_task(health_monitor.start_monitoring()))
-        background_tasks.append(asyncio.create_task(metrics_collector.start_collection()))
         background_tasks.append(asyncio.create_task(alert_manager.start_monitoring()))
         
         # Lazy load and start evolution periodic updates if enabled
@@ -269,8 +265,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         
         # Log performance metrics
         logger.info("MCP ADHD Server startup complete", 
-                   host=settings.HOST, 
-                   port=settings.PORT,
+                   host=settings.host,
+                   port=settings.port,
                    startup_time=f"{total_startup_time:.2f}s",
                    memory_efficient=True,
                    performance_optimized=True)
@@ -302,6 +298,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         shutdown_start = time.perf_counter()
         
         try:
+            # Stop lifespan-owned loops before closing their dependencies.
+            for task in background_tasks:
+                task.cancel()
+            if background_tasks:
+                await asyncio.gather(*background_tasks, return_exceptions=True)
             # Shutdown tasks with timeout to prevent hanging
             shutdown_tasks = []
             
@@ -336,9 +337,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Shutdown monitoring systems
             shutdown_tasks.extend([
                 monitoring_system.shutdown(),
-                alert_manager.shutdown(),
-                metrics_collector.shutdown(),
-                health_monitor.shutdown()
+                alert_manager.stop_monitoring()
             ])
             
             # Run shutdowns in parallel with timeout
@@ -448,7 +447,7 @@ def create_app() -> FastAPI:
         },
         servers=[
             {
-                "url": f"http://{settings.HOST}:{settings.PORT}",
+                "url": f"http://{settings.host}:{settings.port}",
                 "description": "Development server"
             },
             {
@@ -543,7 +542,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit methods for performance
         allow_headers=["*"],
-        max_age=3600 if not settings.DEBUG else 0  # Cache preflight requests in production
+        max_age=3600 if not settings.debug else 0  # Cache preflight requests in production
     )
     
     # Add custom middleware stack in performance-optimized order
@@ -741,7 +740,7 @@ def create_app() -> FastAPI:
         }
         
         # Only include documentation links in debug mode for performance
-        if settings.DEBUG:
+        if settings.debug:
             base_info["documentation"] = {
                 "openapi": "/openapi.json",
                 "swagger_ui": "/docs",
@@ -799,13 +798,13 @@ if __name__ == "__main__":
     
     print(f"🧠 MCP ADHD Server v{__version__}")
     print(f"🚀 Starting server at {datetime.now()}")
-    print(f"📡 http://{settings.HOST}:{settings.PORT}")
-    print(f"📖 API Documentation: http://{settings.HOST}:{settings.PORT}/docs")
+    print(f"📡 http://{settings.host}:{settings.port}")
+    print(f"📖 API Documentation: http://{settings.host}:{settings.port}/docs")
     
     uvicorn.run(
         "main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.DEBUG,
-        log_level="info" if settings.DEBUG else "warning"
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+        log_level="info" if settings.debug else "warning"
     )

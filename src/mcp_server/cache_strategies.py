@@ -705,7 +705,7 @@ class CacheWarmingEngine:
                 del self.user_patterns[user_id]
         
         if old_patterns:
-            logger.info("Cleaned up old cache patterns", global=len(old_patterns))
+            logger.info("Cleaned up old cache patterns", global_patterns=len(old_patterns))
     
     async def _analyze_warming_effectiveness(self) -> None:
         """Analyze the effectiveness of warming tasks."""

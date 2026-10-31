@@ -3,7 +3,7 @@ Accessibility test configuration and fixtures.
 """
 import pytest
 from playwright.sync_api import Page, Browser, BrowserContext
-from axe_playwright_python import Axe
+from tests.accessibility.axe_adapter import Axe
 import json
 import os
 from pathlib import Path
@@ -63,7 +63,6 @@ def accessibility_config() -> Dict[str, Any]:
 def axe_builder(page: Page):
     """Axe accessibility testing builder."""
     axe = Axe()
-    axe.inject(page)
     return axe
 
 

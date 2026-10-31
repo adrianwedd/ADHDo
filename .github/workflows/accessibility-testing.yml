@@ -87,7 +87,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+        pip install -e ".[dev,integrations]"
         
     - name: Install Playwright browsers
       run: |
@@ -106,13 +106,13 @@ jobs:
       run: |
         python -c "
         import asyncio
-        from src.mcp_server.database import init_db
-        asyncio.run(init_db())
+        from mcp_server.database import init_database
+        asyncio.run(init_database())
         "
         
     - name: Start test server
       run: |
-        python -m uvicorn src.mcp_server.main:app --host 127.0.0.1 --port 8000 &
+        python -m uvicorn mcp_server.main:app --host 127.0.0.1 --port 8000 &
         sleep 10  # Wait for server to start
         curl -f http://localhost:8000/health || exit 1
       env:
@@ -168,7 +168,7 @@ jobs:
         HEADLESS: true
         
     - name: Generate Accessibility Report Summary
-      if: always()
+      if: always() && hashFiles('test-results/accessibility/*.json') != ''
       run: |
         python scripts/generate_accessibility_report.py \
           --results-dir test-results/accessibility \

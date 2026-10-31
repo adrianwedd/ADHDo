@@ -26,7 +26,6 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import explain
 
 from mcp_server.config import settings
 from mcp_server.database import get_db_session, get_engine

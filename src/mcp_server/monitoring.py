@@ -38,8 +38,8 @@ from opentelemetry.exporter.prometheus import PrometheusMetricReader
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.httpx import HttpxInstrumentor
-from opentelemetry.instrumentation.psutil import PsutilInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 
 from mcp_server.config import settings
 
@@ -429,19 +429,19 @@ class MonitoringSystem:
     async def _initialize_instrumentation(self):
         """Initialize automatic instrumentation."""
         # FastAPI instrumentation
-        FastAPIInstrumentor.instrument()
+        FastAPIInstrumentor().instrument()
         
         # Database instrumentation
-        SQLAlchemyInstrumentor.instrument(enable_commenter=True)
+        SQLAlchemyInstrumentor().instrument(enable_commenter=True)
         
         # Redis instrumentation
-        RedisInstrumentor.instrument()
+        RedisInstrumentor().instrument()
         
         # HTTP client instrumentation
-        HttpxInstrumentor.instrument()
+        HTTPXClientInstrumentor().instrument()
         
         # System metrics instrumentation
-        PsutilInstrumentor.instrument()
+        SystemMetricsInstrumentor().instrument()
         
         logger.info("Automatic instrumentation initialized")
     

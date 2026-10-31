@@ -664,3 +664,16 @@ async def close_database() -> None:
             logger.error("Error during database shutdown", error=str(e))
             # Force cleanup
             engine = None
+
+# FastAPI consumes get_database_session as an async-generator dependency;
+# middleware and background jobs need the same lifecycle as a context manager.
+from contextlib import asynccontextmanager
+get_db_session = asynccontextmanager(get_database_session)
+get_session = get_db_session
+
+
+def get_engine():
+    return engine
+
+
+init_db = init_database

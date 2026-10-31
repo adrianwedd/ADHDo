@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 from xml.parsers.expat import ExpatError
 
 import structlog
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from bleach import clean, linkify
 from bleach.css_sanitizer import CSSSanitizer
 
@@ -562,15 +562,15 @@ class RequestValidationModels:
     class ChatRequest(BaseModel):
         """Chat request validation model."""
         message: str = Field(..., min_length=1, max_length=10000)
-        user_id: Optional[str] = Field(None, regex=r'^[a-zA-Z0-9_-]+$')
+        user_id: Optional[str] = Field(None, pattern=r'^[a-zA-Z0-9_-]+$')
         context: Optional[Dict[str, Any]] = None
         
-        @validator('message')
+        @field_validator('message')
         def validate_message(cls, v):
             validator = InputValidator()
             return validator.validate_and_sanitize(v, "message", crisis_detection=True)
         
-        @validator('context')
+        @field_validator('context')
         def validate_context(cls, v):
             if v is not None:
                 validator = InputValidator()
@@ -579,17 +579,17 @@ class RequestValidationModels:
     
     class UserRegistration(BaseModel):
         """User registration validation model."""
-        username: str = Field(..., min_length=3, max_length=50, regex=r'^[a-zA-Z0-9_]+$')
-        email: str = Field(..., regex=r'^[^@]+@[^@]+\.[^@]+$')
+        username: str = Field(..., min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_]+$')
+        email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
         password: str = Field(..., min_length=8, max_length=128)
         full_name: Optional[str] = Field(None, max_length=100)
         
-        @validator('username')
+        @field_validator('username')
         def validate_username(cls, v):
             validator = InputValidator()
             return validator.validate_and_sanitize(v, "username", crisis_detection=False)
         
-        @validator('full_name')
+        @field_validator('full_name')
         def validate_full_name(cls, v):
             if v is not None:
                 validator = InputValidator()
@@ -600,18 +600,18 @@ class RequestValidationModels:
         """Task creation validation model."""
         title: str = Field(..., min_length=1, max_length=200)
         description: Optional[str] = Field(None, max_length=2000)
-        priority: Optional[str] = Field('medium', regex=r'^(low|medium|high|urgent)$')
+        priority: Optional[str] = Field('medium', pattern=r'^(low|medium|high|urgent)$')
         due_date: Optional[datetime] = None
-        tags: Optional[List[str]] = Field(None, max_items=10)
+        tags: Optional[List[str]] = Field(None, max_length=10)
         
-        @validator('title', 'description')
-        def validate_text_fields(cls, v, field):
+        @field_validator('title', 'description')
+        def validate_text_fields(cls, v, info):
             if v is not None:
                 validator = InputValidator()
-                return validator.validate_and_sanitize(v, field.name, crisis_detection=True)
+                return validator.validate_and_sanitize(v, info.field_name, crisis_detection=True)
             return v
         
-        @validator('tags')
+        @field_validator('tags')
         def validate_tags(cls, v):
             if v is not None:
                 validator = InputValidator()

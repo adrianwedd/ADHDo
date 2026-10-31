@@ -4,6 +4,10 @@ Health monitoring routes - System health, metrics, and alerting.
 Extracted from monolithic main.py to improve code organization and maintainability.
 """
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from typing import Optional
@@ -26,9 +30,9 @@ health_router = APIRouter(tags=["Health"])
 async def basic_health_check():
     """Basic health check endpoint for load balancers and monitoring."""
     try:
-        status = await health_monitor.get_system_health()
+        status = await health_monitor.get_overall_health()
         return {
-            "status": "healthy" if status.get("overall_health", "unknown") == "healthy" else "unhealthy",
+            "status": "healthy" if status.get("status", "unknown") == "healthy" else "unhealthy",
             "timestamp": datetime.utcnow().isoformat(),
             "version": "1.0.0"  # Could be imported from __version__
         }
@@ -39,7 +43,7 @@ async def basic_health_check():
 @health_router.get("/health/detailed")
 async def detailed_health_check():
     """Detailed health check with component status."""
-    return await health_monitor.get_detailed_health()
+    return await health_monitor.get_overall_health()
 
 
 @health_router.get("/health/{component}")
@@ -62,7 +66,7 @@ async def system_metrics():
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        health_monitor.record_error("system_metrics", str(e))
+        logger.error("system_metrics", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve system metrics")
 
 
@@ -92,7 +96,7 @@ async def component_health_history(
             "data_points": history
         }
     except Exception as e:
-        health_monitor.record_error("component_health_history", str(e))
+        logger.error("component_health_history", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve history for {component}")
 
 
@@ -100,13 +104,13 @@ async def component_health_history(
 async def prometheus_metrics():
     """Prometheus-compatible metrics endpoint."""
     try:
-        metrics_data = await metrics_collector.get_prometheus_metrics()
+        metrics_data = metrics_collector.export_metrics()
         return Response(
             content=metrics_data,
             media_type="text/plain; version=0.0.4; charset=utf-8"
         )
     except Exception as e:
-        health_monitor.record_error("prometheus_metrics", str(e))
+        logger.error("prometheus_metrics", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate metrics")
 
 
@@ -114,9 +118,9 @@ async def prometheus_metrics():
 async def metrics_summary():
     """Human-readable metrics summary for dashboards."""
     try:
-        return await metrics_collector.get_metrics_summary()
+        return metrics_collector.get_metrics_summary()
     except Exception as e:
-        health_monitor.record_error("metrics_summary", str(e))
+        logger.error("metrics_summary", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve metrics summary")
 
 
@@ -124,9 +128,9 @@ async def metrics_summary():
 async def get_active_alerts():
     """Get currently active system alerts."""
     try:
-        return await alert_manager.get_active_alerts()
+        return alert_manager.get_active_alerts()
     except Exception as e:
-        health_monitor.record_error("get_active_alerts", str(e))
+        logger.error("get_active_alerts", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve alerts")
 
 
@@ -134,9 +138,9 @@ async def get_active_alerts():
 async def get_alert_history(limit: int = 50):
     """Get alert history for analysis and debugging."""
     try:
-        return await alert_manager.get_alert_history(limit=limit)
+        return alert_manager.get_alert_history(limit=limit)
     except Exception as e:
-        health_monitor.record_error("get_alert_history", str(e))
+        logger.error("get_alert_history", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve alert history")
 
 
@@ -144,9 +148,9 @@ async def get_alert_history(limit: int = 50):
 async def get_alert_statistics():
     """Get alert statistics and trends."""
     try:
-        return await alert_manager.get_alert_statistics()
+        return alert_manager.get_alert_statistics()
     except Exception as e:
-        health_monitor.record_error("get_alert_statistics", str(e))
+        logger.error("get_alert_statistics", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve alert statistics")
 
 
@@ -154,10 +158,10 @@ async def get_alert_statistics():
 async def manual_alert_check():
     """Manually trigger alert rule evaluation."""
     try:
-        results = await alert_manager.run_alert_checks()
+        results = await alert_manager.manual_alert_check()
         return {"status": "success", "checks_run": len(results), "results": results}
     except Exception as e:
-        health_monitor.record_error("manual_alert_check", str(e))
+        logger.error("manual_alert_check", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to run alert checks")
 
 
@@ -165,7 +169,7 @@ async def manual_alert_check():
 async def disable_alert_rule(rule_name: str):
     """Disable a specific alert rule."""
     try:
-        success = await alert_manager.disable_rule(rule_name)
+        success = alert_manager.disable_rule(rule_name)
         if success:
             return {"status": "success", "message": f"Alert rule '{rule_name}' disabled"}
         else:
@@ -173,7 +177,7 @@ async def disable_alert_rule(rule_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        health_monitor.record_error("disable_alert_rule", str(e))
+        logger.error("disable_alert_rule", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to disable alert rule")
 
 
@@ -181,7 +185,7 @@ async def disable_alert_rule(rule_name: str):
 async def enable_alert_rule(rule_name: str):
     """Enable a specific alert rule."""
     try:
-        success = await alert_manager.enable_rule(rule_name)
+        success = alert_manager.enable_rule(rule_name)
         if success:
             return {"status": "success", "message": f"Alert rule '{rule_name}' enabled"}
         else:
@@ -189,7 +193,7 @@ async def enable_alert_rule(rule_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        health_monitor.record_error("enable_alert_rule", str(e))
+        logger.error("enable_alert_rule", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to enable alert rule")
 
 
@@ -197,9 +201,9 @@ async def enable_alert_rule(rule_name: str):
 async def get_alert_rules():
     """Get all configured alert rules and their status."""
     try:
-        return await alert_manager.get_alert_rules()
+        return alert_manager.alert_rules
     except Exception as e:
-        health_monitor.record_error("get_alert_rules", str(e))
+        logger.error("get_alert_rules", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve alert rules")
 
 
@@ -223,7 +227,7 @@ async def database_health_check():
         health_status = await perform_database_health_check()
         return health_status
     except Exception as e:
-        health_monitor.record_error("database_health_check", str(e))
+        logger.error("database_health_check", error=str(e))
         raise HTTPException(status_code=500, detail=f"Database health check failed: {str(e)}")
 
 
@@ -243,7 +247,7 @@ async def database_performance_metrics():
         performance_metrics = await get_db_performance_metrics()
         return performance_metrics
     except Exception as e:
-        health_monitor.record_error("database_performance_metrics", str(e))
+        logger.error("database_performance_metrics", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve database metrics: {str(e)}")
 
 
@@ -262,7 +266,7 @@ async def database_schema_validation():
         schema_status = await validate_database_schema()
         return schema_status
     except Exception as e:
-        health_monitor.record_error("database_schema_validation", str(e))
+        logger.error("database_schema_validation", error=str(e))
         raise HTTPException(status_code=500, detail=f"Schema validation failed: {str(e)}")
 
 
@@ -281,7 +285,7 @@ async def create_database_backup_endpoint():
         backup_result = await create_database_backup()
         return backup_result
     except Exception as e:
-        health_monitor.record_error("create_database_backup", str(e))
+        logger.error("create_database_backup", error=str(e))
         raise HTTPException(status_code=500, detail=f"Backup creation failed: {str(e)}")
 
 
@@ -301,7 +305,7 @@ async def migration_status():
         status = await migration_manager.get_migration_status()
         return status
     except Exception as e:
-        health_monitor.record_error("migration_status", str(e))
+        logger.error("migration_status", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get migration status: {str(e)}")
 
 
@@ -334,7 +338,7 @@ async def run_database_migrations(target_revision: Optional[str] = None):
         migration_result = await migration_manager.run_migrations(target_revision)
         return migration_result
     except Exception as e:
-        health_monitor.record_error("run_database_migrations", str(e))
+        logger.error("run_database_migrations", error=str(e))
         raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
 
 
@@ -353,7 +357,7 @@ async def rollback_database_migration(target_revision: str):
         rollback_result = await migration_manager.rollback_migration(target_revision)
         return rollback_result
     except Exception as e:
-        health_monitor.record_error("rollback_database_migration", str(e))
+        logger.error("rollback_database_migration", error=str(e))
         raise HTTPException(status_code=500, detail=f"Rollback failed: {str(e)}")
 
 
@@ -377,7 +381,7 @@ async def validate_migration_safety(target_revision: str):
         safety_report = await migration_manager.validate_migration_safety(target_revision)
         return safety_report
     except Exception as e:
-        health_monitor.record_error("validate_migration_safety", str(e))
+        logger.error("validate_migration_safety", error=str(e))
         raise HTTPException(status_code=500, detail=f"Safety validation failed: {str(e)}")
 
 
@@ -400,7 +404,7 @@ async def run_full_database_test_suite():
         test_results = await database_test_suite.run_full_test_suite()
         return test_results
     except Exception as e:
-        health_monitor.record_error("run_full_database_test_suite", str(e))
+        logger.error("run_full_database_test_suite", error=str(e))
         raise HTTPException(status_code=500, detail=f"Database test suite failed: {str(e)}")
 
 
@@ -419,7 +423,7 @@ async def test_adhd_performance_requirements():
         performance_test = await database_test_suite._test_adhd_performance_requirements()
         return performance_test
     except Exception as e:
-        health_monitor.record_error("test_adhd_performance_requirements", str(e))
+        logger.error("test_adhd_performance_requirements", error=str(e))
         raise HTTPException(status_code=500, detail=f"ADHD performance test failed: {str(e)}")
 
 
@@ -438,7 +442,7 @@ async def test_connection_pooling():
         pool_test = await database_test_suite._test_connection_pooling()
         return pool_test
     except Exception as e:
-        health_monitor.record_error("test_connection_pooling", str(e))
+        logger.error("test_connection_pooling", error=str(e))
         raise HTTPException(status_code=500, detail=f"Connection pooling test failed: {str(e)}")
 
 
@@ -457,5 +461,5 @@ async def test_load_performance():
         load_test = await database_test_suite._test_load_performance()
         return load_test
     except Exception as e:
-        health_monitor.record_error("test_load_performance", str(e))
+        logger.error("test_load_performance", error=str(e))
         raise HTTPException(status_code=500, detail=f"Load performance test failed: {str(e)}")

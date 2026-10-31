@@ -219,7 +219,8 @@ class DatabaseTestSuite:
             # Test 1: Basic connection
             start_time = time.perf_counter()
             async with engine.begin() as conn:
-                result = await conn.execute(text("SELECT 1 as test"))\n                test_value = await result.fetchone()
+                result = await conn.execute(text("SELECT 1 as test"))
+                test_value = result.fetchone()
             
             connection_time = time.perf_counter() - start_time
             test_result["details"]["basic_connection"] = {
@@ -239,7 +240,7 @@ class DatabaseTestSuite:
             # Test 3: PostgreSQL-specific features
             async with engine.begin() as conn:
                 version_result = await conn.execute(text("SELECT version()"))
-                version = await version_result.fetchone()
+                version = version_result.fetchone()
                 
             test_result["details"]["postgresql_features"] = {
                 "status": "PASS",
@@ -249,7 +250,7 @@ class DatabaseTestSuite:
             # Test 4: Session factory
             async with get_database_session() as session:
                 result = await session.execute(text("SELECT 1"))
-                test_value = await result.fetchone()
+                test_value = result.fetchone()
                 
             test_result["details"]["session_factory"] = {
                 "status": "PASS" if test_value and test_value[0] == 1 else "FAIL"
@@ -300,7 +301,7 @@ class DatabaseTestSuite:
             async def test_concurrent_connection():
                 async with get_database_session() as session:
                     result = await session.execute(text("SELECT 1"))
-                    await result.fetchone()
+                    result.fetchone()
                     await asyncio.sleep(0.1)  # Hold connection briefly
                     return True
             
@@ -369,7 +370,7 @@ class DatabaseTestSuite:
                 start_time = time.perf_counter()
                 async with get_database_session() as session:
                     result = await session.execute(text("SELECT 1, 'test_query'"))
-                    await result.fetchone()
+                    result.fetchone()
                 query_time = time.perf_counter() - start_time
                 query_times.append(query_time)
             
@@ -411,14 +412,14 @@ class DatabaseTestSuite:
                 async with get_database_session() as session:
                     # Quick query (typical ADHD pattern - quick context switches)
                     result = await session.execute(text("SELECT 1"))
-                    await result.fetchone()
+                    result.fetchone()
                     
                     # Small delay (simulates thinking time)
                     await asyncio.sleep(random.uniform(0.01, 0.05))
                     
                     # Another quick query
                     result = await session.execute(text("SELECT 2"))
-                    await result.fetchone()
+                    result.fetchone()
                 
                 return time.perf_counter() - start_time
             
@@ -691,7 +692,7 @@ class DatabaseTestSuite:
             async def db_operation():
                 async with get_database_session() as session:
                     result = await session.execute(text("SELECT 1, now()"))
-                    await result.fetchone()
+                    result.fetchone()
                     return time.perf_counter()
             
             start_time = time.perf_counter()
@@ -779,8 +780,8 @@ class DatabaseTestSuite:
                     result1 = await session1.execute(text("SELECT 'session1' as test"))
                     result2 = await session2.execute(text("SELECT 'session2' as test"))
                     
-                    data1 = await result1.fetchone()
-                    data2 = await result2.fetchone()
+                    data1 = result1.fetchone()
+                    data2 = result2.fetchone()
                     
                     test_result["details"]["transaction_isolation"] = {
                         "session1_result": data1[0] if data1 else None,
@@ -812,7 +813,7 @@ class DatabaseTestSuite:
             # Database should still be functional after error
             async with get_database_session() as session:
                 result = await session.execute(text("SELECT 1"))
-                test_value = await result.fetchone()
+                test_value = result.fetchone()
                 
             test_result["details"]["error_recovery"] = {
                 "database_functional_after_error": test_value is not None and test_value[0] == 1,

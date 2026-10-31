@@ -5,7 +5,7 @@ Tests automated accessibility using axe-core and custom WCAG rules.
 """
 import pytest
 from playwright.sync_api import Page, expect
-from axe_playwright_python import Axe
+from tests.accessibility.axe_adapter import Axe
 import json
 from pathlib import Path
 from typing import Dict, List, Any

@@ -32,9 +32,9 @@ dependencies = [
   "pydantic>=2.4.0",
   "redis>=5.0.0",
   "asyncpg>=0.29.0",
-  "sqlalchemy[asyncio]>=2.0.0",
+  "sqlalchemy[asyncio]>=2.0.0,<2.1",
   "alembic>=1.12.0",
-  "httpx>=0.25.0",
+  "httpx[socks]>=0.25.0",
   "python-telegram-bot>=20.0",
   "openai>=1.3.0",
   "pydantic-settings>=2.0.0",
@@ -46,7 +46,14 @@ dependencies = [
   "prometheus-client>=0.19.0",
   "jinja2>=3.1.0",
   # Security Dependencies
+  "bcrypt>=4",
+  "PyJWT>=2.8",
+  "cryptography>=46.0.5",
+  "email-validator>=2",
+  "playwright>=1.40",
+  "setuptools>=65,<81",  # pkg_resources used by retained OTel instrumentation
   "bleach>=6.1.0",
+  "qrcode[pil]>=7",
   # Background Processing Dependencies
   "celery[redis]>=5.3.0",
   "kombu>=5.3.0",
@@ -65,25 +72,34 @@ dependencies = [
   "msgpack>=1.0.7",
   "orjson>=3.9.0",
   "ujson>=5.8.0",
+  # Retained Jaeger 1.21 exporter requires the matching SDK family.
+  # Migrate the exporter before widening the SDK bound.
   # Monitoring and Observability Dependencies
   "sentry-sdk[fastapi,sqlalchemy,redis,httpx,logging]>=1.40.0",
   "opentelemetry-api>=1.21.0",
-  "opentelemetry-sdk>=1.21.0",
-  "opentelemetry-auto-instrumentation>=0.42b0",
-  "opentelemetry-instrumentation-fastapi>=0.42b0",
-  "opentelemetry-instrumentation-sqlalchemy>=0.42b0",
-  "opentelemetry-instrumentation-redis>=0.42b0",
-  "opentelemetry-instrumentation-httpx>=0.42b0",
-  "opentelemetry-instrumentation-psutil>=0.42b0",
+  "opentelemetry-sdk>=1.21.0,<1.22",
+  "opentelemetry-instrumentation>=0.42b0,<0.43",
+  "opentelemetry-instrumentation-fastapi>=0.42b0,<0.43",
+  "opentelemetry-instrumentation-sqlalchemy>=0.42b0,<0.43",
+  "opentelemetry-instrumentation-redis>=0.42b0,<0.43",
+  "opentelemetry-instrumentation-httpx>=0.42b0,<0.43",
+  "opentelemetry-instrumentation-system-metrics>=0.42b0,<0.43",
   "opentelemetry-exporter-jaeger>=1.21.0",
-  "opentelemetry-exporter-prometheus>=1.12.0rc1",
-  "opentelemetry-propagator-b3>=1.21.0",
+  "deprecated>=1.2.6",
+  "opentelemetry-exporter-prometheus>=0.42b0,<0.43",
+  "opentelemetry-propagator-b3>=1.21.0,<1.22",
   "py-cpuinfo>=9.0.0",
+  "numpy>=1.24",
+  "scikit-learn>=1.3",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=7.4.0",
+  "aiosqlite>=0.19",
+  "aiohttp>=3.9",
+  "isort>=5",
+  "tinycss2>=1.2",
   "pytest-asyncio>=0.21.0",
   "pytest-mock>=3.12.0",
   "pytest-cov>=4.1.0",
@@ -96,7 +112,7 @@ dev = [
   "bandit>=1.7.5",
   "safety>=2.3.0",
   "coverage[toml]>=7.3.0",
-  "httpx>=0.25.0",
+  "httpx[socks]>=0.25.0",
   # Accessibility testing tools
   "playwright>=1.40.0",
   "pytest-playwright>=0.4.0",
@@ -159,7 +175,7 @@ mcp-server = "mcp_server.cli:main"
 path = "src/mcp_server/__about__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_server"]
+packages = ["src/mcp_server", "src/adhd", "src/calendar_integration", "src/frames", "src/github_automation", "src/mcp_client", "src/mcp_tools", "src/nudge", "src/traces"]
 
 [tool.hatch.envs.default]
 dependencies = [

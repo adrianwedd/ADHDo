@@ -53,7 +53,7 @@ async def set_telegram_webhook():
     directly rather than polling.
     """
     try:
-        webhook_url = f"{settings.BASE_URL}/webhooks/telegram"
+        webhook_url = f"{settings.base_url}/webhooks/telegram"
         
         success = await telegram_bot.set_webhook(
             url=webhook_url,
