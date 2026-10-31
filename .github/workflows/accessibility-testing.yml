@@ -23,7 +23,7 @@ jobs:
     
     strategy:
       matrix:
-        python-version: [3.11]
+        python-version: [3.12]
         
     services:
       postgres:
@@ -96,11 +96,14 @@ jobs:
         
     - name: Set up environment variables
       run: |
-        cp .env.example .env || echo "# Test environment" > .env
-        echo "DATABASE_URL=postgresql://test_user:test_password@localhost:5432/test_adhd_server" >> .env
-        echo "REDIS_URL=redis://localhost:6379" >> .env
-        echo "SECRET_KEY=test-secret-key-for-accessibility-testing" >> .env
-        echo "OPENAI_API_KEY=sk-test-key-not-used-in-accessibility-tests" >> .env
+        cat > .env <<'TEST_ENV'
+        ENVIRONMENT=testing
+        DEBUG=true
+        DATABASE_URL=postgresql+asyncpg://test_user:test_password@localhost:5432/test_adhd_server
+        REDIS_URL=redis://localhost:6379
+        SECRET_KEY=test-secret-key-for-accessibility-testing
+        OPENAI_API_KEY=sk-test-key-not-used-in-accessibility-tests
+        TEST_ENV
         
     - name: Initialize test database
       run: |
