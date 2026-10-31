@@ -146,6 +146,23 @@ def _record_database_failure(error: Exception) -> None:
         _connection_metrics['circuit_breaker_trips'] += 1
         logger.error("Database circuit breaker TRIPPED - 3 consecutive failures detected")
 
+def create_database_engine(url):
+    if url.startswith("sqlite"):
+        return create_async_engine(url, echo=False, pool_pre_ping=True)
+    return create_async_engine(
+        url, echo=False, pool_pre_ping=True,
+        pool_recycle=settings.database_pool_recycle,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_pool_max_overflow,
+        pool_timeout=settings.database_pool_timeout,
+        connect_args={"command_timeout": settings.database_query_timeout,
+                      "server_settings": {"application_name": "mcp-adhd-server"}},
+        isolation_level="READ COMMITTED",
+        logging_name="mcp_adhd_postgresql",
+        pool_reset_on_return="rollback",
+    )
+
+
 async def init_database() -> None:
     """Initialize enterprise-grade PostgreSQL engine with production enforcement."""
     global engine, SessionLocal
@@ -164,53 +181,15 @@ async def init_database() -> None:
         if not _check_circuit_breaker():
             raise DatabaseError("Database circuit breaker is open - cannot initialize")
         
-        # Enterprise-grade connection arguments optimized for ADHD users
-        connect_args = {
-            "server_settings": {
-                # Performance optimizations for sub-100ms queries
-                "jit": "off",  # Disable JIT for consistent performance
-                "shared_preload_libraries": "",  # Reduce startup overhead
-                "max_connections": "200",  # Higher limit for production
-                "work_mem": "8MB",  # Increased memory for sorts/hashes
-                "maintenance_work_mem": "128MB",  # Increased for better maintenance
-                "effective_cache_size": "512MB",  # More cache for better performance
-                "checkpoint_completion_target": "0.9",
-                "wal_buffers": "32MB",  # Increased WAL buffers
-                "default_statistics_target": "100",
-                # ADHD-specific optimizations
-                "random_page_cost": "1.1",  # Optimized for SSD storage
-                "effective_io_concurrency": "200",  # Better concurrent I/O
-                "max_worker_processes": "8",
-                "max_parallel_workers_per_gather": "4"
-            },
-            "command_timeout": settings.database_query_timeout,
-            "prepare_threshold": 5,  # Prepared statements for better performance
-        }
-        
-        # Create enterprise engine with enhanced connection pooling
+        # Let SQLAlchemy select the async-compatible pool. asyncpg accepts
+        # per-session settings, not server-startup parameters or psycopg options.
         try:
-            engine = create_async_engine(
-                settings.database_url,
-                echo=settings.debug and False,  # Disable echo in production for performance
-                pool_pre_ping=True,  # Verify connections before use
-                pool_recycle=settings.database_pool_recycle,  # Use configurable recycle time
-                pool_size=settings.database_pool_size,  # Use config values
-                max_overflow=settings.database_pool_max_overflow,  # Use config values
-                pool_timeout=settings.database_pool_timeout,  # ADHD-optimized timeout
-                poolclass=QueuePool,  # Use queue pool for better performance
-                connect_args=connect_args,
-                # Performance options
-                isolation_level="READ_COMMITTED",  # Faster than SERIALIZABLE
-                logging_name="mcp_adhd_postgresql",
-                # Additional performance settings
-                pool_reset_on_return='commit',  # Reset connections properly
-                pool_events=True,  # Enable pool event tracking
-            )
+            engine = create_database_engine(settings.database_url)
         except Exception as e:
             _record_database_failure(e)
             logger.error("Failed to create database engine", error=str(e))
             raise DatabaseError(f"Database engine creation failed: {e}")
-        
+
         # Enhanced connection event listeners for enterprise monitoring
         @event.listens_for(engine.sync_engine, "connect")
         def receive_connect(dbapi_connection, connection_record):
@@ -258,29 +237,25 @@ async def init_database() -> None:
             # Test basic connectivity
             async with engine.begin() as conn:
                 result = await conn.execute(text("SELECT 1 as test_connection"))
-                test_result = await result.fetchone()
+                test_result = result.fetchone()
                 if not test_result or test_result[0] != 1:
                     raise DatabaseError("Database connectivity test failed")
                 
-                # Test PostgreSQL-specific features
-                pg_version_result = await conn.execute(text("SELECT version()"))
-                pg_version = await pg_version_result.fetchone()
-                if pg_version:
-                    logger.info("PostgreSQL version detected", version=str(pg_version[0])[:50])
-                
-                # Test transaction capabilities
-                await conn.execute(text("BEGIN"))
-                await conn.execute(text("ROLLBACK"))
-            
+                if engine.dialect.name == "postgresql":
+                    pg_version_result = await conn.execute(text("SELECT version()"))
+                    pg_version = pg_version_result.fetchone()
+                    if pg_version:
+                        logger.info("PostgreSQL version detected", version=str(pg_version[0])[:50])
+
             connection_time = time.perf_counter() - connection_start
             
             # Log comprehensive initialization metrics
             pool_status = engine.pool.status()
             logger.info("Database engine initialized successfully",
                        connection_time_ms=f"{connection_time * 1000:.2f}",
-                       pool_size=engine.pool.size(),
-                       checked_out=engine.pool.checkedout(),
-                       overflow=engine.pool.overflow(),
+                       pool_size=getattr(engine.pool, "size", lambda: 0)(),
+                       checked_out=getattr(engine.pool, "checkedout", lambda: 0)(),
+                       overflow=getattr(engine.pool, "overflow", lambda: 0)(),
                        database_type="PostgreSQL",
                        asyncpg_driver=True,
                        enterprise_features=True)
@@ -368,14 +343,16 @@ async def get_db_performance_metrics() -> Dict[str, Any]:
     p95_query_time = sorted(query_times)[int(len(query_times) * 0.95)] if query_times else 0
     
     # Calculate connection pool efficiency
-    pool_utilization = pool.checkedout() / pool.size() if pool.size() > 0 else 0
+    pool_size = getattr(pool, "size", lambda: 0)()
+    checked_out = getattr(pool, "checkedout", lambda: 0)()
+    pool_utilization = checked_out / pool_size if pool_size > 0 else 0
     
     return {
         "pool_metrics": {
-            "pool_size": pool.size(),
-            "checked_out": pool.checkedout(), 
-            "overflow": pool.overflow(),
-            "checked_in": pool.checkedin(),
+            "pool_size": pool_size,
+            "checked_out": checked_out,
+            "overflow": getattr(pool, "overflow", lambda: 0)(),
+            "checked_in": getattr(pool, "checkedin", lambda: 0)(),
             "utilization_percent": round(pool_utilization * 100, 2),
             "max_overflow": settings.database_pool_max_overflow
         },
@@ -440,27 +417,27 @@ async def perform_database_health_check() -> Dict[str, Any]:
         async with engine.begin() as conn:
             # Basic connectivity test
             result = await conn.execute(text("SELECT 1"))
-            await result.fetchone()
+            result.fetchone()
             
             # PostgreSQL-specific health checks
             # Check database size
             size_result = await conn.execute(text(
                 "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size"
             ))
-            db_size = await size_result.fetchone()
+            db_size = size_result.fetchone()
             
             # Check active connections
             conn_result = await conn.execute(text(
                 "SELECT count(*) as active_connections FROM pg_stat_activity WHERE state = 'active'"
             ))
-            active_conns = await conn.fetchone()
+            active_conns = conn.fetchone()
             
             # Check for long-running queries (potential ADHD impact)
             long_query_result = await conn.execute(text(
                 "SELECT count(*) as long_queries FROM pg_stat_activity "
                 "WHERE state = 'active' AND now() - query_start > interval '5 seconds'"
             ))
-            long_queries = await long_query_result.fetchone()
+            long_queries = long_query_result.fetchone()
             
         connection_time = time.perf_counter() - connection_start
         
@@ -605,7 +582,7 @@ async def validate_database_schema() -> Dict[str, Any]:
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
             ))
-            tables = [row[0] for row in await table_check.fetchall()]
+            tables = [row[0] for row in table_check.fetchall()]
             
             validation_result["tables"] = {
                 "total_count": len(tables),
@@ -617,7 +594,7 @@ async def validate_database_schema() -> Dict[str, Any]:
                 "SELECT schemaname, tablename, indexname, indexdef "
                 "FROM pg_indexes WHERE schemaname = 'public'"
             ))
-            indexes = await index_check.fetchall()
+            indexes = index_check.fetchall()
             
             validation_result["indexes"] = {
                 "total_count": len(indexes),
@@ -640,30 +617,22 @@ async def validate_database_schema() -> Dict[str, Any]:
 
 
 async def close_database() -> None:
-    """Performance-optimized database shutdown."""
-    global engine
-    
-    if engine:
-        logger.info("Closing database connections")
-        
+    """Dispose connections even if optional metrics collection fails."""
+    global engine, SessionLocal
+    current = engine
+    if current is None:
+        return
+    try:
         try:
-            # Get final metrics before shutdown
             metrics = await get_db_performance_metrics()
             logger.info("Database performance summary", **metrics)
-            
-            # Graceful connection disposal
-            await engine.dispose()
-            
-            # Reset globals
-            engine = None
-            SessionLocal = None
-            
-            logger.info("Database connections closed successfully")
-            
         except Exception as e:
-            logger.error("Error during database shutdown", error=str(e))
-            # Force cleanup
-            engine = None
+            logger.warning("Database shutdown metrics unavailable", error=str(e))
+        await current.dispose()
+    finally:
+        engine = None
+        SessionLocal = None
+
 
 # FastAPI consumes get_database_session as an async-generator dependency;
 # middleware and background jobs need the same lifecycle as a context manager.

@@ -96,3 +96,57 @@ def test_metrics_and_alert_endpoints_accept_sync_services():
     response = client.get('/metrics')
     assert response.status_code == 200 and 'mcp_adhd_server' in response.text
     assert client.get('/alerts').status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_postgres_engine_uses_an_async_pool():
+    from sqlalchemy.pool import AsyncAdaptedQueuePool
+    from mcp_server.database import create_database_engine
+    engine = create_database_engine('postgresql+asyncpg://test:test@127.0.0.1/test')
+    try:
+        assert isinstance(engine.pool, AsyncAdaptedQueuePool)
+        # Construction is real; no live PostgreSQL connection is needed here.
+        assert engine.dialect.name == 'postgresql'
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_development_database_initialises_real_sqlite(monkeypatch):
+    from mcp_server import database
+    monkeypatch.setattr(database.settings, 'database_url', 'sqlite+aiosqlite:///:memory:')
+    monkeypatch.setattr(database.settings, 'environment', 'development')
+    monkeypatch.setattr(database, 'engine', None)
+    monkeypatch.setattr(database, 'SessionLocal', None)
+    await database.init_database()
+    try:
+        async with database.get_db_session() as session:
+            result = await session.execute(database.text('SELECT 1'))
+            assert result.scalar() == 1
+    finally:
+        await database.close_database()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_disposes_even_when_metrics_fail(monkeypatch):
+    from mcp_server import database
+    engine = SimpleNamespace(dispose=AsyncMock())
+    monkeypatch.setattr(database, 'engine', engine)
+    monkeypatch.setattr(database, 'SessionLocal', object())
+    monkeypatch.setattr(database, 'get_db_performance_metrics',
+                        AsyncMock(side_effect=RuntimeError('metrics unavailable')))
+    await database.close_database()
+    engine.dispose.assert_awaited_once()
+    assert database.engine is None and database.SessionLocal is None
+
+
+@pytest.mark.asyncio
+async def test_production_still_rejects_sqlite(monkeypatch):
+    from mcp_server import database
+    monkeypatch.setattr(database.settings, 'database_url', 'sqlite+aiosqlite:///:memory:')
+    monkeypatch.setattr(database.settings, 'environment', 'production')
+    monkeypatch.setattr(database.settings, 'enforce_postgresql', True)
+    monkeypatch.setattr(database, 'engine', None)
+    with pytest.raises(database.ProductionDatabaseError):
+        await database.init_database()
+    assert database.engine is None

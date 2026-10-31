@@ -25,7 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, DisconnectionError
 
 from mcp_server.database import (
-    engine, init_database, get_database_session, 
+    get_engine, init_database, get_database_session,
     get_db_performance_metrics, perform_database_health_check,
     create_database_backup, validate_database_schema,
     _check_circuit_breaker, _circuit_breaker, _connection_metrics,
@@ -218,7 +218,7 @@ class DatabaseTestSuite:
         try:
             # Test 1: Basic connection
             start_time = time.perf_counter()
-            async with engine.begin() as conn:
+            async with get_engine().begin() as conn:
                 result = await conn.execute(text("SELECT 1 as test"))
                 test_value = result.fetchone()
             
@@ -230,7 +230,7 @@ class DatabaseTestSuite:
             }
             
             # Test 2: Transaction support
-            async with engine.begin() as conn:
+            async with get_engine().begin() as conn:
                 await conn.execute(text("BEGIN"))
                 await conn.execute(text("SELECT 1"))
                 await conn.execute(text("ROLLBACK"))
@@ -238,7 +238,7 @@ class DatabaseTestSuite:
             test_result["details"]["transaction_support"] = {"status": "PASS"}
             
             # Test 3: PostgreSQL-specific features
-            async with engine.begin() as conn:
+            async with get_engine().begin() as conn:
                 version_result = await conn.execute(text("SELECT version()"))
                 version = version_result.fetchone()
                 
@@ -277,7 +277,7 @@ class DatabaseTestSuite:
         }
         
         try:
-            pool = engine.pool
+            pool = get_engine().pool
             
             # Test 1: Pool configuration
             test_result["details"]["pool_config"] = {
@@ -393,7 +393,7 @@ class DatabaseTestSuite:
             connection_times = []
             for i in range(5):
                 start_time = time.perf_counter()
-                async with engine.begin() as conn:
+                async with get_engine().begin() as conn:
                     await conn.execute(text("SELECT 1"))
                 connection_time = time.perf_counter() - start_time
                 connection_times.append(connection_time)
@@ -713,13 +713,13 @@ class DatabaseTestSuite:
             }
             
             # Test 2: Connection pool stress test
-            initial_pool_size = engine.pool.size()
+            initial_pool_size = get_engine().pool.size()
             max_connections_reached = 0
             
             async def pool_stress_operation():
                 nonlocal max_connections_reached
                 async with get_database_session() as session:
-                    current_checked_out = engine.pool.checkedout()
+                    current_checked_out = get_engine().pool.checkedout()
                     max_connections_reached = max(max_connections_reached, current_checked_out)
                     await session.execute(text("SELECT 1"))
                     await asyncio.sleep(0.1)  # Hold connection

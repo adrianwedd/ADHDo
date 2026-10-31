@@ -494,3 +494,20 @@ def metrics_collector():
 def alert_manager():
     from mcp_server.alerting import AlertManager
     return AlertManager()
+
+
+@pytest.fixture
+def profile_manager():
+    from adhd.user_profile import UserProfileManager
+    return UserProfileManager()
+
+
+@pytest.fixture
+def db_service(db_session):
+    from mcp_server.db_service import DatabaseService
+    return DatabaseService(db_session)
+
+
+@pytest.fixture
+async def test_db_session(db_session):
+    return db_session
