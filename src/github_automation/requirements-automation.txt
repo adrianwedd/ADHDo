@@ -2,9 +2,9 @@
 # Production-ready dependencies with pinned versions for security and stability
 
 # Core HTTP and API clients
-aiohttp==3.13.3
+aiohttp==3.14.4
 httpx==0.24.1
-requests==2.32.4
+requests==2.34.2
 
 # GitHub API integration
 PyGithub==1.59.1
@@ -19,8 +19,8 @@ pandas==2.0.3
 numpy==1.24.4
 
 # Configuration and validation
-pydantic[email]==2.3.0
-python-dotenv==1.0.0
+pydantic[email]==2.14.2
+python-dotenv==1.2.2
 
 # Caching and rate limiting
 redis==4.6.0
@@ -32,9 +32,9 @@ structlog==23.1.0
 sentry-sdk[fastapi]==2.34.1
 
 # Security
-cryptography==46.0.5
+cryptography==50.0.0
 bcrypt==4.0.1
-python-jose[cryptography]==3.4.0
+python-jose[cryptography]==3.5.0
 
 # Code analysis (for feature detection)
 ast-decompiler==0.6.0
@@ -42,8 +42,8 @@ tree-sitter==0.20.1
 tree-sitter-python==0.20.4
 
 # Git operations
-GitPython==3.1.41
-dulwich==0.21.5
+GitPython==3.2.1
+dulwich==1.2.9
 
 # Testing utilities (dev/test environments)
 faker==19.3.1
