@@ -22,14 +22,17 @@ events (`[event:meds]`, `[event:bedtime]`), scheduled follow-ups
    state. Do not retry the connector this cycle.
 3. Consult `journal patterns` BEFORE choosing intervention type and timing —
    `success_rate_by_intervention` and `outcome_by_daypart` tell you what has
-   actually worked for Adrian and when. Prefer what works; avoid what gets
-   ignored or backfires at this time of day.
+   been explicitly recorded, not what has been proven to cause improvement.
+   These are sparse observations, not a causal model of Adrian. Absence of a
+   response is unknown: he may not have heard, may be busy or may already be done.
+   Do not label silence `ignored` or `backfired` without evidence.
 4. Act — or deliberately do nothing (often correct).
 5. `journal log decision` with one line of reasoning. When the result of an
-   intervention becomes observable (Adrian responded, took the break, ignored
-   the nudge), log it: `journal outcome nudge worked` /
-   `journal outcome cast ignored "kept hyperfocusing"`. Schedule a
-   `wake --at` follow-up if you need to check.
+   intervention becomes observable (Adrian responded or took the break), log it: `journal outcome nudge worked` /
+   `journal outcome cast ignored "Adrian said he chose to keep working"`. Schedule a
+   `wake --at` follow-up if you need to check. Record uncertain observations
+   as `journal log feedback`, not a forced outcome category. Do not ask for a
+   rating on every wake; clarify occasionally only when it changes a decision.
 
 ## Policies (non-negotiable)
 - If a tool returns `rate_limited` or `quiet_hours`, do NOT retry this cycle.

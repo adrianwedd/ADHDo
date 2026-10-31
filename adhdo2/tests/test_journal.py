@@ -139,3 +139,10 @@ def test_rollup_prunes_rows_older_than_90_days(adhdo_home):
     # the old day was still rolled up before pruning
     assert conn.execute("SELECT COUNT(*) FROM rollups").fetchone()[0] > 0
     conn.close()
+
+
+def test_free_text_outcome_cannot_pollute_learning_stats(adhdo_home):
+    code, out = run_cli(adhdo_home, 'log', 'outcome', 'maybe worked')
+    assert code == 1 and out['error'] == 'usage'
+    code, out = run_cli(adhdo_home, 'patterns')
+    assert code == 0 and out['outcome_by_intervention'] == {}

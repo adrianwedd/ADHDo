@@ -113,6 +113,7 @@ tunnel-*.txt
 test_*.py
 test_*.json
 !adhdo2/tests/**
+!tests/**
 
 # Temporary files
 *.txt

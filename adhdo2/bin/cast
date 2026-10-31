@@ -78,6 +78,17 @@ def device_status(cfg):
     finally:
         browser.stop_discovery()
 
+def clear_now_playing(path, real):
+    """A stop on one device must not erase another device's resume record."""
+    try:
+        info = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return False
+    if info.get("device") != real:
+        return False
+    path.unlink(missing_ok=True)
+    return True
+
 def run(argv, _test_conn=None, _test_cfg=None):
     ap = ToolArgumentParser(prog="cast")
     ap.add_argument("cmd", choices=["play", "stop", "volume", "status"])
@@ -116,8 +127,7 @@ def run(argv, _test_conn=None, _test_cfg=None):
                     # The user asked to stop: clear now_playing.json even
                     # though the device is unreachable, so a later nudge's
                     # resume doesn't restart music they tried to stop.
-                    if np_path.exists():
-                        np_path.unlink(missing_ok=True)
+                    if clear_now_playing(np_path, real):
                         db.log_event(conn, "cast", "cast", json.dumps(
                             {"action": "stop_cleared_now_playing",
                              "device": device}))
@@ -125,7 +135,7 @@ def run(argv, _test_conn=None, _test_cfg=None):
                 casts[0].wait(); casts[0].media_controller.stop()
             finally:
                 browser.stop_discovery()
-            np_path.unlink(missing_ok=True)
+            clear_now_playing(np_path, real)
             db.log_event(conn, "cast", "cast",
                          json.dumps({"action": "stop", "device": device}))
             out = {"stopped": True, "device": device, "cast_name": real}

@@ -119,3 +119,22 @@ def test_crash_trace_scrubbed(capsys):
     assert code == 1
     assert "MYSECRET" not in out["trace_tail"]
     assert "token=REDACTED" in out["trace_tail"]
+
+
+def test_atomic_writers_do_not_share_a_temporary_file(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from adhdolib import envelope
+    barrier = Barrier(2)
+    replace = envelope.os.replace
+    def synchronised_replace(source, target):
+        barrier.wait(timeout=5)
+        replace(source, target)
+    monkeypatch.setattr(envelope.os, 'replace', synchronised_replace)
+    target = tmp_path / 'cache.json'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        jobs = [pool.submit(write_atomic, target, json.dumps({'writer': n})) for n in (1, 2)]
+        for job in jobs:
+            job.result()
+    assert json.loads(target.read_text()) in ({'writer': 1}, {'writer': 2})
+    assert len(list(tmp_path.iterdir())) == 1

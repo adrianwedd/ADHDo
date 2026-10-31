@@ -304,3 +304,21 @@ def test_jellyfin_play_is_buffered_for_position_resume(adhdo_home, monkeypatch):
     monkeypatch.setattr(cast, 'play_on_device', lambda *a, **kw: calls.append((a, kw)))
     cast.run(['play', 'focus'], _test_conn=db.connect(), _test_cfg=CFG_DEV)
     assert calls == [(('http://jf/track', 'office', 'Nest Hub Max'), {'stream_type': 'BUFFERED'})]
+
+
+@pytest.mark.parametrize('available', [True, False])
+def test_stop_other_device_preserves_music_record(adhdo_home, monkeypatch, available):
+    from adhdolib import db
+    import sys
+    cast = load_cast()
+    record = adhdo_home / 'data' / 'now_playing.json'
+    original = json.dumps({'url': 'http://music', 'device': 'Living Room'})
+    record.write_text(original)
+    monkeypatch.setitem(sys.modules, 'pychromecast',
+                        _fake_pychromecast([_FakeCast()] if available else [], []))
+    if available:
+        cast.run(['stop'], _test_conn=db.connect(), _test_cfg=CFG_DEV)
+    else:
+        with pytest.raises(ToolError):
+            cast.run(['stop'], _test_conn=db.connect(), _test_cfg=CFG_DEV)
+    assert record.read_text() == original

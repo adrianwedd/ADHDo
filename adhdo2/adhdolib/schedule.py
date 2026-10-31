@@ -1,4 +1,6 @@
-import sqlite3
+import sqlite3, fcntl
+from contextlib import contextmanager
+from .config import home
 from datetime import datetime, timedelta
 
 
@@ -38,3 +40,16 @@ def consolidate_missed(conn, fixed_events, last_wake_ts: float, now: float):
     if not missed:
         return None
     return "Missed while offline: " + ", ".join(missed)
+
+
+@contextmanager
+def delivery_lock():
+    """Serialise dispatcher/catch-up consumers; wake.lock remains separate."""
+    data = home() / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    with open(data / "dispatch.lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)

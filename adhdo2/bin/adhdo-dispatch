@@ -17,7 +17,8 @@ def inject(text):
 def run(_test_conn=None):
     conn = _test_conn or db.connect()
     try:
-        n_sent, n_queued = _run(conn)
+        with schedule.delivery_lock():
+            n_sent, n_queued = _run(conn)
         db.audit(conn, "adhdo-dispatch", [], True, f"sent={n_sent} queued={n_queued}")
         return {"delivered": n_sent, "queued": n_queued}
     except Exception as e:

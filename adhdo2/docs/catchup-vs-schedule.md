@@ -1,40 +1,28 @@
-# Catch-up vs. schedule: how missed events are handled
+# Reminder delivery and boot catch-up
 
-Two mechanisms deliver time-based wakes, and they must not double-fire.
+Fixed events (meds 08:00 and bedtime 22:30) are installed in cron. A systemd user
+timer sends heartbeats every 25 minutes. One-off follow-ups created by
+`wake --at` live in SQLite's **`schedule`** table; `adhdo-dispatch` checks them
+every five minutes and also drains the pending wake queue.
 
-## Normal operation (Pi is up)
+At reboot, `scripts/adhdo-catchup.sh` waits 120 seconds, then runs
+`bin/adhdo-catchup`. Catch-up reads the last journalled wake timestamp (or the
+previous 24 hours), combines missed fixed events and overdue follow-ups into
+one message, and injects it or queues it if the resident session is busy.
+Only after that succeeds does it mark those scheduled rows delivered.
+A failed injection leaves them due for retry by the dispatcher.
 
-- **Fixed events** (meds 08:00, bedtime 22:30) fire from cron entries
-  installed by `scripts/install-cron.sh` (`bin/wake --event ...`).
-- **Heartbeat** fires from the `adhdo-heartbeat.timer` systemd user timer
-  every 25 minutes (a true 25-min cadence; cron's `*/25` leaves a 10-minute
-  gap at each hour boundary, which is why this is a timer, not a cron line).
-- **One-off follow-ups** (`bin/wake --at <time> --tag <t>`) are written to
-  the `scheduled` table and delivered by `bin/adhdo-dispatch` (cron, every
-  5 min), which marks rows delivered so they fire exactly once.
+Both consumers hold `data/dispatch.lock` while selecting and acknowledging
+reminders. Overlapping dispatch/catch-up processes therefore cannot normally
+select the same rows. `wake.lock` is separate: it protects literal tmux injection
+and pending-file writes without deadlocking the consumer.
 
-## After downtime (reboot / power loss)
+Delivery is **at least once**, not exactly once. A crash after injection but
+before acknowledgement can replay a reminder. Pending messages are handed off
+using an atomic rename to `pending.processing`; a crash can replay part of that
+batch. Prefer a duplicate over silently losing a reminder.
 
-`scripts/adhdo-catchup.sh` runs once from cron's `@reboot`, sleeps 120s for
-the session to come up, then sends **at most one consolidated wake**:
-
-1. It reads the timestamp of the last `wake` event from the `events` table
-   (falling back to 24h ago if none).
-2. `schedule.consolidate_missed()` compares that window against the fixed
-   daily events (meds, bedtime) and builds a single "missed while offline"
-   message for any that should have fired.
-3. It also folds in overdue rows from the `scheduled` table
-   (`schedule.due()`) into the same message, then calls
-   `schedule.mark_delivered()` on them — this is what prevents
-   `adhdo-dispatch` from re-delivering the same rows on its next 5-minute
-   tick.
-4. If anything was missed, one `wake.inject()` is sent and a `wake` event is
-   logged (which advances the "last wake" watermark for the next boot).
-
-## Invariants
-
-- Exactly one catch-up inject per boot, never a storm of per-event wakes.
-- A scheduled row is delivered by *either* the dispatcher *or* catch-up,
-  never both (`mark_delivered` is the shared gate).
-- Missed heartbeats are intentionally NOT caught up — the next timer tick
-  gathers fresh state anyway, so replaying stale heartbeats has no value.
+Missed heartbeats are not replayed: the next heartbeat gathers fresh state.
+Catch-up's fixed-event window is based on the last journalled wake, not a separate
+power-loss clock. It is an approximate reminder of missed events, not a complete
+history of what happened while the Pi was offline.

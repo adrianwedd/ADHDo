@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+import time
+from adhdolib import db, schedule
+from adhdolib.binload import load_bin_module
+from adhdolib.envelope import cli_main
+
+
+def run(_test_conn=None):
+    conn = _test_conn or db.connect()
+    wake = load_bin_module('wake')
+    with schedule.delivery_lock():
+        row = conn.execute("SELECT MAX(ts) FROM events WHERE type='wake'").fetchone()
+        now = time.time()
+        last = row[0] or (now - 86400)
+        fixed = [{'tag': 'meds', 'time': '08:00'}, {'tag': 'bedtime', 'time': '22:30'}]
+        msg = schedule.consolidate_missed(conn, fixed, last, now)
+        overdue = schedule.due(conn, now)
+        if overdue:
+            overdue_msg = 'Missed while offline: ' + ', '.join(tag for _, tag in overdue)
+            msg = f'{msg}. {overdue_msg}' if msg else overdue_msg
+        if not msg:
+            return {'catchup': 'nothing_due'}
+        delivery = wake.inject(msg)
+        # Never acknowledge a reminder before injection or durable queuing.
+        # A crash after injection can replay it: at least once, not exactly once.
+        schedule.mark_delivered(conn, [id_ for id_, _ in overdue])
+        db.log_event(conn, 'wake', 'wake', msg)
+        return {'catchup': delivery, 'scheduled': len(overdue)}
+
+
+if __name__ == '__main__':
+    cli_main(run)
