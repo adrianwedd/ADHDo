@@ -6,5 +6,5 @@ PANE_PID=$(tmux list-panes -t adhdo -F '#{pane_pid}' 2>/dev/null | head -1) || e
 if ! pgrep -P "$PANE_PID" -f claude >/dev/null; then
   ~/adhdo2/venv/bin/python ~/adhdo2/bin/journal log error "watchdog: claude dead, respawning" || true
   tmux respawn-pane -k -t adhdo \
-    "cd ~/adhdo2/session && ADHDO_HOME=~/adhdo2 claude --dangerously-skip-permissions"
+    "cd ~/adhdo2/session && ADHDO_HOME=~/adhdo2 claude --settings ~/adhdo2/session/settings.json --dangerously-skip-permissions"
 fi

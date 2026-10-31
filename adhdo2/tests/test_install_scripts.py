@@ -57,3 +57,24 @@ def test_deploy_installs_piper_and_timers():
     text = (ROOT / "scripts" / "deploy.sh").read_text()
     assert re.search(r"pip -q install .*piper-tts", text) or "install piper-tts" in text
     assert "systemd/*.timer" in text
+
+
+def test_all_resident_launch_paths_load_busy_hooks_explicitly():
+    paths = [ROOT / 'systemd' / 'adhdo-tmux.service',
+             ROOT / 'scripts' / 'adhdo-watchdog.sh',
+             ROOT / 'scripts' / 'adhdo-recycle.sh']
+    for path in paths:
+        for line in path.read_text().splitlines():
+            if 'claude --' in line:
+                assert '--settings ' in line and '/session/settings.json' in line
+
+
+def test_busy_hooks_create_and_clear_marker(adhdo_home):
+    import json, subprocess
+    settings = json.loads((ROOT / 'session' / 'settings.json').read_text())
+    start = settings['hooks']['UserPromptSubmit'][0]['hooks'][0]['command']
+    stop = settings['hooks']['Stop'][0]['hooks'][0]['command']
+    subprocess.run(start, shell=True, check=True)
+    assert (adhdo_home / 'data' / 'busy').exists()
+    subprocess.run(stop, shell=True, check=True)
+    assert not (adhdo_home / 'data' / 'busy').exists()

@@ -103,7 +103,7 @@ jobs:
             --junit-xml=test-results.xml \
             --tb=short \
             --maxfail=10 \
-            -v || echo "Some tests failed but continuing"
+            -v
         else
           echo "No test directories found, creating placeholder test"
           mkdir -p tests

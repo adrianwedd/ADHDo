@@ -10,5 +10,5 @@ for i in $(seq 60); do  # wait up to 5 min for busy marker to clear
   [ ! -e ~/adhdo2/data/busy ] && break
 done
 tmux respawn-pane -k -t adhdo \
-  "cd ~/adhdo2/session && ADHDO_HOME=~/adhdo2 claude --dangerously-skip-permissions"
+  "cd ~/adhdo2/session && ADHDO_HOME=~/adhdo2 claude --settings ~/adhdo2/session/settings.json --dangerously-skip-permissions"
 ~/adhdo2/venv/bin/python ~/adhdo2/bin/journal log decision "nightly session recycle" || true

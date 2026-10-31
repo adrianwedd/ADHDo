@@ -1,4 +1,4 @@
-import argparse, json, os, sys, traceback, re
+import argparse, json, os, sys, traceback, re, tempfile
 from pathlib import Path
 
 _SECRET_RE = re.compile(r"(api_key|apikey|token|password|secret)=[^&\s\"']+", re.I)
@@ -23,9 +23,14 @@ def write_atomic(path, text: str) -> None:
     """Write text to path atomically: write to a temp file in the same
     directory, then os.replace() it into place."""
     path = Path(path)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text)
-    os.replace(str(tmp), str(path))
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(text)
+        os.replace(str(tmp), str(path))
+    finally:
+        tmp.unlink(missing_ok=True)
 
 def cli_main(fn):
     try:

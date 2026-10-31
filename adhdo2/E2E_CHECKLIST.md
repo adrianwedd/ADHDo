@@ -1,7 +1,20 @@
+# Current verification status — 31 October 2026
+
+Source fixes for Telegram advisory delivery and playback restoration are merged
+in #124. The maintenance sweep updates reminder delivery, concurrent writes,
+resume-record ownership and launch settings. Automated tests use simulated
+interfaces. No new Pi installation, live Telegram or audible acceptance is claimed.
+The dated checkboxes below are historical receipts, not current live status.
+
+Before testing busy/queued wakes, confirm the running Claude session loaded
+`~/adhdo2/session/settings.json` via `--settings`. Verify a submitted prompt
+creates `data/busy` and completion removes it. Updating a unit file does not
+restart its already-running process.
+
 # ADHDo 2.0 P1 Hardware E2E (pi5-hailo)
 
 > How boot catch-up interacts with the dispatcher and fixed-event schedule
-> (and why they never double-fire) is documented in
+> (including retry and duplicate-delivery limits) is documented in
 > [docs/catchup-vs-schedule.md](docs/catchup-vs-schedule.md).
 >
 > Note (P2 quality pass): the heartbeat is no longer a `*/25` cron line —

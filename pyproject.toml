@@ -148,9 +148,9 @@ ai = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/adrianwedd/mcp-adhd-server#readme"
-Issues = "https://github.com/adrianwedd/mcp-adhd-server/issues"
-Source = "https://github.com/adrianwedd/mcp-adhd-server"
+Documentation = "https://github.com/adrianwedd/ADHDo#readme"
+Issues = "https://github.com/adrianwedd/ADHDo/issues"
+Source = "https://github.com/adrianwedd/ADHDo"
 
 [project.scripts]
 mcp-server = "mcp_server.cli:main"

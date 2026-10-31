@@ -10,6 +10,8 @@ def cmd_log(conn, args):
     if len(args) < 2:
         raise ToolError("usage", "journal log <type> <text>")
     type_, text = args[0], " ".join(args[1:])
+    if type_ == "outcome":
+        raise ToolError("usage", "use journal outcome <intervention> <result> [feedback]")
     if type_ not in db.EVENT_TYPES:
         raise ToolError("bad_type", f"type must be one of {sorted(db.EVENT_TYPES)}")
     db.log_event(conn, "session", type_, text)
