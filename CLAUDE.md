@@ -14,8 +14,9 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest \
   -c adhdo2/pyproject.toml --confcutdir=adhdo2/tests adhdo2/tests -q
 ```
 
-Read `.github/workflows/adhdo2.yml` for the product CI command. Root legacy
-CI is separate and has known failures in #119. Report failures accurately;
+Read `.github/workflows/adhdo2.yml` for the product CI command. Root
+`python -m pytest` also selects ADHDo 2. The legacy application and its CI are
+retired by the owner decision in `docs/maintenance/2026-10-31-retirement.md`. Report failures accurately;
 do not turn an exception, skipped check or mocked interface into a live pass.
 For bug fixes, reproduce the failing behaviour before changing it and test the
 relevant boundary, not just a helper that mirrors the implementation.
@@ -31,7 +32,8 @@ relevant boundary, not just a helper that mirrors the implementation.
 - Do not infer benefit or intent from a lack of response. Outcome statistics
   describe recorded feedback, not a validated model of the person.
 
-`src/`, root launchers and the root package describe the older application.
-Consult `docs/maintenance/2026-10-31.md` before reviving those paths. The previous
+`src/`, `tests/`, root launchers and the archived root package describe the
+unsupported older application. They are reference material, not current work
+targets. Keep supported development and acceptance focused on `adhdo2/`. The previous
 repository instructions are retained at `docs/archive/CLAUDE-legacy.md` as history;
 they are not current operational guidance.

@@ -42,11 +42,14 @@ Nudges enforce quiet hours and ordinary hourly limits in code.
 
 ## Earlier implementations
 
-`src/`, the root `pyproject.toml`, Docker files and top-level server launchers
-belong to the earlier FastAPI/browser-automation application. They are retained
-for reference and separate maintenance; their dependencies and tests are not
-needed to install ADHDo 2. Legacy CI and compilation defects are tracked in
-[#119](https://github.com/adrianwedd/ADHDo/issues/119).
+**ADHDo 2 is the sole supported application.** The earlier FastAPI/browser
+server under `src/`, its `tests/`, Docker files and top-level launchers are
+retired reference material. Their active workflows and root packaging metadata
+are [archived](docs/archive/legacy-workflows/README.md); their failing tests have
+not been declared passing.
+
+Root `python -m pytest` now selects `adhdo2/tests`. Install the current package
+with `pip install ./adhdo2`. See the [support decision and evidence](docs/maintenance/2026-10-31-retirement.md).
 
 The [previous README](docs/archive/README-legacy.md) is preserved as historical
 material. Its claims of immediate readiness, sub-three-second responses and

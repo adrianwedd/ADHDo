@@ -18,7 +18,8 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest \
 
 Tests use temporary data and simulated external services. They do not send live
 Telegram messages, run the resident agent or establish audible Cast behaviour.
-The older root package is a separate application; do not install it for this one.
+The older root package is retired; its metadata is archived. Root
+`python -m pytest` selects this same supported suite.
 
 ## Configuration
 
